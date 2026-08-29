@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0.0",
+  "application_site": "Jadel Tech RD",
+  "public_urls": {
+    "homepage": "https://jadeltechrd.com/",
+    "privacy_policy": "https://jadeltechrd.com/?view=privacy",
+    "terms_of_service": "https://jadeltechrd.com/?view=terms",
+    "data_deletion_instructions": "https://jadeltechrd.com/?view=data-deletion"
+  },
+  "privacy_contact_email": null,
+  "compliance_readiness": {
+    "public_pages_implemented": true,
+    "privacy_contact_configured": false,
+    "pages_hosting_enabled": false,
+    "custom_domain_verified": false,
+    "https_verified": false,
+    "status": "PENDING_PAGES_ENABLEMENT_AND_PRIVACY_CONTACT"
+  },
+  "notes": [
+    "Do not invent or publish a privacy email address that has not been created and verified.",
+    "GitHub Pages must be enabled with GitHub Actions as the publishing source before deployment can succeed.",
+    "The custom domain jadeltechrd.com must be configured and verified in repository Pages settings.",
+    "Update readiness fields only after externally verifying each condition."
+  ]
+}
