@@ -1,18 +1,21 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
   const requested = params.get("view");
-  const view = requested === "privacy" || requested === "terms" ? requested : "home";
+  const allowedViews = new Set(["privacy", "terms", "data-deletion"]);
+  const view = allowedViews.has(requested) ? requested : "home";
 
   const titles = {
     home: "Jadel Tech RD",
     privacy: "Política de Privacidad | Jadel Tech RD",
     terms: "Condiciones del Servicio | Jadel Tech RD",
+    "data-deletion": "Eliminación de Datos | Jadel Tech RD",
   };
 
   const descriptions = {
     home: "Sitio oficial de Jadel Tech RD para información pública de aplicaciones y servicios.",
     privacy: "Política de Privacidad de las aplicaciones y servicios de Jadel Tech RD.",
     terms: "Condiciones del Servicio de las aplicaciones y servicios de Jadel Tech RD.",
+    "data-deletion": "Instrucciones públicas para solicitar la eliminación de datos asociados a aplicaciones de Jadel Tech RD.",
   };
 
   document.title = titles[view];
