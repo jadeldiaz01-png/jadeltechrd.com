@@ -1,0 +1,49 @@
+name: agent-production-manifest
+
+on:
+  pull_request:
+    paths:
+      - "config/agent-production-manifest.json"
+      - "agent-readiness.html"
+      - "agent-readiness.js"
+      - "scripts/validate-agent-manifest.mjs"
+      - ".github/workflows/agent-production-manifest.yml"
+  push:
+    branches: [main]
+    paths:
+      - "config/agent-production-manifest.json"
+      - "agent-readiness.html"
+      - "agent-readiness.js"
+      - "scripts/validate-agent-manifest.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-production-manifest-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate manifest contract
+        run: node scripts/validate-agent-manifest.mjs
+      - name: JavaScript syntax
+        run: node --check agent-readiness.js
+      - name: Assert fail-closed rendering
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'Fail-closed' agent-readiness.js
+          grep -q 'DEGRADED_NOT_PRODUCTION_READY' config/agent-production-manifest.json
+          grep -q 'RESEARCH_ONLY_NO_LIVE_CAPITAL' config/agent-production-manifest.json
+          grep -q 'human_approval_required_for' config/agent-production-manifest.json
