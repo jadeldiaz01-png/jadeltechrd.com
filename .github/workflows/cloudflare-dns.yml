@@ -42,12 +42,11 @@ jobs:
           echo "variable.CF_API_TOKEN=${HAS_CF_API_TOKEN_VARIABLE}"
           echo "variable.CLOUDFLARE_TOKEN=${HAS_CLOUDFLARE_TOKEN_VARIABLE}"
           echo "variable.CF_TOKEN=${HAS_CF_TOKEN_VARIABLE}"
-
-          if [ "$HAS_CLOUDFLARE_API_TOKEN_VARIABLE" = 'true' ] || \
-             [ "$HAS_CF_API_TOKEN_VARIABLE" = 'true' ] || \
-             [ "$HAS_CLOUDFLARE_TOKEN_VARIABLE" = 'true' ] || \
-             [ "$HAS_CF_TOKEN_VARIABLE" = 'true' ]; then
-            echo 'A Cloudflare credential appears to be stored as an Environment variable. Refusing to consume credentials from vars; move it to Environment secrets.' >&2
+          if [ "$HAS_CLOUDFLARE_API_TOKEN_VARIABLE" = true ] || \
+             [ "$HAS_CF_API_TOKEN_VARIABLE" = true ] || \
+             [ "$HAS_CLOUDFLARE_TOKEN_VARIABLE" = true ] || \
+             [ "$HAS_CF_TOKEN_VARIABLE" = true ]; then
+            echo 'A Cloudflare credential appears to be stored as an Environment variable. Credentials must remain in Environment secrets.' >&2
           fi
 
       - name: Normalize Cloudflare token safely
@@ -63,12 +62,10 @@ jobs:
           fi
           if [ -z "$token" ]; then
             echo 'No supported Cloudflare Environment secret is available.' >&2
-            echo 'Accepted secret names: CLOUDFLARE_API_TOKEN, CF_API_TOKEN, CLOUDFLARE_TOKEN, CF_TOKEN.' >&2
             exit 2
           fi
           echo "::add-mask::$token"
           printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
-          echo 'Cloudflare token normalized without exposing its value.'
 
       - name: Authenticate and resolve Cloudflare zone
         id: zone
@@ -76,59 +73,30 @@ jobs:
         run: |
           set -euo pipefail
           auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
-
           case "$CLOUDFLARE_API_TOKEN" in
             cfut_*) token_family='user_api_token' ;;
             cfat_*) token_family='account_api_token' ;;
-            cfk_*)
-              echo 'A Cloudflare Global API Key was supplied. This workflow intentionally rejects legacy global keys; create a scoped API Token instead.' >&2
-              exit 8
-              ;;
+            cfk_*) echo 'Legacy Global API Keys are rejected.' >&2; exit 8 ;;
             *) token_family='legacy_or_unknown_api_token' ;;
           esac
           echo "token_family=${token_family}"
-
-          if [ "$token_family" = 'user_api_token' ] || [ "$token_family" = 'legacy_or_unknown_api_token' ]; then
-            verify_tmp=$(mktemp)
-            verify_code=$(curl -sS -o "$verify_tmp" -w '%{http_code}' "${auth[@]}" \
-              https://api.cloudflare.com/client/v4/user/tokens/verify || true)
-            if [ "$verify_code" = '200' ] && [ "$(jq -r '.success // false' "$verify_tmp")" = 'true' ]; then
-              status=$(jq -r '.result.status // "unknown"' "$verify_tmp")
-              echo "user_token_verify_status=${status}"
-              if [ "$status" != 'active' ]; then
-                echo 'Cloudflare user API token is not active.' >&2
-                exit 7
-              fi
-            else
-              echo "User-token verification was not authoritative for this credential (HTTP ${verify_code}); testing zone access next."
-            fi
-          fi
-
           zones_tmp=$(mktemp)
           zones_code=$(curl -sS -o "$zones_tmp" -w '%{http_code}' "${auth[@]}" \
             "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50" || true)
-          if [ "$zones_code" != '200' ]; then
+          if [ "$zones_code" != 200 ]; then
             echo "Cloudflare zone API authentication/authorization failed with HTTP ${zones_code}." >&2
             jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' "$zones_tmp" >&2 || true
             exit 7
           fi
-
-          zones=$(cat "$zones_tmp")
-          if [ "$(jq -r '.success // false' <<<"$zones")" != 'true' ]; then
-            echo 'Cloudflare zone API returned success=false.' >&2
-            jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' <<<"$zones" >&2 || true
-            exit 7
-          fi
-
-          zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name == $d) | .id' <<<"$zones" | head -n1)
-          if [ -z "$zone_id" ] || [ "$zone_id" = 'null' ]; then
-            echo "Active Cloudflare zone not found for ${DOMAIN}. Token must include Zone Read for this specific zone." >&2
+          zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .id' "$zones_tmp" | head -n1)
+          if [ -z "$zone_id" ] || [ "$zone_id" = null ]; then
+            echo "Active Cloudflare zone not found for ${DOMAIN}." >&2
             exit 3
           fi
           echo "zone_id=$zone_id" >> "$GITHUB_OUTPUT"
-          echo 'Cloudflare credential authenticated and zone resolved.'
+          echo 'CLOUDFLARE_ZONE_ACCESS=PASS'
 
-      - name: Reconcile apex A records fail-closed
+      - name: Reconcile proxied GitHub Pages origin records fail-closed
         shell: bash
         env:
           ZONE_ID: ${{ steps.zone.outputs.zone_id }}
@@ -136,19 +104,17 @@ jobs:
           set -euo pipefail
           auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
           desired=(185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153)
-
           records=$(curl --fail-with-body -sS "${auth[@]}" \
             "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?name=${DOMAIN}&per_page=100")
-          test "$(jq -r '.success' <<<"$records")" = 'true'
+          test "$(jq -r '.success' <<<"$records")" = true
 
-          conflict=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name == $d and (.type == "CNAME" or .type == "NS" or .type == "ALIAS")) | [.type,.content] | @tsv' <<<"$records")
+          conflict=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and (.type=="CNAME" or .type=="NS" or .type=="ALIAS")) | [.type,.content] | @tsv' <<<"$records")
           if [ -n "$conflict" ]; then
             echo 'Conflicting apex record found; refusing destructive changes:' >&2
             echo "$conflict" >&2
             exit 4
           fi
-
-          extra_a=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name == $d and .type == "A") | .content' <<<"$records" \
+          extra_a=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and .type=="A") | .content' <<<"$records" \
             | grep -vxE '185\.199\.(108|109|110|111)\.153' || true)
           if [ -n "$extra_a" ]; then
             echo 'Unknown apex A record(s) found; refusing to delete automatically:' >&2
@@ -157,36 +123,49 @@ jobs:
           fi
 
           for ip in "${desired[@]}"; do
-            record_id=$(jq -r --arg d "$DOMAIN" --arg ip "$ip" '.result[] | select(.name == $d and .type == "A" and .content == $ip) | .id' <<<"$records" | head -n1)
-            payload=$(jq -nc --arg type A --arg name "$DOMAIN" --arg content "$ip" '{type:$type,name:$name,content:$content,ttl:1,proxied:false}')
-            if [ -n "$record_id" ] && [ "$record_id" != 'null' ]; then
+            record_id=$(jq -r --arg d "$DOMAIN" --arg ip "$ip" '.result[] | select(.name==$d and .type=="A" and .content==$ip) | .id' <<<"$records" | head -n1)
+            payload=$(jq -nc --arg type A --arg name "$DOMAIN" --arg content "$ip" '{type:$type,name:$name,content:$content,ttl:1,proxied:true}')
+            if [ -n "$record_id" ] && [ "$record_id" != null ]; then
               response=$(curl --fail-with-body -sS -X PATCH "${auth[@]}" \
-                "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${record_id}" \
-                --data "$payload")
-              test "$(jq -r '.success' <<<"$response")" = 'true'
-              echo "Reconciled A ${DOMAIN} -> ${ip} (DNS only)."
+                "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${record_id}" --data "$payload")
             else
               response=$(curl --fail-with-body -sS -X POST "${auth[@]}" \
-                "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" \
-                --data "$payload")
-              test "$(jq -r '.success' <<<"$response")" = 'true'
-              echo "Created A ${DOMAIN} -> ${ip} (DNS only)."
+                "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" --data "$payload")
             fi
+            test "$(jq -r '.success' <<<"$response")" = true
+            echo "Reconciled origin A ${DOMAIN} -> ${ip} (Cloudflare proxied)."
           done
 
-      - name: Verify authoritative/public DNS convergence
+          verify=$(curl --fail-with-body -sS "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?name=${DOMAIN}&type=A&per_page=100")
+          for ip in "${desired[@]}"; do
+            ok=$(jq -r --arg d "$DOMAIN" --arg ip "$ip" '[.result[] | select(.name==$d and .type=="A" and .content==$ip and .proxied==true)] | length' <<<"$verify")
+            test "$ok" = 1
+          done
+          echo 'CLOUDFLARE_PROXY=PASS'
+
+      - name: Verify public Cloudflare edge DNS and HTTPS
         shell: bash
         run: |
           set -euo pipefail
-          expected=$(printf '%s\n' 185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153 | sort)
-          for attempt in $(seq 1 12); do
+          for attempt in $(seq 1 18); do
             actual=$(dig @1.1.1.1 +short A "$DOMAIN" | sort || true)
-            if [ "$actual" = "$expected" ]; then
+            if [ -n "$actual" ] && ! grep -qE '^185\.199\.(108|109|110|111)\.153$' <<<"$actual"; then
+              echo "Cloudflare edge DNS: ${actual//$'\n'/, }"
+              for url in \
+                "https://${DOMAIN}/" \
+                "https://${DOMAIN}/?view=privacy" \
+                "https://${DOMAIN}/?view=terms" \
+                "https://${DOMAIN}/?view=data-deletion"; do
+                curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+                  --connect-timeout 10 --max-time 20 "$url" >/dev/null
+              done
               echo 'DNS_RESOLUTION=PASS'
+              echo 'EDGE_HTTPS=PASS'
               exit 0
             fi
-            echo "DNS not converged yet (attempt ${attempt}/12)."
+            echo "Waiting for Cloudflare edge convergence (${attempt}/18)..."
             sleep 10
           done
-          echo 'DNS_RESOLUTION=PENDING_PROPAGATION' >&2
+          echo 'Cloudflare edge did not converge.' >&2
           exit 6
