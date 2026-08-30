@@ -16,18 +16,4 @@ if 'http://' in text.replace('http-equiv', ''):
     raise SystemExit('insecure HTTP reference detected in source')
 
 INDEX.write_text(text, encoding='utf-8')
-
-pins = {
-    'actions/checkout@v4': 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
-    'actions/configure-pages@v5': 'actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b',
-    'actions/upload-pages-artifact@v3': 'actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa',
-    'actions/deploy-pages@v4': 'actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e',
-}
-for workflow in Path('.github/workflows').glob('*.y*ml'):
-    body = workflow.read_text(encoding='utf-8')
-    for old, new in pins.items():
-        body = body.replace(old, new)
-    workflow.write_text(body, encoding='utf-8')
-
 print('SOURCE_CSP=PASS')
-print('KNOWN_ACTION_PINS=APPLIED')
