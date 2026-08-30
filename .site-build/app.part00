@@ -1,0 +1,181 @@
+(() => {
+  const DATA_DELETION_URL = "/?view=data-deletion";
+
+  const services = [
+    {
+      id: "architecture",
+      category: "automation",
+      icon: "⌘",
+      name: "Arquitectura Agentic & Automatización",
+      summary: "Diseño de agentes, workflows, APIs, MCP, guardrails, memoria y handoffs con arquitectura modular y auditable.",
+      deliverables: ["Mapa de procesos", "Arquitectura objetivo", "Backlog priorizado", "Plan de integración"],
+      status: "available",
+      statusLabel: "Servicio de ingeniería",
+      setup: 250,
+      monthly: 0,
+      priceLabel: "Desde US$250"
+    },
+    {
+      id: "support",
+      category: "business",
+      icon: "◎",
+      name: "Agente de Soporte & Tickets",
+      summary: "Chatbot y flujo de soporte con clasificación, base de conocimiento, escalación humana, trazabilidad y panel operativo.",
+      deliverables: ["Chat de soporte", "Gestión de tickets", "Escalación humana", "Dashboard"],
+      status: "available",
+      statusLabel: "Implementable",
+      setup: 900,
+      monthly: 149,
+      priceLabel: "US$900 + US$149/mes"
+    },
+    {
+      id: "sales",
+      category: "business",
+      icon: "↗",
+      name: "Sales & Lead Intelligence",
+      summary: "Investigación de cuentas, calificación de oportunidades, preparación de outreach y seguimiento con aprobación antes de acciones externas.",
+      deliverables: ["Lead research", "Scoring", "Brief comercial", "Aprobaciones"],
+      status: "pilot",
+      statusLabel: "Piloto supervisado",
+      setup: 1500,
+      monthly: 299,
+      priceLabel: "Desde US$1,500 + US$299/mes"
+    },
+    {
+      id: "social",
+      category: "media",
+      icon: "◉",
+      name: "Social Trend Intelligence",
+      summary: "Detección y ranking de tendencias con normalización de métricas, frescura, fit por plataforma, derechos y revisión de políticas.",
+      deliverables: ["Trend scoring", "Creative brief", "Rights review", "Feedback loop"],
+      status: "pilot",
+      statusLabel: "Piloto supervisado",
+      setup: 750,
+      monthly: 199,
+      priceLabel: "US$750 + US$199/mes"
+    },
+    {
+      id: "cineforge",
+      category: "media",
+      icon: "▶",
+      name: "CineForge · Video Premium",
+      summary: "Pipeline para reels y video social premium: planificación, QC, originalidad, aprobación humana y conectores de publicación multi-plataforma.",
+      deliverables: ["Creative direction", "Video QC", "Caption/thumbnail", "Publisher connectors"],
+      status: "pilot",
+      statusLabel: "Publicación live bloqueada por gates",
+      setup: 180,
+      monthly: 899,
+      priceLabel: "Desde US$180/reel · packs desde US$899/mes"
+    },
+    {
+      id: "meta",
+      category: "integrations",
+      icon: "∞",
+      name: "Meta/Facebook Integration & App Review",
+      summary: "Integración segura de Facebook Pages, OAuth, permisos, revisión de app, evidencias y páginas públicas de cumplimiento.",
+      deliverables: ["OAuth", "Pages API", "Review readiness", "Compliance URLs"],
+      status: "available",
+      statusLabel: "Servicio de ingeniería",
+      setup: 850,
+      monthly: 0,
+      priceLabel: "Desde US$850"
+    },
+    {
+      id: "analytics",
+      category: "data",
+      icon: "▦",
+      name: "Dashboards & Decision Intelligence",
+      summary: "Paneles operativos y analíticos para convertir métricas, tickets, actividad de agentes o datos de negocio en decisiones accionables.",
+      deliverables: ["KPIs", "Visual analytics", "Filtros", "Exportación"],
+      status: "available",
+      statusLabel: "Implementable",
+      setup: 650,
+      monthly: 99,
+      priceLabel: "Desde US$650 + US$99/mes"
+    },
+    {
+      id: "revenue",
+      category: "automation",
+      icon: "$",
+      name: "Revenue Opportunity Intelligence",
+      summary: "Descubrimiento, evaluación y reconciliación de oportunidades legítimas con evidencia, costes atribuidos y autoridad financiera cerrada por defecto.",
+      deliverables: ["Opportunity scoring", "Cost model", "Evidence ledger", "Approval gates"],
+      status: "pilot",
+      statusLabel: "Piloto · sin promesas de ingresos",
+      setup: 1800,
+      monthly: 349,
+      priceLabel: "Pilotos desde US$1,800"
+    },
+    {
+      id: "quant",
+      category: "research",
+      icon: "∑",
+      name: "Quant Research & Trading Risk Systems",
+      summary: "Investigación cuantitativa, contratos de datos, backtesting, walk-forward, risk engine y arquitectura de ejecución supervisada.",
+      deliverables: ["Research pipeline", "Backtest design", "Risk controls", "Production gates"],
+      status: "research",
+      statusLabel: "Research-only · no live capital",
+      setup: 2000,
+      monthly: 0,
+      priceLabel: "Proyectos desde US$2,000"
+    },
+    {
+      id: "governance",
+      category: "security",
+      icon: "◇",
+      name: "AI Governance & Production Readiness",
+      summary: "Políticas fail-closed, secretos, supply chain, observabilidad, evaluaciones adversariales, SLOs y evidencia de readiness.",
+      deliverables: ["Threat model", "Policy gates", "CI/CD controls", "Readiness report"],
+      status: "available",
+      statusLabel: "Servicio de ingeniería",
+      setup: 2500,
+      monthly: 299,
+      priceLabel: "Desde US$2,500"
+    },
+    {
+      id: "multiagent",
+      category: "automation",
+      icon: "✦",
+      name: "Multi-Agent Orchestration",
+      summary: "Sistemas coordinados con agentes especializados, routing, colas, APIs, memoria, approvals, retries, idempotencia y observabilidad.",
+      deliverables: ["Agent registry", "Routing", "Durable workflows", "Observability"],
+      status: "pilot",
+      statusLabel: "Proyecto a medida",
+      setup: 4500,
+      monthly: 790,
+      priceLabel: "Desde US$4,500 + soporte"
+    }
+  ];
+
+  const categories = [
+    ["all", "Todos"],
+    ["automation", "Automatización"],
+    ["business", "Ventas & soporte"],
+    ["media", "Media"],
+    ["integrations", "Integraciones"],
+    ["data", "Datos"],
+    ["security", "Gobernanza"],
+    ["research", "Research"]
+  ];
+
+  const formatMoney = (value) => new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+
+  const serviceCard = (service) => `
+    <article class="service-card reveal" data-category="${service.category}" data-service-id="${service.id}">
+      <div class="service-topline">
+        <span class="service-icon" aria-hidden="true">${service.icon}</span>
+        <span class="status-badge status-${service.status}">${service.statusLabel}</span>
+      </div>
+      <h3>${service.name}</h3>
+      <p>${service.summary}</p>
+      <ul class="service-deliverables" aria-label="Entregables incluidos">
+        ${service.deliverables.map((item) => `<li>${item}</li>`).join("")}
+      </ul>
+      <div class="service-footer">
+        <div>
+          <span class="price-caption">Precio de lanzamiento</span>
+          <strong>${se
