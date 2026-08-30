@@ -24,19 +24,19 @@ jobs:
     env:
       DOMAIN: jadeltechrd.com
     steps:
-      - name: Verify public DNS
+      - name: Verify public Cloudflare DNS
         shell: bash
         run: |
           set -euo pipefail
-          expected=$(printf '%s\n' \
-            185.199.108.153 \
-            185.199.109.153 \
-            185.199.110.153 \
-            185.199.111.153 | sort)
           actual=$(dig @1.1.1.1 +short A "$DOMAIN" | sort)
-          printf 'Resolved A records:\n%s\n' "$actual"
-          test "$actual" = "$expected"
+          printf 'Resolved public A records:\n%s\n' "$actual"
+          test -n "$actual"
+          if grep -qE '^185\.199\.(108|109|110|111)\.153$' <<<"$actual"; then
+            echo 'Public DNS is bypassing the declared Cloudflare edge front door.' >&2
+            exit 2
+          fi
           echo 'DNS_RESOLUTION=PASS'
+          echo 'CLOUDFLARE_EDGE_DNS=PASS'
 
       - name: Verify TLS and HTTP 200 gates with bounded retries
         shell: bash
@@ -53,19 +53,19 @@ jobs:
           for attempt in $(seq 1 24); do
             echo "Public-access verification attempt ${attempt}/24"
             all_ok=true
-
             for url in "${urls[@]}"; do
               body=$(mktemp)
               meta=$(mktemp)
-              if curl --silent --show-error --location \
+              if curl --silent --show-error --location --fail \
                 --connect-timeout 8 --max-time 20 \
                 --proto '=https' --tlsv1.2 \
                 --output "$body" \
                 --write-out '%{http_code}\t%{remote_ip}\t%{ssl_verify_result}' \
                 "$url" >"$meta"; then
-                IFS=$'\t' read -r code remote tls <"$meta"
+                code=''; remote=''; tls=''
+                IFS=$'\t' read -r code remote tls <"$meta" || true
                 echo "$url -> HTTP=$code remote=$remote tls_verify=$tls"
-                if [ "$code" != '200' ] || [ "$tls" != '0' ] || [ ! -s "$body" ]; then
+                if [ "$code" != 200 ] || [ "$tls" != 0 ] || [ ! -s "$body" ]; then
                   all_ok=false
                 fi
               else
@@ -74,11 +74,7 @@ jobs:
               fi
               rm -f "$body" "$meta"
             done
-
-            if [ "$all_ok" = true ]; then
-              success=true
-              break
-            fi
+            if [ "$all_ok" = true ]; then success=true; break; fi
             sleep 15
           done
 
@@ -86,20 +82,22 @@ jobs:
             echo 'PUBLIC_ACCESS_READY=NO' >&2
             exit 1
           fi
-
           echo 'TLS_CERTIFICATE=PASS'
           echo 'HOME_HTTP_200=PASS'
           echo 'PRIVACY_HTTP_200=PASS'
           echo 'TERMS_HTTP_200=PASS'
           echo 'DATA_DELETION_HTTP_200=PASS'
 
-      - name: Verify expected homepage content
+      - name: Verify canonical application content
         shell: bash
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --location \
-            --connect-timeout 8 --max-time 20 \
-            --proto '=https' --tlsv1.2 \
-            "https://jadeltechrd.com/" | grep -Fq 'Jadel Tech RD'
+            --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 \
+            "https://${DOMAIN}/" | grep -Fq 'Jadel Tech RD'
+          curl --fail --silent --show-error --location \
+            --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 \
+            "https://${DOMAIN}/app.js" | grep -Fq 'data-deletion'
           echo 'HOME_CONTENT=PASS'
+          echo 'DATA_DELETION_IMPLEMENTATION=PASS'
           echo 'PUBLIC_ACCESS_READY=YES'
