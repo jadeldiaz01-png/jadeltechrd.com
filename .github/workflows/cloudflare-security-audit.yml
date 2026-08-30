@@ -2,7 +2,7 @@ name: Audit Cloudflare security posture
 
 on:
   push:
-    branches: [security/hardening-2026, main]
+    branches: [main]
     paths:
       - '.github/workflows/cloudflare-security-audit.yml'
   workflow_dispatch:
@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 8
     env:
       DOMAIN: jadeltechrd.com
+      FREE_MANAGED_RULESET_ID: 77454fe2d30c4220b5701f6fdfb893ba
       CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
     steps:
       - name: Normalize credential and resolve zone
@@ -44,71 +45,95 @@ jobs:
           echo "CLOUDFLARE_PLAN=$plan"
           echo 'CLOUDFLARE_ZONE_ACCESS=PASS'
 
-      - name: Audit TLS and browser security settings
+      - name: Enforce TLS and browser security invariants
         shell: bash
         env:
           ZONE_ID: ${{ steps.zone.outputs.zone_id }}
         run: |
           set -euo pipefail
           auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
-          for setting in min_tls_version tls_1_3 always_use_https automatic_https_rewrites browser_check security_level; do
+
+          require_setting() {
+            local setting="$1" expected="$2" tmp value code
             tmp=$(mktemp)
             code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/settings/${setting}" || true)
-            if [ "$code" = 200 ]; then
-              value=$(jq -r '.result.value // "unknown"' "$tmp")
-              editable=$(jq -r '.result.editable // "unknown"' "$tmp")
-              echo "CF_SETTING_${setting}=${value} editable=${editable}"
-            else
-              echo "CF_SETTING_${setting}=UNAVAILABLE_HTTP_${code}"
+            if [ "$code" != 200 ]; then
+              echo "CF_SETTING_${setting}=FAIL_HTTP_${code}"
+              return 20
             fi
-          done
+            value=$(jq -r '.result.value // "unknown"' "$tmp")
+            echo "CF_SETTING_${setting}=${value}"
+            test "$value" = "$expected" || {
+              echo "CF_SETTING_${setting}=DRIFT expected=${expected} actual=${value}"
+              return 21
+            }
+          }
 
-      - name: Audit bot and ruleset capabilities
+          require_setting min_tls_version 1.2
+          require_setting tls_1_3 on
+          require_setting always_use_https on
+          require_setting automatic_https_rewrites on
+          require_setting browser_check on
+          require_setting security_level medium
+
+          hsts=$(curl --fail-with-body --silent --show-error "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/settings/security_header")
+          test "$(jq -r '.result.value.strict_transport_security.enabled' <<<"$hsts")" = true
+          test "$(jq -r '.result.value.strict_transport_security.max_age' <<<"$hsts")" = 15552000
+          test "$(jq -r '.result.value.strict_transport_security.include_subdomains' <<<"$hsts")" = false
+          test "$(jq -r '.result.value.strict_transport_security.preload' <<<"$hsts")" = false
+          test "$(jq -r '.result.value.strict_transport_security.nosniff' <<<"$hsts")" = true
+          echo 'TRANSPORT_SECURITY_INVARIANTS=PASS'
+
+      - name: Require Free Managed WAF deployment
         shell: bash
         env:
           ZONE_ID: ${{ steps.zone.outputs.zone_id }}
         run: |
           set -euo pipefail
           auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
-          tmp=$(mktemp)
-          code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/bot_management" || true)
-          if [ "$code" = 200 ]; then
-            echo "BOT_FIGHT_MODE=$(jq -r '.result.fight_mode // "unknown"' "$tmp")"
-            echo "AI_BOTS_PROTECTION=$(jq -r '.result.ai_bots_protection // "unknown"' "$tmp")"
-          else
-            echo "BOT_MANAGEMENT_READ=UNAVAILABLE_HTTP_${code}"
-          fi
+          entry=$(mktemp)
+          code=$(curl -sS -o "$entry" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/phases/http_request_firewall_managed/entrypoint" || true)
+          test "$code" = 200 || {
+            echo "MANAGED_WAF_ENTRYPOINT=FAIL_HTTP_${code}"
+            exit 30
+          }
+          jq -e --arg id "$FREE_MANAGED_RULESET_ID" '.result.rules[]? | select(.action=="execute" and .action_parameters.id==$id and (.enabled // true)==true)' "$entry" >/dev/null || {
+            echo 'FREE_MANAGED_WAF=DRIFT_OR_MISSING'
+            exit 31
+          }
+          echo 'FREE_MANAGED_WAF=PASS'
 
-          for phase in http_response_headers_transform http_request_firewall_custom http_ratelimit http_request_firewall_managed; do
-            tmp=$(mktemp)
-            code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/phases/${phase}/entrypoint" || true)
-            case "$code" in
-              200) echo "RULESET_${phase}=READABLE" ;;
-              404) echo "RULESET_${phase}=NOT_DEPLOYED_OR_EMPTY" ;;
-              403) echo "RULESET_${phase}=PERMISSION_BLOCKED" ;;
-              *) echo "RULESET_${phase}=HTTP_${code}" ;;
-            esac
-          done
-
-      - name: Audit live edge response headers
+      - name: Enforce live edge response contract
         shell: bash
         run: |
           set -euo pipefail
+          http_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-redirs 0 "http://${DOMAIN}/" || true)
+          case "$http_code" in
+            301|302|307|308) echo "HTTP_TO_HTTPS_REDIRECT=PASS code=${http_code}" ;;
+            *) echo "HTTP_TO_HTTPS_REDIRECT=FAIL code=${http_code}"; exit 40 ;;
+          esac
+
           curl --silent --show-error --fail --location --proto '=https' --tlsv1.2 \
-            --dump-header /tmp/headers --output /dev/null "https://${DOMAIN}/"
+            --dump-header /tmp/headers --output /tmp/body "https://${DOMAIN}/"
           tr -d '\r' </tmp/headers >/tmp/headers.clean
-          echo 'LIVE_EDGE_HEADERS_BEGIN'
-          for header in \
-            content-security-policy \
-            strict-transport-security \
-            x-frame-options \
-            x-content-type-options \
-            referrer-policy \
-            permissions-policy \
-            cross-origin-opener-policy \
-            cross-origin-resource-policy; do
+
+          require_header() {
+            local header="$1" pattern="$2" value
             value=$(awk -v h="$header" 'BEGIN{IGNORECASE=1} $0 ~ "^"h":" {sub(/^[^:]+:[[:space:]]*/,""); print; exit}' /tmp/headers.clean)
-            if [ -n "$value" ]; then echo "HEADER_${header}=PRESENT"; else echo "HEADER_${header}=MISSING"; fi
-          done
-          echo 'LIVE_EDGE_HEADERS_END'
-          echo 'CLOUDFLARE_SECURITY_AUDIT=COMPLETE'
+            test -n "$value" || { echo "HEADER_${header}=MISSING"; return 50; }
+            printf '%s' "$value" | grep -Fq "$pattern" || { echo "HEADER_${header}=DRIFT"; return 51; }
+            echo "HEADER_${header}=PASS"
+          }
+
+          require_header strict-transport-security 'max-age=15552000'
+          require_header content-security-policy "default-src 'none'"
+          require_header content-security-policy "frame-ancestors 'none'"
+          require_header x-frame-options 'DENY'
+          require_header x-content-type-options 'nosniff'
+          require_header referrer-policy 'strict-origin-when-cross-origin'
+          require_header permissions-policy 'camera=()'
+          require_header cross-origin-opener-policy 'same-origin'
+          require_header cross-origin-resource-policy 'same-origin'
+          test -s /tmp/body
+          echo 'LIVE_EDGE_SECURITY_CONTRACT=PASS'
+          echo 'CLOUDFLARE_SECURITY_AUDIT=PASS'
