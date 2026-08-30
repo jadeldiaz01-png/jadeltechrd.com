@@ -1,0 +1,56 @@
+name: Audit GitHub Pages configuration
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pages-config-audit.yml'
+
+permissions:
+  contents: read
+  pages: read
+
+jobs:
+  audit-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read Pages configuration without mutation
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          response=$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages")
+
+          jq '{
+            status,
+            cname,
+            html_url,
+            public,
+            build_type,
+            pending_domain_unverified_at,
+            protected_domain_state,
+            https_enforced,
+            https_certificate: (
+              if .https_certificate then {
+                state: .https_certificate.state,
+                description: .https_certificate.description,
+                domains: .https_certificate.domains,
+                expires_at: .https_certificate.expires_at
+              } else null end
+            )
+          }' <<<"$response"
+
+          cname=$(jq -r '.cname // empty' <<<"$response")
+          if [ "$cname" = 'jadeltechrd.com' ]; then
+            echo 'PAGES_CUSTOM_DOMAIN=PASS'
+          else
+            echo "PAGES_CUSTOM_DOMAIN=FAIL current=${cname:-<none>} expected=jadeltechrd.com" >&2
+            exit 2
+          fi
