@@ -20,18 +20,18 @@ jobs:
       DOMAIN: jadeltechrd.com
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
-      - name: Audit apex records relevant to TLS
+      - name: Audit declared Cloudflare edge TLS topology
         shell: bash
         run: |
           set -euo pipefail
           test -n "${CLOUDFLARE_API_TOKEN:-}"
           auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
           zones=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50")
-          zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name == $d) | .id' <<<"$zones" | head -n1)
+          zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .id' <<<"$zones" | head -n1)
           test -n "$zone_id"
           records=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=${DOMAIN}&per_page=100")
 
-          echo 'A records:'
+          echo 'A origin records:'
           jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and .type=="A") | "A content=\(.content) proxied=\(.proxied)"' <<<"$records"
           echo 'AAAA records:'
           jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and .type=="AAAA") | "AAAA content=\(.content) proxied=\(.proxied)"' <<<"$records"
@@ -41,16 +41,16 @@ jobs:
           expected_a=$(printf '%s\n' 185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153 | sort)
           actual_a=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and .type=="A") | .content' <<<"$records" | sort)
           test "$actual_a" = "$expected_a"
-          bad_proxy=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and (.type=="A" or .type=="AAAA") and .proxied==true) | .type' <<<"$records")
-          if [ -n "$bad_proxy" ]; then
-            echo 'TLS_DNS_AUDIT=FAIL Cloudflare proxy enabled on Pages address record.' >&2
+
+          proxied_count=$(jq -r --arg d "$DOMAIN" '[.result[] | select(.name==$d and .type=="A" and .proxied==true)] | length' <<<"$records")
+          if [ "$proxied_count" != 4 ]; then
+            echo "TLS_DNS_AUDIT=FAIL expected 4 proxied GitHub Pages origin A records, got ${proxied_count}." >&2
             exit 4
           fi
 
-          allowed_v6='^(2606:50c0:8000::153|2606:50c0:8001::153|2606:50c0:8002::153|2606:50c0:8003::153)$'
-          extra_v6=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and .type=="AAAA") | .content' <<<"$records" | grep -vE "$allowed_v6" || true)
+          extra_v6=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and .type=="AAAA") | .content' <<<"$records" || true)
           if [ -n "$extra_v6" ]; then
-            echo 'TLS_DNS_AUDIT=FAIL unexpected apex AAAA record(s).' >&2
+            echo 'TLS_DNS_AUDIT=FAIL unexpected apex AAAA record(s) in the declared IPv4 edge topology.' >&2
             echo "$extra_v6" >&2
             exit 5
           fi
@@ -58,9 +58,21 @@ jobs:
           caa_count=$(jq -r --arg d "$DOMAIN" '[.result[] | select(.name==$d and .type=="CAA")] | length' <<<"$records")
           if [ "$caa_count" -gt 0 ]; then
             letsencrypt=$(jq -r --arg d "$DOMAIN" '[.result[] | select(.name==$d and .type=="CAA") | (.data.value // "")] | any(. == "letsencrypt.org")' <<<"$records")
-            if [ "$letsencrypt" != 'true' ]; then
+            if [ "$letsencrypt" != true ]; then
               echo 'TLS_DNS_AUDIT=FAIL CAA exists but does not authorize letsencrypt.org.' >&2
               exit 6
             fi
           fi
+
+          public_a=$(dig @1.1.1.1 +short A "$DOMAIN" | sort)
+          test -n "$public_a"
+          if grep -qE '^185\.199\.(108|109|110|111)\.153$' <<<"$public_a"; then
+            echo 'TLS_DNS_AUDIT=FAIL public DNS bypasses Cloudflare.' >&2
+            exit 7
+          fi
+          echo "Cloudflare public edge: ${public_a//$'\n'/, }"
+
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 10 --max-time 20 "https://${DOMAIN}/" >/dev/null
           echo 'TLS_DNS_AUDIT=PASS'
+          echo 'CLOUDFLARE_EDGE_TLS=PASS'
