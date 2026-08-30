@@ -1,0 +1,116 @@
+name: Reconcile Cloudflare DNS for GitHub Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cloudflare-dns.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile-dns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DOMAIN: jadeltechrd.com
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Require least-privilege Cloudflare token
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo 'CLOUDFLARE_API_TOKEN is not configured.' >&2
+            echo 'Required scope: Zone Read + DNS Write, restricted to jadeltechrd.com.' >&2
+            exit 2
+          fi
+
+      - name: Verify token and resolve zone
+        id: zone
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+
+          verify=$(curl --fail-with-body -sS "${auth[@]}" \
+            https://api.cloudflare.com/client/v4/user/tokens/verify)
+          test "$(jq -r '.success' <<<"$verify")" = 'true'
+          test "$(jq -r '.result.status' <<<"$verify")" = 'active'
+
+          zones=$(curl --fail-with-body -sS "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50")
+          test "$(jq -r '.success' <<<"$zones")" = 'true'
+          zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name == $d) | .id' <<<"$zones" | head -n1)
+          if [ -z "$zone_id" ] || [ "$zone_id" = 'null' ]; then
+            echo "Active Cloudflare zone not found for ${DOMAIN}." >&2
+            exit 3
+          fi
+          echo "zone_id=$zone_id" >> "$GITHUB_OUTPUT"
+          echo "Cloudflare zone resolved without exposing credentials."
+
+      - name: Reconcile apex A records fail-closed
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.zone.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          desired=(185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153)
+
+          records=$(curl --fail-with-body -sS "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?name=${DOMAIN}&per_page=100")
+          test "$(jq -r '.success' <<<"$records")" = 'true'
+
+          conflict=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name == $d and (.type == "CNAME" or .type == "NS" or .type == "ALIAS")) | [.type,.content] | @tsv' <<<"$records")
+          if [ -n "$conflict" ]; then
+            echo 'Conflicting apex record found; refusing destructive changes:' >&2
+            echo "$conflict" >&2
+            exit 4
+          fi
+
+          extra_a=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name == $d and .type == "A") | .content' <<<"$records" \
+            | grep -vxE '185\.199\.(108|109|110|111)\.153' || true)
+          if [ -n "$extra_a" ]; then
+            echo 'Unknown apex A record(s) found; refusing to delete automatically:' >&2
+            echo "$extra_a" >&2
+            exit 5
+          fi
+
+          for ip in "${desired[@]}"; do
+            record_id=$(jq -r --arg d "$DOMAIN" --arg ip "$ip" '.result[] | select(.name == $d and .type == "A" and .content == $ip) | .id' <<<"$records" | head -n1)
+            if [ -n "$record_id" ] && [ "$record_id" != 'null' ]; then
+              payload=$(jq -nc --arg type A --arg name "$DOMAIN" --arg content "$ip" '{type:$type,name:$name,content:$content,ttl:1,proxied:false}')
+              response=$(curl --fail-with-body -sS -X PATCH "${auth[@]}" \
+                "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${record_id}" \
+                --data "$payload")
+              test "$(jq -r '.success' <<<"$response")" = 'true'
+              echo "Reconciled A ${DOMAIN} -> ${ip} (DNS only)."
+            else
+              payload=$(jq -nc --arg type A --arg name "$DOMAIN" --arg content "$ip" '{type:$type,name:$name,content:$content,ttl:1,proxied:false}')
+              response=$(curl --fail-with-body -sS -X POST "${auth[@]}" \
+                "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" \
+                --data "$payload")
+              test "$(jq -r '.success' <<<"$response")" = 'true'
+              echo "Created A ${DOMAIN} -> ${ip} (DNS only)."
+            fi
+          done
+
+      - name: Verify authoritative/public DNS convergence
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=$(printf '%s\n' 185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153 | sort)
+          for attempt in $(seq 1 12); do
+            actual=$(dig @1.1.1.1 +short A "$DOMAIN" | sort || true)
+            if [ "$actual" = "$expected" ]; then
+              echo 'DNS_RESOLUTION=PASS'
+              exit 0
+            fi
+            echo "DNS not converged yet (attempt ${attempt}/12)."
+            sleep 10
+          done
+          echo 'DNS_RESOLUTION=PENDING_PROPAGATION' >&2
+          exit 6
