@@ -50,33 +50,65 @@ jobs:
           printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
           echo 'Cloudflare token normalized without exposing its value.'
 
-      - name: Verify token and resolve zone
+      - name: Authenticate and resolve Cloudflare zone
         id: zone
         shell: bash
         run: |
           set -euo pipefail
           auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
 
-          tmp=$(mktemp)
-          code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" https://api.cloudflare.com/client/v4/user/tokens/verify || true)
-          if [ "$code" != '200' ]; then
-            echo "Cloudflare token verification failed with HTTP ${code}." >&2
-            jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' "$tmp" >&2 || true
+          case "$CLOUDFLARE_API_TOKEN" in
+            cfut_*) token_family='user_api_token' ;;
+            cfat_*) token_family='account_api_token' ;;
+            cfk_*)
+              echo 'A Cloudflare Global API Key was supplied. This workflow intentionally rejects legacy global keys; create a scoped API Token instead.' >&2
+              exit 8
+              ;;
+            *) token_family='legacy_or_unknown_api_token' ;;
+          esac
+          echo "token_family=${token_family}"
+
+          # User-owned tokens have a dedicated verification endpoint. Account-owned
+          # tokens are authenticated authoritatively by the zone API request below.
+          if [ "$token_family" = 'user_api_token' ] || [ "$token_family" = 'legacy_or_unknown_api_token' ]; then
+            verify_tmp=$(mktemp)
+            verify_code=$(curl -sS -o "$verify_tmp" -w '%{http_code}' "${auth[@]}" \
+              https://api.cloudflare.com/client/v4/user/tokens/verify || true)
+            if [ "$verify_code" = '200' ] && [ "$(jq -r '.success // false' "$verify_tmp")" = 'true' ]; then
+              status=$(jq -r '.result.status // "unknown"' "$verify_tmp")
+              echo "user_token_verify_status=${status}"
+              if [ "$status" != 'active' ]; then
+                echo 'Cloudflare user API token is not active.' >&2
+                exit 7
+              fi
+            else
+              echo "User-token verification was not authoritative for this credential (HTTP ${verify_code}); testing zone access next."
+            fi
+          fi
+
+          zones_tmp=$(mktemp)
+          zones_code=$(curl -sS -o "$zones_tmp" -w '%{http_code}' "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50" || true)
+          if [ "$zones_code" != '200' ]; then
+            echo "Cloudflare zone API authentication/authorization failed with HTTP ${zones_code}." >&2
+            jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' "$zones_tmp" >&2 || true
             exit 7
           fi
-          test "$(jq -r '.success' "$tmp")" = 'true'
-          test "$(jq -r '.result.status' "$tmp")" = 'active'
 
-          zones=$(curl --fail-with-body -sS "${auth[@]}" \
-            "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50")
-          test "$(jq -r '.success' <<<"$zones")" = 'true'
+          zones=$(cat "$zones_tmp")
+          if [ "$(jq -r '.success // false' <<<"$zones")" != 'true' ]; then
+            echo 'Cloudflare zone API returned success=false.' >&2
+            jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' <<<"$zones" >&2 || true
+            exit 7
+          fi
+
           zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name == $d) | .id' <<<"$zones" | head -n1)
           if [ -z "$zone_id" ] || [ "$zone_id" = 'null' ]; then
-            echo "Active Cloudflare zone not found for ${DOMAIN}." >&2
+            echo "Active Cloudflare zone not found for ${DOMAIN}. Token must include Zone Read for this specific zone." >&2
             exit 3
           fi
           echo "zone_id=$zone_id" >> "$GITHUB_OUTPUT"
-          echo 'Cloudflare token and zone validated.'
+          echo 'Cloudflare credential authenticated and zone resolved.'
 
       - name: Reconcile apex A records fail-closed
         shell: bash
