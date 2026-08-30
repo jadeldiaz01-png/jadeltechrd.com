@@ -12,6 +12,8 @@ permissions:
 
 jobs:
   reconcile-dns:
+    environment:
+      name: github-pages
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -23,7 +25,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-            echo 'CLOUDFLARE_API_TOKEN is not configured.' >&2
+            echo 'CLOUDFLARE_API_TOKEN is not configured in the github-pages environment.' >&2
             echo 'Required scope: Zone Read + DNS Write, restricted to jadeltechrd.com.' >&2
             exit 2
           fi
@@ -81,15 +83,14 @@ jobs:
 
           for ip in "${desired[@]}"; do
             record_id=$(jq -r --arg d "$DOMAIN" --arg ip "$ip" '.result[] | select(.name == $d and .type == "A" and .content == $ip) | .id' <<<"$records" | head -n1)
+            payload=$(jq -nc --arg type A --arg name "$DOMAIN" --arg content "$ip" '{type:$type,name:$name,content:$content,ttl:1,proxied:false}')
             if [ -n "$record_id" ] && [ "$record_id" != 'null' ]; then
-              payload=$(jq -nc --arg type A --arg name "$DOMAIN" --arg content "$ip" '{type:$type,name:$name,content:$content,ttl:1,proxied:false}')
               response=$(curl --fail-with-body -sS -X PATCH "${auth[@]}" \
                 "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${record_id}" \
                 --data "$payload")
               test "$(jq -r '.success' <<<"$response")" = 'true'
               echo "Reconciled A ${DOMAIN} -> ${ip} (DNS only)."
             else
-              payload=$(jq -nc --arg type A --arg name "$DOMAIN" --arg content "$ip" '{type:$type,name:$name,content:$content,ttl:1,proxied:false}')
               response=$(curl --fail-with-body -sS -X POST "${auth[@]}" \
                 "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" \
                 --data "$payload")
