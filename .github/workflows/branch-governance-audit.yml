@@ -1,0 +1,66 @@
+name: Audit repository branch governance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 10 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  ruleset-governance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require active default-branch rulesets
+        shell: bash
+        env:
+          API_VERSION: '2022-11-28'
+        run: |
+          set -euo pipefail
+
+          audit_repo() {
+            local repo="$1" required_check="$2"
+            local list ruleset_id detail types contexts include_default
+            echo "Auditing ${repo}"
+
+            list=$(curl --fail-with-body --silent --show-error \
+              -H 'Accept: application/vnd.github+json' \
+              -H "X-GitHub-Api-Version: ${API_VERSION}" \
+              "https://api.github.com/repos/${repo}/rulesets")
+
+            ruleset_id=$(jq -r '.[] | select(.target=="branch" and .enforcement=="active") | .id' <<<"$list" | head -n1)
+            if [ -z "$ruleset_id" ] || [ "$ruleset_id" = null ]; then
+              echo "RULESET_${repo//\//_}=FAIL no active branch ruleset"
+              return 30
+            fi
+
+            detail=$(curl --fail-with-body --silent --show-error \
+              -H 'Accept: application/vnd.github+json' \
+              -H "X-GitHub-Api-Version: ${API_VERSION}" \
+              "https://api.github.com/repos/${repo}/rulesets/${ruleset_id}")
+
+            include_default=$(jq -r '.conditions.ref_name.include // [] | any(. == "~DEFAULT_BRANCH")' <<<"$detail")
+            test "$include_default" = true
+
+            types=$(jq -r '[.rules[]?.type] | unique | .[]' <<<"$detail")
+            for required in pull_request required_status_checks deletion non_fast_forward; do
+              grep -Fxq "$required" <<<"$types" || {
+                echo "RULESET_${repo//\//_}=FAIL missing rule ${required}"
+                return 31
+              }
+            done
+
+            contexts=$(jq -r '[.rules[]? | select(.type=="required_status_checks") | .parameters.required_status_checks[]?.context] | .[]' <<<"$detail")
+            grep -Fxq "$required_check" <<<"$contexts" || {
+              echo "RULESET_${repo//\//_}=FAIL missing check ${required_check}"
+              return 32
+            }
+
+            echo "RULESET_${repo//\//_}=PASS id=${ruleset_id} check=${required_check}"
+          }
+
+          audit_repo 'jadeldiaz01-png/jadeltechrd.com' 'security-baseline'
+          audit_repo 'jadeldiaz01-png/jadeldiaz01-png.github.io' 'root-public-site-validation'
+          echo 'BRANCH_GOVERNANCE=PASS'
