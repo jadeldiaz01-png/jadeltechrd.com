@@ -1,0 +1,118 @@
+rvice.priceLabel}</strong>
+        </div>
+        <button class="mini-action" type="button" data-add-service="${service.id}" aria-pressed="false">Añadir</button>
+      </div>
+    </article>`;
+
+  const homeMarkup = `
+    <section class="commercial-home" data-view="home">
+      <section class="hero-v2" id="inicio">
+        <div class="hero-copy reveal">
+          <div class="eyebrow"><span class="live-dot"></span> Agentic Systems Studio · 2026</div>
+          <h1>Agentes de IA que <span>trabajan con controles reales.</span></h1>
+          <p class="lead">Diseñamos automatización, agentes, media intelligence, integraciones y sistemas de decisión con ingeniería, seguridad y aprobación humana donde importa.</p>
+          <div class="actions">
+            <a class="button primary" href="#servicios">Explorar servicios <span aria-hidden="true">↘</span></a>
+            <a class="button secondary" href="#configurador">Configurar una solución</a>
+          </div>
+          <div class="hero-trust" aria-label="Principios de operación">
+            <span>✓ Human-in-the-loop</span>
+            <span>✓ Fail-closed</span>
+            <span>✓ APIs oficiales</span>
+            <span>✓ Evidencia auditable</span>
+          </div>
+        </div>
+
+        <div class="agent-console reveal" aria-label="Visualización del sistema de agentes">
+          <div class="console-bar">
+            <span class="console-dot"></span><span class="console-dot"></span><span class="console-dot"></span>
+            <span class="console-title">Jadel Agent Control Plane</span>
+            <span class="console-state">ONLINE</span>
+          </div>
+          <div class="agent-core">
+            <div class="core-orbit orbit-a"><span>Media</span><span>Data</span><span>Sales</span></div>
+            <div class="core-orbit orbit-b"><span>Risk</span><span>Policy</span><span>Ops</span></div>
+            <div class="core-node"><strong>JT</strong><small>ORCHESTRATOR</small></div>
+          </div>
+          <div class="console-events" aria-live="polite">
+            <div><span class="event-ok">PASS</span><b>Policy gate</b><small>external action requires approval</small></div>
+            <div><span class="event-ok">PASS</span><b>Evidence ledger</b><small>trace id attached</small></div>
+            <div><span class="event-wait">HITL</span><b>Human approval</b><small>waiting before side effect</small></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="signal-strip reveal" aria-label="Capacidades verificables">
+        <div><strong>4</strong><span>plataformas sociales en conectores CineForge</span></div>
+        <div><strong>3</strong><span>niveles de madurez visibles en el catálogo</span></div>
+        <div><strong>0</strong><span>acciones críticas autónomas sin gates</span></div>
+        <div><strong>24/7</strong><span>arquitectura preparada para observabilidad</span></div>
+      </section>
+
+      <section class="section-block" id="servicios">
+        <div class="section-heading reveal">
+          <div>
+            <div class="eyebrow">Catálogo de capacidades</div>
+            <h2>Un estudio de agentes, no una caja negra.</h2>
+          </div>
+          <p>Cada servicio indica su nivel real de madurez. “Piloto” no se presenta como producción y “Research-only” nunca se vende como operación financiera real.</p>
+        </div>
+        <div class="filter-row reveal" role="group" aria-label="Filtrar servicios">
+          ${categories.map(([id, label], index) => `<button type="button" class="filter-chip${index === 0 ? " is-active" : ""}" data-filter="${id}" aria-pressed="${index === 0}">${label}</button>`).join("")}
+        </div>
+        <div class="services-grid" id="services-grid">
+          ${services.map(serviceCard).join("")}
+        </div>
+      </section>
+
+      <section class="section-block split-section" id="metodo">
+        <div class="section-heading reveal">
+          <div>
+            <div class="eyebrow">Cómo trabajamos</div>
+            <h2>De problema real a sistema controlado.</h2>
+          </div>
+          <p>La autonomía se gana con evidencia. Primero definimos valor, después permisos, ejecución, observabilidad y criterios de promoción.</p>
+        </div>
+        <ol class="process-grid">
+          <li class="process-card reveal"><span>01</span><h3>Descubrir</h3><p>Proceso, datos, coste actual, riesgos, restricciones y objetivo medible.</p></li>
+          <li class="process-card reveal"><span>02</span><h3>Diseñar</h3><p>Arquitectura, contratos, integraciones, guardrails, HITL y modelo de datos.</p></li>
+          <li class="process-card reveal"><span>03</span><h3>Validar</h3><p>Tests, evals, sandbox, observabilidad, seguridad y evidencia de calidad.</p></li>
+          <li class="process-card reveal"><span>04</span><h3>Operar</h3><p>Despliegue gradual, SLOs, alertas, reconciliación y mejora controlada.</p></li>
+        </ol>
+      </section>
+
+      <section class="section-block configurator-shell" id="configurador">
+        <div class="section-heading reveal">
+          <div>
+            <div class="eyebrow">Configurador interactivo</div>
+            <h2>Construye tu alcance en segundos.</h2>
+          </div>
+          <p>Selecciona capacidades. La estimación es orientativa y no incluye consumo de APIs, licencias de terceros, impuestos ni requisitos extraordinarios de cumplimiento.</p>
+        </div>
+        <div class="configurator reveal">
+          <div class="selected-services" id="selected-services">
+            <div class="empty-selection">
+              <span>+</span>
+              <strong>Tu solución está vacía</strong>
+              <p>Añade servicios desde el catálogo para estimar implementación y soporte.</p>
+            </div>
+          </div>
+          <aside class="estimate-card">
+            <span class="estimate-label">Estimación inicial</span>
+            <div class="estimate-row"><span>Implementación</span><strong id="estimate-setup">US$0</strong></div>
+            <div class="estimate-row"><span>Soporte mensual</span><strong id="estimate-monthly">US$0</strong></div>
+            <div class="estimate-note">Rango recomendado final: ±25% según integraciones, volumen y controles requeridos.</div>
+            <button class="button primary full" type="button" id="copy-brief" disabled>Copiar brief de proyecto</button>
+            <span class="copy-feedback" id="copy-feedback" role="status"></span>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section-block pricing-section" id="precios">
+        <div class="section-heading reveal">
+          <div>
+            <div class="eyebrow">Paquetes de lanzamiento</div>
+            <h2>Precios claros para empezar. Escala solo cuando genera valor.</h2>
+          </div>
+          <p>Posicionamiento entre herramientas self-service y consultoría enterprise: más implementación que un SaaS genérico, sin empezar en tickets de US$10k para cada proyecto.</p>
+   
