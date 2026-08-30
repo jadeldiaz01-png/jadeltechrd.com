@@ -56,31 +56,23 @@ A response-header Transform Rule emits:
 - `Cross-Origin-Opener-Policy: same-origin`
 - `Cross-Origin-Resource-Policy: same-origin`
 
-Production hardening verification: GitHub Actions run `33315441016`, successful rerun job `99268073291`.
-
-Post-merge edge audit: run `33315889967` completed successfully and confirmed TLS/HTTPS settings plus all required response headers present on the public domain.
+The permanent Cloudflare drift auditor is fail-closed. Run `33316965872` verified TLS 1.2 minimum, TLS 1.3, Always HTTPS, Automatic HTTPS Rewrites, Browser Integrity Check, security level, HSTS invariants, HTTP-to-HTTPS redirect, the managed WAF execute rule, and all required public security headers.
 
 ### Cloudflare Free Managed WAF — PASS / LIVE
 
 Cloudflare's official documentation identifies the **Cloudflare Free Managed Ruleset** as available on every Cloudflare plan and publishes the ruleset ID `77454fe2d30c4220b5701f6fdfb893ba`.
 
-The WAF reconciler was redesigned to avoid account-level managed-ruleset enumeration. It now needs only zone-level access, resolves the active zone, uses the documented Free Managed Ruleset ID, deploys the ruleset idempotently in the `http_request_firewall_managed` phase, verifies the active execute rule, and then performs post-change public health checks.
+The WAF reconciler uses zone-level access, the documented Free Managed Ruleset ID, deploys it idempotently in the `http_request_firewall_managed` phase, verifies the active execute rule, and performs post-change public health checks.
 
 Verified production execution:
 
 - workflow run: `33316670808`
 - job: `99271274056`
 - `CLOUDFLARE_ZONE_ACCESS=PASS`
-- `FREE_MANAGED_RULESET_ID_SOURCE=OFFICIAL_CLOUDFLARE_DOCS`
 - `FREE_MANAGED_WAF_DEPLOY=PASS`
 - `FREE_MANAGED_WAF_VERIFY=PASS`
-- homepage: HTTP 200
-- privacy: HTTP 200
-- terms: HTTP 200
-- data deletion: HTTP 200
+- homepage/privacy/terms/data-deletion: HTTP 200
 - `POST_WAF_SITE_HEALTH=PASS`
-
-The previous blocker `Account Rulesets Read` is no longer required and was not broadened. This closes the managed-WAF security gate without expanding the credential to unnecessary account-level inventory permissions.
 
 ### Source/browser security — PASS / MERGED
 
@@ -93,10 +85,6 @@ The canonical homepage includes a restrictive CSP meta policy and strict referre
 - requires every external GitHub Action to use a full 40-character commit SHA
 - performs a Chrome headless smoke test under CSP
 
-Security baseline run `33315817723` passed on the final hardening branch revision. Pull-request security baseline run `33315856455` also passed before merge.
-
-PR #4 was merged to `main` as commit `aa6a6ab107a9f9e109d937853d0e6185bb0bd1f2`.
-
 ### GitHub Actions supply chain — PASS / MERGED
 
 Pinned canonical Actions include:
@@ -106,30 +94,63 @@ Pinned canonical Actions include:
 - `actions/upload-pages-artifact` → `56afc609e74202658d3ffba0e8f6dda462b719fa`
 - `actions/deploy-pages` → `d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e`
 
-The actual root Pages synchronization workflow also uses the immutable checkout SHA and fails closed if the synchronized canonical homepage lacks the CSP/referrer security baseline.
+The root Pages validation and synchronization workflows also use immutable checkout SHAs.
 
-Root synchronization run `33315914772` completed successfully. The resulting GitHub Pages build/deployment run `33315920973` also completed successfully.
+### Canonical repository ruleset — PASS / ACTIVE
+
+GitHub repository ruleset ID `21863034`, `Jadel Tech RD canonical main protection`, is active and targets `~DEFAULT_BRANCH`.
+
+Verified rules:
+
+- pull request required
+- `security-baseline` required status check
+- strict required-status-check policy
+- review-thread resolution
+- linear history
+- deletion restricted
+- non-fast-forward / force-push restricted
+- `bypass_actors=[]`
+- connected actor reports `current_user_can_bypass=never`
+
+GitHub branch metadata now reports `protected=true`; legacy branch-protection fields remain separate and are not the authority for this ruleset.
+
+### Root Pages publication architecture — PASS / PR-BASED
+
+Root PR #1 migrated `.github/workflows/sync-public-site.yml` away from direct pushes to `main`.
+
+The new workflow:
+
+- synchronizes only on an isolated `automation/canonical-site-sync` branch
+- validates canonical assets before committing
+- creates/updates a PR when the configured PR credential permits it
+- never publishes synchronized content directly to protected `main`
+- preserves production unchanged if PR creation is blocked
+- runs hourly and can be manually dispatched
+- uses concurrency to avoid overlapping synchronization runs
+
+`root-public-site-validation` passed on PR #1 exact head SHA `d9e936a8efc6d558d2786f91d72ae7b0515c37b8`. PR #1 was squash-merged as `f43dbb589b33f1be1df3c03073b885b81bdd4fb5`. The first execution of the new sync workflow completed successfully and detected no canonical drift.
+
+This removes the previous architectural reason that a root ruleset would necessarily break publication.
 
 ## Residual risks / required governance
 
-### P0 — Repository governance
+### P0 — Root Pages ruleset activation
 
-Both public-serving repositories currently report no repository rulesets protecting the default branch. Required target controls:
+The canonical repository is protected. The remaining default-branch governance gate is the root Pages repository.
 
-- require a pull request before canonical changes reach `main`
-- require the `security-baseline` status check in the canonical repository
-- require branches to be up to date before merge where practical
-- block force pushes
-- block branch deletion
-- require linear history where compatible
-- keep bypass actors empty or explicitly minimized
-- require signed commits only after automation identities are prepared, to avoid operational deadlock
+`docs/security/rulesets/root-pages-main-protection.json` is prepared with:
 
-The canonical ruleset can enforce these controls directly.
+- PR requirement
+- `root-public-site-validation` required status check
+- strict up-to-date check policy
+- linear history
+- deletion restriction
+- non-fast-forward / force-push restriction
+- no bypass actors
 
-The root Pages repository has an architectural constraint: its synchronization workflow currently writes the validated canonical site directly to `main`. Enabling a blanket pull-request requirement there without an explicit, audited automation bypass or a PR-based synchronization redesign would break publication. Therefore root protection must be activated only together with a safe synchronization path; do not weaken the rule silently just to keep the pipeline green.
+Importing that ruleset requires repository administrative action. After activation, verify it through GitHub REST and perform a controlled PR-based publication test.
 
-This control remains open because the connected GitHub integration exposes ruleset reads but not the Administration-write operation required to create or edit repository rulesets.
+For autonomous PR creation, the preferred identity is a least-privilege GitHub App installation token. A fine-grained PAT is a secondary option. `GITHUB_TOKEN` can safely publish the synchronization branch but GitHub repository settings may restrict workflow-created PRs or subsequent PR workflow execution; therefore do not weaken branch rules to accommodate token limitations.
 
 ### P1 — Security reporting
 
@@ -157,12 +178,12 @@ Cloudflare DDoS protection remains part of the edge architecture. Permanent week
 
 - Edge transport and browser headers: **PASS / LIVE**
 - Cloudflare Free Managed WAF: **PASS / LIVE**
+- Cloudflare fail-closed drift audit: **PASS**
 - Static source security gate: **PASS / MERGED / DEPLOYED**
 - Immutable Actions in canonical repo: **PASS / MERGED**
-- Immutable checkout in root Pages sync: **PASS / LIVE**
+- Canonical branch protection/ruleset: **PASS / ACTIVE**
 - Root synchronization security baseline: **PASS**
-- GitHub Pages build/deploy after hardening: **PASS**
-- Canonical branch protection/ruleset: **PENDING ADMIN CONTROL**
-- Root Pages branch protection/ruleset: **PENDING ADMIN CONTROL + SAFE SYNC DESIGN**
+- Root publication architecture: **PASS / PR-BASED**
+- Root Pages branch protection/ruleset: **PENDING ADMIN ACTIVATION**
 
-Production security is materially stronger. `SECURITY_FULLY_CLOSED=NO` only because repository-governance enforcement on the two public-serving default branches is not yet active.
+Production security is materially stronger. `SECURITY_FULLY_CLOSED=NO` only because the root Pages default-branch ruleset still requires administrative activation and post-activation verification.
