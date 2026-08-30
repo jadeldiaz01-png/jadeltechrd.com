@@ -1,0 +1,86 @@
+l-gradient(circle at 90% 70%, rgba(116,192,252,.08), transparent 28%),
+    rgba(255,255,255,.028);
+}
+.final-cta .actions { margin: 0; justify-content: flex-end; }
+
+.reveal { opacity: 0; transform: translateY(18px); transition: opacity .65s ease, transform .65s cubic-bezier(.2,.8,.2,1); }
+.reveal.is-visible { opacity: 1; transform: none; }
+
+/* Legal views retained and visually aligned */
+.legal {
+  max-width: 880px;
+  padding: clamp(3.5rem, 7vw, 6rem) 0 7rem;
+}
+.legal-heading {
+  padding-bottom: 1.5rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--line);
+}
+.legal h1 {
+  margin: .6rem 0 1rem;
+  font-size: clamp(2.5rem, 6vw, 4.8rem);
+}
+.legal h2 { margin: 2.5rem 0 .8rem; font-size: 1.4rem; }
+.legal p, .legal li { color: #ccd6e6; }
+.legal ul { padding-left: 1.3rem; }
+.legal li + li { margin-top: .4rem; }
+.legal code { padding: .15rem .35rem; border-radius: .35rem; background: rgba(255,255,255,.07); }
+.muted { color: var(--muted) !important; }
+
+.site-footer {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .88rem;
+  background: rgba(2,4,8,.35);
+}
+.site-footer nav { gap: .8rem; }
+.site-footer a:hover { color: var(--text); }
+
+@media (max-width: 1060px) {
+  .hero-v2 { grid-template-columns: 1fr; min-height: auto; }
+  .hero-v2 h1 { max-width: 13ch; }
+  .agent-console { width: min(680px, 100%); }
+  .services-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pricing-grid { grid-template-columns: repeat(2, 1fr); }
+  .pricing-card.featured { transform: none; }
+  .process-grid { grid-template-columns: repeat(2, 1fr); }
+  .benchmark-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 780px) {
+  .header-inner, .footer-inner { align-items: flex-start; flex-direction: column; padding-block: .85rem; }
+  .nav { width: 100%; overflow-x: auto; flex-wrap: nowrap; padding-bottom: .2rem; scrollbar-width: none; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { white-space: nowrap; }
+  .hero-v2 { padding-top: 4rem; }
+  .hero-v2 h1 { font-size: clamp(3rem, 15vw, 5rem); }
+  .agent-console { min-height: 460px; }
+  .agent-core { width: min(290px, 82%); }
+  .orbit-a { width: 210px; height: 210px; }
+  .orbit-b { width: 275px; height: 275px; }
+  .signal-strip { grid-template-columns: repeat(2, 1fr); }
+  .section-heading { grid-template-columns: 1fr; align-items: start; }
+  .services-grid, .pricing-grid, .governance-panel, .configurator, .final-cta { grid-template-columns: 1fr; }
+  .estimate-card { position: static; }
+  .governance-grid { grid-template-columns: repeat(2, 1fr); }
+  .final-cta .actions { justify-content: flex-start; }
+}
+
+@media (max-width: 520px) {
+  .shell { width: min(calc(100% - 1.2rem), var(--max)); }
+  .hero-v2 h1 { max-width: 100%; }
+  .hero-trust { display: grid; grid-template-columns: 1fr 1fr; }
+  .agent-console { min-height: 430px; border-radius: 20px; }
+  .console-events > div { grid-template-columns: 44px 1fr; }
+  .signal-strip, .services-grid, .process-grid, .pricing-grid, .benchmark-grid, .governance-grid { grid-template-columns: 1fr; }
+  .signal-strip > div { min-height: 105px; }
+  .service-card { min-height: 395px; }
+  .section-block { padding-top: 5.5rem; }
+  .final-cta { margin-bottom: 3rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  .reveal { opacity: 1; transform: none; }
+}
