@@ -1,10 +1,6 @@
 name: Harden Cloudflare security posture
 
 on:
-  push:
-    branches: [security/hardening-2026]
-    paths:
-      - '.github/workflows/cloudflare-security-harden.yml'
   workflow_dispatch:
 
 permissions:
@@ -70,7 +66,7 @@ jobs:
           patch_setting security_header '{"value":{"strict_transport_security":{"enabled":true,"max_age":15552000,"include_subdomains":false,"preload":false,"nosniff":true}}}'
           echo 'TRANSPORT_HARDENING=PASS'
 
-      - name: Install deterministic response security headers
+      - name: Install deterministic response security headers without replacing unrelated rules
         shell: bash
         env:
           ZONE_ID: ${{ steps.zone.outputs.zone_id }}
@@ -83,36 +79,42 @@ jobs:
 
           csp="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
           permissions='accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()'
-          payload=$(jq -n --arg domain "$DOMAIN" --arg csp "$csp" --arg pp "$permissions" '{
-            rules: [{
-              ref: "jadel_security_headers_v1",
-              expression: ("(http.host eq \"" + $domain + "\")"),
-              description: "Jadel Tech RD hardened browser response headers",
-              action: "rewrite",
-              action_parameters: {headers: {
-                "Content-Security-Policy": {operation:"set", value:$csp},
-                "X-Frame-Options": {operation:"set", value:"DENY"},
-                "X-Content-Type-Options": {operation:"set", value:"nosniff"},
-                "Referrer-Policy": {operation:"set", value:"strict-origin-when-cross-origin"},
-                "Permissions-Policy": {operation:"set", value:$pp},
-                "Cross-Origin-Opener-Policy": {operation:"set", value:"same-origin"},
-                "Cross-Origin-Resource-Policy": {operation:"set", value:"same-origin"}
-              }},
-              enabled: true
-            }]
+          rule=$(jq -n --arg domain "$DOMAIN" --arg csp "$csp" --arg pp "$permissions" '{
+            ref: "jadel_security_headers_v1",
+            expression: ("(http.host eq \"" + $domain + "\")"),
+            description: "Jadel Tech RD hardened browser response headers",
+            action: "rewrite",
+            action_parameters: {headers: {
+              "Content-Security-Policy": {operation:"set", value:$csp},
+              "X-Frame-Options": {operation:"set", value:"DENY"},
+              "X-Content-Type-Options": {operation:"set", value:"nosniff"},
+              "Referrer-Policy": {operation:"set", value:"strict-origin-when-cross-origin"},
+              "Permissions-Policy": {operation:"set", value:$pp},
+              "Cross-Origin-Opener-Policy": {operation:"set", value:"same-origin"},
+              "Cross-Origin-Resource-Policy": {operation:"set", value:"same-origin"}
+            }},
+            enabled: true
           }')
 
+          out=$(mktemp)
           if [ "$existing_code" = 200 ]; then
             ruleset_id=$(jq -r '.result.id' "$existing")
             test -n "$ruleset_id" && test "$ruleset_id" != null
-            out=$(mktemp)
-            code=$(curl -sS -o "$out" -w '%{http_code}' --request PUT "${auth[@]}" \
-              --data "$payload" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/${ruleset_id}" || true)
+            rule_id=$(jq -r '.result.rules[]? | select(.ref=="jadel_security_headers_v1") | .id' "$existing" | head -n1)
+            if [ -n "$rule_id" ] && [ "$rule_id" != null ]; then
+              code=$(curl -sS -o "$out" -w '%{http_code}' --request PATCH "${auth[@]}" \
+                --data "$rule" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/${ruleset_id}/rules/${rule_id}" || true)
+              echo 'RESPONSE_SECURITY_HEADERS_OPERATION=UPDATE_OWN_RULE'
+            else
+              code=$(curl -sS -o "$out" -w '%{http_code}' --request POST "${auth[@]}" \
+                --data "$rule" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/${ruleset_id}/rules" || true)
+              echo 'RESPONSE_SECURITY_HEADERS_OPERATION=ADD_OWN_RULE'
+            fi
           elif [ "$existing_code" = 404 ]; then
-            create_payload=$(jq -n --argjson rules "$(jq '.rules' <<<"$payload")" '{name:"Jadel Tech RD security response headers",description:"Browser hardening headers managed by audited GitHub workflow",kind:"zone",phase:"http_response_headers_transform",rules:$rules}')
-            out=$(mktemp)
+            create_payload=$(jq -n --argjson rule "$rule" '{name:"Jadel Tech RD security response headers",description:"Browser hardening headers managed by audited GitHub workflow",kind:"zone",phase:"http_response_headers_transform",rules:[$rule]}')
             code=$(curl -sS -o "$out" -w '%{http_code}' --request POST "${auth[@]}" \
               --data "$create_payload" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets" || true)
+            echo 'RESPONSE_SECURITY_HEADERS_OPERATION=CREATE_PHASE_ENTRYPOINT'
           else
             echo "RESPONSE_HEADERS_RULESET_READ=HTTP_${existing_code}" >&2
             exit 30
@@ -153,32 +155,51 @@ jobs:
           test "$(jq -r '.result.value.strict_transport_security.nosniff' <<<"$hsts")" = true
           echo 'CLOUDFLARE_SETTING_VERIFY=PASS'
 
-      - name: Verify live transport and response headers
+      - name: Verify live transport and response headers after propagation
         shell: bash
         run: |
           set -euo pipefail
-          # HTTP must redirect to HTTPS.
-          http_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-redirs 0 "http://${DOMAIN}/" || true)
-          case "$http_code" in 301|302|307|308) ;; *) echo "HTTP_REDIRECT=FAIL code=$http_code"; exit 40;; esac
+          ok=false
+          for attempt in $(seq 1 12); do
+            echo "Edge verification attempt ${attempt}/12"
+            http_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-redirs 0 "http://${DOMAIN}/" || true)
+            case "$http_code" in 301|302|307|308) ;; *) sleep 5; continue;; esac
 
-          curl --silent --show-error --fail --location --proto '=https' --tlsv1.2 \
-            --dump-header /tmp/headers --output /tmp/body "https://${DOMAIN}/"
-          tr -d '\r' </tmp/headers >/tmp/headers.clean
-          require_header() {
-            local header="$1" pattern="$2"
-            value=$(awk -v h="$header" 'BEGIN{IGNORECASE=1} $0 ~ "^"h":" {sub(/^[^:]+:[[:space:]]*/,""); print; exit}' /tmp/headers.clean)
-            test -n "$value"
-            printf '%s' "$value" | grep -Fq "$pattern"
-            echo "HEADER_${header}=PASS"
-          }
-          require_header Strict-Transport-Security 'max-age=15552000'
-          require_header Content-Security-Policy "default-src 'none'"
-          require_header Content-Security-Policy "frame-ancestors 'none'"
-          require_header X-Frame-Options 'DENY'
-          require_header X-Content-Type-Options 'nosniff'
-          require_header Referrer-Policy 'strict-origin-when-cross-origin'
-          require_header Permissions-Policy 'camera=()'
-          require_header Cross-Origin-Opener-Policy 'same-origin'
-          require_header Cross-Origin-Resource-Policy 'same-origin'
-          grep -Fq 'Agentes de IA' /tmp/body
+            if ! curl --silent --show-error --fail --location --proto '=https' --tlsv1.2 \
+              --dump-header /tmp/headers --output /tmp/body "https://${DOMAIN}/"; then
+              sleep 5
+              continue
+            fi
+            tr -d '\r' </tmp/headers >/tmp/headers.clean
+            header_value() { awk -v h="$1" 'BEGIN{IGNORECASE=1} $0 ~ "^"h":" {sub(/^[^:]+:[[:space:]]*/,""); print; exit}' /tmp/headers.clean; }
+            hsts=$(header_value Strict-Transport-Security)
+            csp=$(header_value Content-Security-Policy)
+            xfo=$(header_value X-Frame-Options)
+            nosniff=$(header_value X-Content-Type-Options)
+            referrer=$(header_value Referrer-Policy)
+            pp=$(header_value Permissions-Policy)
+            coop=$(header_value Cross-Origin-Opener-Policy)
+            corp=$(header_value Cross-Origin-Resource-Policy)
+            if printf '%s' "$hsts" | grep -Fq 'max-age=15552000' && \
+               printf '%s' "$csp" | grep -Fq "default-src 'none'" && \
+               printf '%s' "$csp" | grep -Fq "frame-ancestors 'none'" && \
+               [ "$xfo" = DENY ] && [ "$nosniff" = nosniff ] && \
+               [ "$referrer" = strict-origin-when-cross-origin ] && \
+               printf '%s' "$pp" | grep -Fq 'camera=()' && \
+               [ "$coop" = same-origin ] && [ "$corp" = same-origin ] && \
+               grep -Fq 'Agentes de IA' /tmp/body; then
+              ok=true
+              break
+            fi
+            sleep 5
+          done
+          test "$ok" = true
+          echo 'HEADER_Strict-Transport-Security=PASS'
+          echo 'HEADER_Content-Security-Policy=PASS'
+          echo 'HEADER_X-Frame-Options=PASS'
+          echo 'HEADER_X-Content-Type-Options=PASS'
+          echo 'HEADER_Referrer-Policy=PASS'
+          echo 'HEADER_Permissions-Policy=PASS'
+          echo 'HEADER_Cross-Origin-Opener-Policy=PASS'
+          echo 'HEADER_Cross-Origin-Resource-Policy=PASS'
           echo 'LIVE_EDGE_SECURITY=PASS'
