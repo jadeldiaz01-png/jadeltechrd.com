@@ -1,0 +1,118 @@
+name: Cloudflare edge TLS canary for GitHub Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cloudflare-edge-tls-canary.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  edge-tls-canary:
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DOMAIN: jadeltechrd.com
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Enable Cloudflare proxy transactionally and verify public HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          desired=(185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153)
+
+          zones=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50")
+          zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .id' <<<"$zones" | head -n1)
+          test -n "$zone_id"
+
+          records=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=${DOMAIN}&type=A&per_page=100")
+          declare -a ids=()
+          for ip in "${desired[@]}"; do
+            id=$(jq -r --arg d "$DOMAIN" --arg ip "$ip" '.result[] | select(.name==$d and .type=="A" and .content==$ip) | .id' <<<"$records" | head -n1)
+            if [ -z "$id" ] || [ "$id" = null ]; then
+              echo "Required GitHub Pages A record missing: ${ip}" >&2
+              exit 2
+            fi
+            ids+=("$id")
+          done
+
+          rollback() {
+            echo 'Canary failed; reverting Cloudflare proxy to DNS-only.' >&2
+            for i in "${!desired[@]}"; do
+              payload=$(jq -nc --arg type A --arg name "$DOMAIN" --arg content "${desired[$i]}" '{type:$type,name:$name,content:$content,ttl:1,proxied:false}')
+              curl -sS -X PATCH "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${ids[$i]}" --data "$payload" >/dev/null || true
+            done
+          }
+          trap rollback ERR
+
+          for i in "${!desired[@]}"; do
+            payload=$(jq -nc --arg type A --arg name "$DOMAIN" --arg content "${desired[$i]}" '{type:$type,name:$name,content:$content,ttl:1,proxied:true}')
+            response=$(curl --fail-with-body -sS -X PATCH "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${ids[$i]}" --data "$payload")
+            test "$(jq -r '.success' <<<"$response")" = true
+          done
+          echo 'CLOUDFLARE_PROXY=ENABLED'
+
+          # Wait until public DNS is served by Cloudflare rather than direct GitHub Pages A records.
+          converged=false
+          for attempt in $(seq 1 18); do
+            actual=$(dig @1.1.1.1 +short A "$DOMAIN" | sort || true)
+            if [ -n "$actual" ] && ! grep -qE '^185\.199\.(108|109|110|111)\.153$' <<<"$actual"; then
+              converged=true
+              echo "Cloudflare edge DNS active: ${actual//$'\n'/, }"
+              break
+            fi
+            echo "Waiting for Cloudflare proxy DNS (${attempt}/18)..."
+            sleep 10
+          done
+          test "$converged" = true
+
+          urls=(
+            "https://${DOMAIN}/"
+            "https://${DOMAIN}/?view=privacy"
+            "https://${DOMAIN}/?view=terms"
+            "https://${DOMAIN}/?view=data-deletion"
+          )
+
+          ready=false
+          for attempt in $(seq 1 18); do
+            echo "HTTPS canary attempt ${attempt}/18"
+            all_ok=true
+            for url in "${urls[@]}"; do
+              body=$(mktemp)
+              meta=$(mktemp)
+              if curl --silent --show-error --location --fail \
+                   --connect-timeout 10 --max-time 25 --proto '=https' --tlsv1.2 \
+                   --output "$body" --write-out '%{http_code}\t%{remote_ip}\t%{ssl_verify_result}' \
+                   "$url" >"$meta"; then
+                IFS=$'\t' read -r code remote tls <"$meta"
+                echo "$url -> HTTP=$code remote=$remote tls_verify=$tls"
+                if [ "$code" != 200 ] || [ "$tls" != 0 ] || [ ! -s "$body" ]; then all_ok=false; fi
+              else
+                echo "$url -> not ready" >&2
+                all_ok=false
+              fi
+              rm -f "$body" "$meta"
+            done
+            if [ "$all_ok" = true ]; then ready=true; break; fi
+            sleep 10
+          done
+          test "$ready" = true
+
+          # Ensure canonical app assets actually come through the public edge.
+          curl --fail --silent --show-error --location "https://${DOMAIN}/" | grep -Fq 'Jadel Tech RD'
+          curl --fail --silent --show-error --location "https://${DOMAIN}/app.js" | grep -Fq 'data-deletion'
+
+          trap - ERR
+          echo 'TLS_CERTIFICATE=PASS'
+          echo 'HOME_HTTP_200=PASS'
+          echo 'PRIVACY_HTTP_200=PASS'
+          echo 'TERMS_HTTP_200=PASS'
+          echo 'DATA_DELETION_HTTP_200=PASS'
+          echo 'PUBLIC_ACCESS_READY=YES'
