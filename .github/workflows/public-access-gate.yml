@@ -1,0 +1,64 @@
+name: Public access gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/public-access-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-public-access:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DOMAIN: jadeltechrd.com
+    steps:
+      - name: Inspect authoritative DNS
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== NS ==='
+          dig +short NS "$DOMAIN" | sort | tee /tmp/ns.txt
+          echo '=== A via system resolver ==='
+          dig +short A "$DOMAIN" | sort | tee /tmp/a.txt
+          echo '=== A via Cloudflare 1.1.1.1 ==='
+          dig @1.1.1.1 +short A "$DOMAIN" | sort | tee /tmp/a-cf.txt
+          echo '=== A via Google 8.8.8.8 ==='
+          dig @8.8.8.8 +short A "$DOMAIN" | sort | tee /tmp/a-google.txt
+          test -s /tmp/ns.txt || { echo 'DNS_NS=FAIL'; exit 10; }
+          test -s /tmp/a-cf.txt || { echo 'DNS_A=FAIL'; exit 11; }
+          echo 'DNS_RESOLUTION=PASS'
+
+      - name: Inspect TLS certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 20 openssl s_client -connect "$DOMAIN:443" -servername "$DOMAIN" </dev/null 2>/tmp/tls.err \
+            | openssl x509 -noout -subject -issuer -dates -ext subjectAltName | tee /tmp/cert.txt
+          grep -Fq "DNS:$DOMAIN" /tmp/cert.txt
+          echo 'TLS_CERTIFICATE=PASS'
+
+      - name: Verify public HTTP endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          urls=(
+            "https://${DOMAIN}/"
+            "https://${DOMAIN}/?view=privacy"
+            "https://${DOMAIN}/?view=terms"
+            "https://${DOMAIN}/?view=data-deletion"
+          )
+          labels=(HOME_HTTP_200 PRIVACY_HTTP_200 TERMS_HTTP_200 DATA_DELETION_HTTP_200)
+          for i in "${!urls[@]}"; do
+            body=$(mktemp)
+            code=$(curl --silent --show-error --location --connect-timeout 10 --max-time 20 \
+              --output "$body" --write-out '%{http_code}' "${urls[$i]}" || true)
+            echo "${labels[$i]}=${code}"
+            test "$code" = '200'
+            test -s "$body"
+          done
+          echo 'PUBLIC_ACCESS_READY=PASS'
