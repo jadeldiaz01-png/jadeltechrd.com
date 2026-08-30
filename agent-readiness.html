@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="description" content="Estado verificable de madurez, controles y gates de los agentes y servicios de Jadel Tech RD.">
+  <link rel="canonical" href="https://jadeltechrd.com/agent-readiness.html">
+  <link rel="stylesheet" href="/styles.css">
+  <title>Agent Production Readiness | Jadel Tech RD</title>
+</head>
+<body>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="/" aria-label="Jadel Tech RD - Inicio"><span class="brand-mark" aria-hidden="true">JT</span><span>Jadel Tech RD</span></a>
+      <nav class="nav" aria-label="Navegación principal"><a href="/">Inicio</a><a href="/#servicios">Servicios</a><a href="/agent-readiness.html" aria-current="page">Readiness</a><a href="/?view=privacy">Privacidad</a></nav>
+    </div>
+  </header>
+  <main id="main" class="shell">
+    <section class="section-block">
+      <div class="section-heading">
+        <div><div class="eyebrow">Production Readiness Registry</div><h1>Madurez basada en evidencia, no en etiquetas.</h1></div>
+        <p>Este registro se alimenta del manifiesto de producción. Un repositorio existente no equivale a un servicio listo para producción.</p>
+      </div>
+      <div class="signal-strip" id="readiness-summary" aria-live="polite">
+        <div><strong>—</strong><span>agentes registrados</span></div><div><strong>—</strong><span>pilotos supervisados</span></div><div><strong>—</strong><span>research-only</span></div><div><strong>HITL</strong><span>acciones críticas</span></div>
+      </div>
+      <div class="services-grid" id="readiness-grid" aria-live="polite">
+        <article class="service-card"><h2>Cargando manifiesto…</h2><p>Si el manifiesto no está disponible, ningún agente será promovido visualmente.</p></article>
+      </div>
+    </section>
+    <section class="section-block">
+      <div class="section-heading"><div><div class="eyebrow">Gate institucional</div><h2>Qué significa “producción”.</h2></div><p>La promoción exige controles verificables de identidad, política, pruebas, observabilidad, costes, seguridad, idempotencia, reconciliación y aprobación humana donde corresponda.</p></div>
+    </section>
+  </main>
+  <footer class="site-footer"><div class="shell footer-inner"><p>© <span id="year"></span> Jadel Tech RD.</p><nav><a href="/">Inicio</a><a href="/config/agent-production-manifest.json">Manifiesto JSON</a></nav></div></footer>
+  <script src="/agent-readiness.js" defer></script>
+</body>
+</html>
