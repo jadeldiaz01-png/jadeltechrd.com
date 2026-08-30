@@ -2,6 +2,14 @@ name: Verify public site health
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows:
+      - Reconcile Cloudflare DNS for GitHub Pages
+    types: [completed]
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/site-health.yml'
   schedule:
     - cron: '17 */6 * * *'
 
@@ -9,11 +17,28 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  verify-public-access:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
+    env:
+      DOMAIN: jadeltechrd.com
     steps:
-      - name: Verify public endpoints
+      - name: Verify public DNS
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=$(printf '%s\n' \
+            185.199.108.153 \
+            185.199.109.153 \
+            185.199.110.153 \
+            185.199.111.153 | sort)
+          actual=$(dig @1.1.1.1 +short A "$DOMAIN" | sort)
+          printf 'Resolved A records:\n%s\n' "$actual"
+          test "$actual" = "$expected"
+          echo 'DNS_RESOLUTION=PASS'
+
+      - name: Verify TLS and HTTP 200 gates with bounded retries
         shell: bash
         run: |
           set -euo pipefail
@@ -23,21 +48,58 @@ jobs:
             "https://jadeltechrd.com/?view=terms"
             "https://jadeltechrd.com/?view=data-deletion"
           )
-          for url in "${urls[@]}"; do
-            echo "Checking $url"
-            curl --fail --silent --show-error --location \
-              --connect-timeout 10 --max-time 20 \
-              --proto '=https' --tlsv1.2 \
-              --output /tmp/site.html \
-              --write-out 'HTTP %{http_code} | remote=%{remote_ip} | tls=%{ssl_verify_result}\n' \
-              "$url"
-            test -s /tmp/site.html
+
+          success=false
+          for attempt in $(seq 1 24); do
+            echo "Public-access verification attempt ${attempt}/24"
+            all_ok=true
+
+            for url in "${urls[@]}"; do
+              body=$(mktemp)
+              meta=$(mktemp)
+              if curl --silent --show-error --location \
+                --connect-timeout 8 --max-time 20 \
+                --proto '=https' --tlsv1.2 \
+                --output "$body" \
+                --write-out '%{http_code}\t%{remote_ip}\t%{ssl_verify_result}' \
+                "$url" >"$meta"; then
+                IFS=$'\t' read -r code remote tls <"$meta"
+                echo "$url -> HTTP=$code remote=$remote tls_verify=$tls"
+                if [ "$code" != '200' ] || [ "$tls" != '0' ] || [ ! -s "$body" ]; then
+                  all_ok=false
+                fi
+              else
+                echo "$url -> HTTPS/TLS request not ready" >&2
+                all_ok=false
+              fi
+              rm -f "$body" "$meta"
+            done
+
+            if [ "$all_ok" = true ]; then
+              success=true
+              break
+            fi
+            sleep 15
           done
 
-      - name: Verify expected public content
+          if [ "$success" != true ]; then
+            echo 'PUBLIC_ACCESS_READY=NO' >&2
+            exit 1
+          fi
+
+          echo 'TLS_CERTIFICATE=PASS'
+          echo 'HOME_HTTP_200=PASS'
+          echo 'PRIVACY_HTTP_200=PASS'
+          echo 'TERMS_HTTP_200=PASS'
+          echo 'DATA_DELETION_HTTP_200=PASS'
+
+      - name: Verify expected homepage content
         shell: bash
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --location \
-            --connect-timeout 10 --max-time 20 \
-            "https://jadeltechrd.com/" | grep -Fq "Jadel Tech RD"
+            --connect-timeout 8 --max-time 20 \
+            --proto '=https' --tlsv1.2 \
+            "https://jadeltechrd.com/" | grep -Fq 'Jadel Tech RD'
+          echo 'HOME_CONTENT=PASS'
+          echo 'PUBLIC_ACCESS_READY=YES'
