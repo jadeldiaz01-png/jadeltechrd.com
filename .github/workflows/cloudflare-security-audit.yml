@@ -1,0 +1,114 @@
+name: Audit Cloudflare security posture
+
+on:
+  push:
+    branches: [security/hardening-2026, main]
+    paths:
+      - '.github/workflows/cloudflare-security-audit.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '41 10 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  audit-edge:
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DOMAIN: jadeltechrd.com
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+    steps:
+      - name: Normalize credential and resolve zone
+        id: zone
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then token="${token:1:${#token}-2}"; fi
+          if [ -z "$token" ]; then echo 'CLOUDFLARE_TOKEN_PRESENT=NO'; exit 2; fi
+          echo "::add-mask::$token"
+          printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          auth=(-H "Authorization: Bearer ${token}" -H 'Content-Type: application/json')
+          tmp=$(mktemp)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50" || true)
+          test "$code" = 200
+          zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .id' "$tmp" | head -n1)
+          test -n "$zone_id" && test "$zone_id" != null
+          plan=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .plan.name // "unknown"' "$tmp" | head -n1)
+          echo "zone_id=$zone_id" >> "$GITHUB_OUTPUT"
+          echo "CLOUDFLARE_PLAN=$plan"
+          echo 'CLOUDFLARE_ZONE_ACCESS=PASS'
+
+      - name: Audit TLS and browser security settings
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.zone.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          for setting in min_tls_version tls_1_3 always_use_https automatic_https_rewrites browser_check security_level; do
+            tmp=$(mktemp)
+            code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/settings/${setting}" || true)
+            if [ "$code" = 200 ]; then
+              value=$(jq -r '.result.value // "unknown"' "$tmp")
+              editable=$(jq -r '.result.editable // "unknown"' "$tmp")
+              echo "CF_SETTING_${setting}=${value} editable=${editable}"
+            else
+              echo "CF_SETTING_${setting}=UNAVAILABLE_HTTP_${code}"
+            fi
+          done
+
+      - name: Audit bot and ruleset capabilities
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.zone.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          tmp=$(mktemp)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/bot_management" || true)
+          if [ "$code" = 200 ]; then
+            echo "BOT_FIGHT_MODE=$(jq -r '.result.fight_mode // "unknown"' "$tmp")"
+            echo "AI_BOTS_PROTECTION=$(jq -r '.result.ai_bots_protection // "unknown"' "$tmp")"
+          else
+            echo "BOT_MANAGEMENT_READ=UNAVAILABLE_HTTP_${code}"
+          fi
+
+          for phase in http_response_headers_transform http_request_firewall_custom http_ratelimit http_request_firewall_managed; do
+            tmp=$(mktemp)
+            code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/phases/${phase}/entrypoint" || true)
+            case "$code" in
+              200) echo "RULESET_${phase}=READABLE" ;;
+              404) echo "RULESET_${phase}=NOT_DEPLOYED_OR_EMPTY" ;;
+              403) echo "RULESET_${phase}=PERMISSION_BLOCKED" ;;
+              *) echo "RULESET_${phase}=HTTP_${code}" ;;
+            esac
+          done
+
+      - name: Audit live edge response headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --silent --show-error --fail --location --proto '=https' --tlsv1.2 \
+            --dump-header /tmp/headers --output /dev/null "https://${DOMAIN}/"
+          tr -d '\r' </tmp/headers >/tmp/headers.clean
+          echo 'LIVE_EDGE_HEADERS_BEGIN'
+          for header in \
+            content-security-policy \
+            strict-transport-security \
+            x-frame-options \
+            x-content-type-options \
+            referrer-policy \
+            permissions-policy \
+            cross-origin-opener-policy \
+            cross-origin-resource-policy; do
+            value=$(awk -v h="$header" 'BEGIN{IGNORECASE=1} $0 ~ "^"h":" {sub(/^[^:]+:[[:space:]]*/,""); print; exit}' /tmp/headers.clean)
+            if [ -n "$value" ]; then echo "HEADER_${header}=PRESENT"; else echo "HEADER_${header}=MISSING"; fi
+          done
+          echo 'LIVE_EDGE_HEADERS_END'
+          echo 'CLOUDFLARE_SECURITY_AUDIT=COMPLETE'

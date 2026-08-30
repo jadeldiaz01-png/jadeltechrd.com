@@ -1,0 +1,205 @@
+name: Harden Cloudflare security posture
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  harden-edge:
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DOMAIN: jadeltechrd.com
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+    steps:
+      - name: Normalize credential and resolve active zone
+        id: zone
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then token="${token:1:${#token}-2}"; fi
+          if [ -z "$token" ]; then echo 'CLOUDFLARE_TOKEN_PRESENT=NO'; exit 2; fi
+          echo "::add-mask::$token"
+          printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          auth=(-H "Authorization: Bearer ${token}" -H 'Content-Type: application/json')
+          tmp=$(mktemp)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50" || true)
+          test "$code" = 200
+          zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .id' "$tmp" | head -n1)
+          test -n "$zone_id" && test "$zone_id" != null
+          echo "zone_id=$zone_id" >> "$GITHUB_OUTPUT"
+          echo 'CLOUDFLARE_ZONE_ACCESS=PASS'
+
+      - name: Enforce modern TLS and HTTPS transport
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.zone.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          patch_setting() {
+            local setting="$1" payload="$2"
+            local tmp code success
+            tmp=$(mktemp)
+            code=$(curl -sS -o "$tmp" -w '%{http_code}' --request PATCH "${auth[@]}" \
+              --data "$payload" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/settings/${setting}" || true)
+            if [ "$code" != 200 ]; then
+              echo "CF_SETTING_${setting}=WRITE_FAILED_HTTP_${code}" >&2
+              jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' "$tmp" >&2 || true
+              exit 20
+            fi
+            success=$(jq -r '.success' "$tmp")
+            test "$success" = true
+            echo "CF_SETTING_${setting}=UPDATED"
+          }
+          patch_setting min_tls_version '{"value":"1.2"}'
+          patch_setting tls_1_3 '{"value":"on"}'
+          patch_setting always_use_https '{"value":"on"}'
+          patch_setting automatic_https_rewrites '{"value":"on"}'
+          patch_setting browser_check '{"value":"on"}'
+          patch_setting security_header '{"value":{"strict_transport_security":{"enabled":true,"max_age":15552000,"include_subdomains":false,"preload":false,"nosniff":true}}}'
+          echo 'TRANSPORT_HARDENING=PASS'
+
+      - name: Install deterministic response security headers without replacing unrelated rules
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.zone.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          endpoint="https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/phases/http_response_headers_transform/entrypoint"
+          existing=$(mktemp)
+          existing_code=$(curl -sS -o "$existing" -w '%{http_code}' "${auth[@]}" "$endpoint" || true)
+
+          csp="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+          permissions='accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()'
+          rule=$(jq -n --arg domain "$DOMAIN" --arg csp "$csp" --arg pp "$permissions" '{
+            ref: "jadel_security_headers_v1",
+            expression: ("(http.host eq \"" + $domain + "\")"),
+            description: "Jadel Tech RD hardened browser response headers",
+            action: "rewrite",
+            action_parameters: {headers: {
+              "Content-Security-Policy": {operation:"set", value:$csp},
+              "X-Frame-Options": {operation:"set", value:"DENY"},
+              "X-Content-Type-Options": {operation:"set", value:"nosniff"},
+              "Referrer-Policy": {operation:"set", value:"strict-origin-when-cross-origin"},
+              "Permissions-Policy": {operation:"set", value:$pp},
+              "Cross-Origin-Opener-Policy": {operation:"set", value:"same-origin"},
+              "Cross-Origin-Resource-Policy": {operation:"set", value:"same-origin"}
+            }},
+            enabled: true
+          }')
+
+          out=$(mktemp)
+          if [ "$existing_code" = 200 ]; then
+            ruleset_id=$(jq -r '.result.id' "$existing")
+            test -n "$ruleset_id" && test "$ruleset_id" != null
+            rule_id=$(jq -r '.result.rules[]? | select(.ref=="jadel_security_headers_v1") | .id' "$existing" | head -n1)
+            if [ -n "$rule_id" ] && [ "$rule_id" != null ]; then
+              code=$(curl -sS -o "$out" -w '%{http_code}' --request PATCH "${auth[@]}" \
+                --data "$rule" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/${ruleset_id}/rules/${rule_id}" || true)
+              echo 'RESPONSE_SECURITY_HEADERS_OPERATION=UPDATE_OWN_RULE'
+            else
+              code=$(curl -sS -o "$out" -w '%{http_code}' --request POST "${auth[@]}" \
+                --data "$rule" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/${ruleset_id}/rules" || true)
+              echo 'RESPONSE_SECURITY_HEADERS_OPERATION=ADD_OWN_RULE'
+            fi
+          elif [ "$existing_code" = 404 ]; then
+            create_payload=$(jq -n --argjson rule "$rule" '{name:"Jadel Tech RD security response headers",description:"Browser hardening headers managed by audited GitHub workflow",kind:"zone",phase:"http_response_headers_transform",rules:[$rule]}')
+            code=$(curl -sS -o "$out" -w '%{http_code}' --request POST "${auth[@]}" \
+              --data "$create_payload" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets" || true)
+            echo 'RESPONSE_SECURITY_HEADERS_OPERATION=CREATE_PHASE_ENTRYPOINT'
+          else
+            echo "RESPONSE_HEADERS_RULESET_READ=HTTP_${existing_code}" >&2
+            exit 30
+          fi
+
+          if [ "$code" != 200 ]; then
+            echo "RESPONSE_HEADERS_RULESET_WRITE=FAILED_HTTP_${code}" >&2
+            jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' "$out" >&2 || true
+            exit 31
+          fi
+          test "$(jq -r '.success' "$out")" = true
+          echo 'RESPONSE_SECURITY_HEADERS=PASS'
+
+      - name: Verify effective Cloudflare configuration
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.zone.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          get_setting() {
+            local setting="$1" expected="$2" tmp value
+            tmp=$(mktemp)
+            curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/settings/${setting}" >"$tmp"
+            value=$(jq -r '.result.value' "$tmp")
+            echo "CF_VERIFY_${setting}=${value}"
+            test "$value" = "$expected"
+          }
+          get_setting min_tls_version 1.2
+          get_setting tls_1_3 on
+          get_setting always_use_https on
+          get_setting browser_check on
+          hsts=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/settings/security_header")
+          test "$(jq -r '.result.value.strict_transport_security.enabled' <<<"$hsts")" = true
+          test "$(jq -r '.result.value.strict_transport_security.max_age' <<<"$hsts")" = 15552000
+          test "$(jq -r '.result.value.strict_transport_security.include_subdomains' <<<"$hsts")" = false
+          test "$(jq -r '.result.value.strict_transport_security.preload' <<<"$hsts")" = false
+          test "$(jq -r '.result.value.strict_transport_security.nosniff' <<<"$hsts")" = true
+          echo 'CLOUDFLARE_SETTING_VERIFY=PASS'
+
+      - name: Verify live transport and response headers after propagation
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=false
+          for attempt in $(seq 1 12); do
+            echo "Edge verification attempt ${attempt}/12"
+            http_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-redirs 0 "http://${DOMAIN}/" || true)
+            case "$http_code" in 301|302|307|308) ;; *) sleep 5; continue;; esac
+
+            if ! curl --silent --show-error --fail --location --proto '=https' --tlsv1.2 \
+              --dump-header /tmp/headers --output /tmp/body "https://${DOMAIN}/"; then
+              sleep 5
+              continue
+            fi
+            tr -d '\r' </tmp/headers >/tmp/headers.clean
+            header_value() { awk -v h="$1" 'BEGIN{IGNORECASE=1} $0 ~ "^"h":" {sub(/^[^:]+:[[:space:]]*/,""); print; exit}' /tmp/headers.clean; }
+            hsts=$(header_value Strict-Transport-Security)
+            csp=$(header_value Content-Security-Policy)
+            xfo=$(header_value X-Frame-Options)
+            nosniff=$(header_value X-Content-Type-Options)
+            referrer=$(header_value Referrer-Policy)
+            pp=$(header_value Permissions-Policy)
+            coop=$(header_value Cross-Origin-Opener-Policy)
+            corp=$(header_value Cross-Origin-Resource-Policy)
+            if printf '%s' "$hsts" | grep -Fq 'max-age=15552000' && \
+               printf '%s' "$csp" | grep -Fq "default-src 'none'" && \
+               printf '%s' "$csp" | grep -Fq "frame-ancestors 'none'" && \
+               [ "$xfo" = DENY ] && [ "$nosniff" = nosniff ] && \
+               [ "$referrer" = strict-origin-when-cross-origin ] && \
+               printf '%s' "$pp" | grep -Fq 'camera=()' && \
+               [ "$coop" = same-origin ] && [ "$corp" = same-origin ] && \
+               grep -Fq 'Agentes de IA' /tmp/body; then
+              ok=true
+              break
+            fi
+            sleep 5
+          done
+          test "$ok" = true
+          echo 'HEADER_Strict-Transport-Security=PASS'
+          echo 'HEADER_Content-Security-Policy=PASS'
+          echo 'HEADER_X-Frame-Options=PASS'
+          echo 'HEADER_X-Content-Type-Options=PASS'
+          echo 'HEADER_Referrer-Policy=PASS'
+          echo 'HEADER_Permissions-Policy=PASS'
+          echo 'HEADER_Cross-Origin-Opener-Policy=PASS'
+          echo 'HEADER_Cross-Origin-Resource-Policy=PASS'
+          echo 'LIVE_EDGE_SECURITY=PASS'

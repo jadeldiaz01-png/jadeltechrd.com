@@ -1,0 +1,117 @@
+name: Deploy Cloudflare Free Managed WAF
+
+on:
+  push:
+    branches: [security/hardening-2026]
+    paths:
+      - '.github/workflows/cloudflare-free-waf.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-free-waf:
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DOMAIN: jadeltechrd.com
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+    steps:
+      - name: Resolve zone, account and Free Managed Ruleset
+        id: cf
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then token="${token:1:${#token}-2}"; fi
+          test -n "$token"
+          echo "::add-mask::$token"
+          printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          auth=(-H "Authorization: Bearer ${token}" -H 'Content-Type: application/json')
+
+          zone_json=$(mktemp)
+          curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50" >"$zone_json"
+          zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .id' "$zone_json" | head -n1)
+          account_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .account.id' "$zone_json" | head -n1)
+          test -n "$zone_id" && test "$zone_id" != null
+          test -n "$account_id" && test "$account_id" != null
+
+          rulesets=$(mktemp)
+          code=$(curl -sS -o "$rulesets" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${account_id}/rulesets?per_page=100" || true)
+          if [ "$code" != 200 ]; then
+            echo "ACCOUNT_RULESETS_READ=BLOCKED_HTTP_${code}"
+            jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' "$rulesets" || true
+            exit 12
+          fi
+          free_id=$(jq -r '.result[] | select(.name=="Cloudflare Free Managed Ruleset" and .phase=="http_request_firewall_managed") | .id' "$rulesets" | head -n1)
+          if [ -z "$free_id" ] || [ "$free_id" = null ]; then
+            echo 'FREE_MANAGED_RULESET=NOT_AVAILABLE_TO_ACCOUNT'
+            exit 13
+          fi
+          echo "zone_id=$zone_id" >> "$GITHUB_OUTPUT"
+          echo "free_id=$free_id" >> "$GITHUB_OUTPUT"
+          echo 'FREE_MANAGED_RULESET_RESOLVED=PASS'
+
+      - name: Deploy idempotently to managed firewall phase
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.cf.outputs.zone_id }}
+          FREE_ID: ${{ steps.cf.outputs.free_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          entry=$(mktemp)
+          code=$(curl -sS -o "$entry" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/phases/http_request_firewall_managed/entrypoint" || true)
+
+          if [ "$code" = 200 ]; then
+            if jq -e --arg id "$FREE_ID" '.result.rules[]? | select(.action=="execute" and .action_parameters.id==$id and (.enabled // true)==true)' "$entry" >/dev/null; then
+              echo 'FREE_MANAGED_WAF_ALREADY_DEPLOYED=YES'
+              exit 0
+            fi
+            entry_id=$(jq -r '.result.id' "$entry")
+            test -n "$entry_id" && test "$entry_id" != null
+            out=$(mktemp)
+            rc=$(curl -sS -o "$out" -w '%{http_code}' --request POST "${auth[@]}" \
+              --data "$(jq -n --arg id "$FREE_ID" '{action:"execute",action_parameters:{id:$id},expression:"true",description:"Execute Cloudflare Free Managed Ruleset for Jadel Tech RD",ref:"jadel_free_managed_waf_v1",enabled:true}')" \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/${entry_id}/rules" || true)
+          elif [ "$code" = 404 ]; then
+            out=$(mktemp)
+            payload=$(jq -n --arg id "$FREE_ID" '{name:"Jadel Tech RD managed WAF",description:"Zone entry point for Cloudflare Free Managed Ruleset",kind:"zone",phase:"http_request_firewall_managed",rules:[{action:"execute",action_parameters:{id:$id},expression:"true",description:"Execute Cloudflare Free Managed Ruleset for Jadel Tech RD",ref:"jadel_free_managed_waf_v1",enabled:true}]}')
+            rc=$(curl -sS -o "$out" -w '%{http_code}' --request POST "${auth[@]}" --data "$payload" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets" || true)
+          else
+            echo "MANAGED_PHASE_READ=FAILED_HTTP_${code}"
+            exit 20
+          fi
+
+          if [ "$rc" != 200 ]; then
+            echo "FREE_MANAGED_WAF_DEPLOY=FAILED_HTTP_${rc}"
+            jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' "$out" || true
+            exit 21
+          fi
+          test "$(jq -r '.success' "$out")" = true
+          echo 'FREE_MANAGED_WAF_DEPLOY=PASS'
+
+      - name: Verify WAF deployment and normal site availability
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.cf.outputs.zone_id }}
+          FREE_ID: ${{ steps.cf.outputs.free_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          entry=$(mktemp)
+          curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/phases/http_request_firewall_managed/entrypoint" >"$entry"
+          jq -e --arg id "$FREE_ID" '.result.rules[]? | select(.action=="execute" and .action_parameters.id==$id and (.enabled // true)==true)' "$entry" >/dev/null
+          echo 'FREE_MANAGED_WAF_VERIFY=PASS'
+
+          for url in "https://${DOMAIN}/" "https://${DOMAIN}/?view=privacy" "https://${DOMAIN}/?view=terms" "https://${DOMAIN}/?view=data-deletion"; do
+            status=$(curl --silent --show-error --location --output /tmp/body --write-out '%{http_code}' --proto '=https' --tlsv1.2 "$url")
+            echo "$url -> HTTP=$status"
+            test "$status" = 200
+            test -s /tmp/body
+          done
+          echo 'POST_WAF_SITE_HEALTH=PASS'
