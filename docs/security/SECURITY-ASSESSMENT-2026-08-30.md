@@ -27,7 +27,7 @@ The current public application is a static site. It has no public database, logi
 | Cloudflare Always Use HTTPS was off | Medium | HTTP was not centrally forced to HTTPS by this setting. |
 | No HSTS observed | Medium | Browsers lacked transport pinning after first secure visit. |
 | No effective CSP / anti-clickjacking / MIME-sniff / permissions / cross-origin response headers | Medium | Reduced browser-side defense in depth. |
-| No managed WAF phase deployment was visible in the initial audit | Medium/Low for current static site | Free Managed Ruleset would add exploit-pattern defense; current site has low server-side attack surface. |
+| No managed WAF phase deployment was visible in the initial audit | Medium/Low for current static site | Free Managed Ruleset adds exploit-pattern defense; current site has low server-side attack surface. |
 | No dedicated private security-reporting channel verified | Low | Responsible disclosure path should be formalized before a public security.txt is advertised. |
 
 ## Implemented controls
@@ -60,17 +60,27 @@ Production hardening verification: GitHub Actions run `33315441016`, successful 
 
 Post-merge edge audit: run `33315889967` completed successfully and confirmed TLS/HTTPS settings plus all required response headers present on the public domain.
 
-Verified live outputs include:
+### Cloudflare Free Managed WAF — PASS / LIVE
 
-- `HEADER_Strict-Transport-Security=PASS`
-- `HEADER_Content-Security-Policy=PASS`
-- `HEADER_X-Frame-Options=PASS`
-- `HEADER_X-Content-Type-Options=PASS`
-- `HEADER_Referrer-Policy=PASS`
-- `HEADER_Permissions-Policy=PASS`
-- `HEADER_Cross-Origin-Opener-Policy=PASS`
-- `HEADER_Cross-Origin-Resource-Policy=PASS`
-- `LIVE_EDGE_SECURITY=PASS`
+Cloudflare's official documentation identifies the **Cloudflare Free Managed Ruleset** as available on every Cloudflare plan and publishes the ruleset ID `77454fe2d30c4220b5701f6fdfb893ba`.
+
+The WAF reconciler was redesigned to avoid account-level managed-ruleset enumeration. It now needs only zone-level access, resolves the active zone, uses the documented Free Managed Ruleset ID, deploys the ruleset idempotently in the `http_request_firewall_managed` phase, verifies the active execute rule, and then performs post-change public health checks.
+
+Verified production execution:
+
+- workflow run: `33316670808`
+- job: `99271274056`
+- `CLOUDFLARE_ZONE_ACCESS=PASS`
+- `FREE_MANAGED_RULESET_ID_SOURCE=OFFICIAL_CLOUDFLARE_DOCS`
+- `FREE_MANAGED_WAF_DEPLOY=PASS`
+- `FREE_MANAGED_WAF_VERIFY=PASS`
+- homepage: HTTP 200
+- privacy: HTTP 200
+- terms: HTTP 200
+- data deletion: HTTP 200
+- `POST_WAF_SITE_HEALTH=PASS`
+
+The previous blocker `Account Rulesets Read` is no longer required and was not broadened. This closes the managed-WAF security gate without expanding the credential to unnecessary account-level inventory permissions.
 
 ### Source/browser security — PASS / MERGED
 
@@ -96,36 +106,30 @@ Pinned canonical Actions include:
 - `actions/upload-pages-artifact` → `56afc609e74202658d3ffba0e8f6dda462b719fa`
 - `actions/deploy-pages` → `d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e`
 
-The actual root Pages synchronization workflow also uses the immutable checkout SHA and now fails closed if the synchronized canonical homepage lacks the CSP/referrer security baseline.
+The actual root Pages synchronization workflow also uses the immutable checkout SHA and fails closed if the synchronized canonical homepage lacks the CSP/referrer security baseline.
 
 Root synchronization run `33315914772` completed successfully. The resulting GitHub Pages build/deployment run `33315920973` also completed successfully.
-
-## WAF status
-
-Cloudflare Free Managed Ruleset is appropriate for the current Free plan and static architecture. An idempotent installer exists, but the current scoped token cannot read account-level managed-ruleset inventory. The attempt failed closed with HTTP 403 before any managed WAF mutation occurred.
-
-Status: `FREE_MANAGED_WAF = PENDING_AUTHORIZED_RULESET_PERMISSION`.
-
-Do not broaden the existing token casually. Prefer a dedicated least-privilege credential or directly authorized Cloudflare administrative integration for managed WAF deployment.
 
 ## Residual risks / required governance
 
 ### P0 — Repository governance
 
-Both public-serving repositories currently report `main` branch protection disabled. Required target controls:
+Both public-serving repositories currently report no repository rulesets protecting the default branch. Required target controls:
 
-- require pull requests to `main`
-- require successful security and production smoke checks
-- block force pushes and branch deletion
-- restrict who can push/merge
-- require signed commits where operationally practical
-- keep deployment environments least-privileged
+- require a pull request before canonical changes reach `main`
+- require the `security-baseline` status check in the canonical repository
+- require branches to be up to date before merge where practical
+- block force pushes
+- block branch deletion
+- require linear history where compatible
+- keep bypass actors empty or explicitly minimized
+- require signed commits only after automation identities are prepared, to avoid operational deadlock
 
-This control remains open because the connected GitHub integration does not expose an authorized branch-protection write operation.
+The canonical ruleset can enforce these controls directly.
 
-### P1 — Managed WAF
+The root Pages repository has an architectural constraint: its synchronization workflow currently writes the validated canonical site directly to `main`. Enabling a blanket pull-request requirement there without an explicit, audited automation bypass or a PR-based synchronization redesign would break publication. Therefore root protection must be activated only together with a safe synchronization path; do not weaken the rule silently just to keep the pipeline green.
 
-Deploy Cloudflare Free Managed Ruleset once a least-privilege token/integration can enumerate and deploy managed rulesets. Validate homepage and all legal routes after deployment before marking PASS.
+This control remains open because the connected GitHub integration exposes ruleset reads but not the Administration-write operation required to create or edit repository rulesets.
 
 ### P1 — Security reporting
 
@@ -152,13 +156,13 @@ Cloudflare DDoS protection remains part of the edge architecture. Permanent week
 ## Current decision
 
 - Edge transport and browser headers: **PASS / LIVE**
+- Cloudflare Free Managed WAF: **PASS / LIVE**
 - Static source security gate: **PASS / MERGED / DEPLOYED**
 - Immutable Actions in canonical repo: **PASS / MERGED**
 - Immutable checkout in root Pages sync: **PASS / LIVE**
 - Root synchronization security baseline: **PASS**
 - GitHub Pages build/deploy after hardening: **PASS**
-- Cloudflare Free Managed WAF: **PENDING PERMISSION**
-- Canonical branch protection: **PENDING ADMIN CONTROL**
-- Root Pages branch protection: **PENDING ADMIN CONTROL**
+- Canonical branch protection/ruleset: **PENDING ADMIN CONTROL**
+- Root Pages branch protection/ruleset: **PENDING ADMIN CONTROL + SAFE SYNC DESIGN**
 
-Production security is materially stronger, but `SECURITY_FULLY_CLOSED=NO` until repository governance is enforced and the optional Free Managed WAF gate is resolved.
+Production security is materially stronger. `SECURITY_FULLY_CLOSED=NO` only because repository-governance enforcement on the two public-serving default branches is not yet active.
