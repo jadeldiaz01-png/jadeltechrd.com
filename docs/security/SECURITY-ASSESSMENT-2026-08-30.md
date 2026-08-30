@@ -32,7 +32,7 @@ The current public application is a static site. It has no public database, logi
 
 ## Implemented controls
 
-### Cloudflare edge — LIVE
+### Cloudflare edge — PASS / LIVE
 
 Verified configuration:
 
@@ -46,7 +46,7 @@ Verified configuration:
 - HSTS `preload`: disabled intentionally
 - `nosniff`: enabled
 
-A response-header Transform Rule now emits:
+A response-header Transform Rule emits:
 
 - `Content-Security-Policy` with deny-by-default policy, same-origin script/style/font/connect, no plugins, no base URI, no framing, and HTTPS upgrade
 - `X-Frame-Options: DENY`
@@ -56,9 +56,11 @@ A response-header Transform Rule now emits:
 - `Cross-Origin-Opener-Policy: same-origin`
 - `Cross-Origin-Resource-Policy: same-origin`
 
-Production verification job: GitHub Actions run `33315441016`, rerun job `99268073291`.
+Production hardening verification: GitHub Actions run `33315441016`, successful rerun job `99268073291`.
 
-Verified live outputs included:
+Post-merge edge audit: run `33315889967` completed successfully and confirmed TLS/HTTPS settings plus all required response headers present on the public domain.
+
+Verified live outputs include:
 
 - `HEADER_Strict-Transport-Security=PASS`
 - `HEADER_Content-Security-Policy=PASS`
@@ -70,9 +72,9 @@ Verified live outputs included:
 - `HEADER_Cross-Origin-Resource-Policy=PASS`
 - `LIVE_EDGE_SECURITY=PASS`
 
-### Source/browser security — READY FOR MERGE
+### Source/browser security — PASS / MERGED
 
-The source homepage now includes a restrictive CSP meta policy and strict referrer policy as defense in depth. Permanent `security-ci.yml`:
+The canonical homepage includes a restrictive CSP meta policy and strict referrer policy as defense in depth. Permanent `security-ci.yml`:
 
 - rejects missing CSP controls
 - rejects inline event handlers
@@ -81,9 +83,11 @@ The source homepage now includes a restrictive CSP meta policy and strict referr
 - requires every external GitHub Action to use a full 40-character commit SHA
 - performs a Chrome headless smoke test under CSP
 
-Security baseline run `33315249567` passed after remediation. A later baseline run `33315440990` also passed all source, immutable-action, and browser-CSP gates.
+Security baseline run `33315817723` passed on the final hardening branch revision. Pull-request security baseline run `33315856455` also passed before merge.
 
-### GitHub Actions supply chain — READY FOR MERGE
+PR #4 was merged to `main` as commit `aa6a6ab107a9f9e109d937853d0e6185bb0bd1f2`.
+
+### GitHub Actions supply chain — PASS / MERGED
 
 Pinned canonical Actions include:
 
@@ -92,15 +96,17 @@ Pinned canonical Actions include:
 - `actions/upload-pages-artifact` → `56afc609e74202658d3ffba0e8f6dda462b719fa`
 - `actions/deploy-pages` → `d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e`
 
-The actual root Pages sync workflow has already been pinned to the immutable checkout SHA.
+The actual root Pages synchronization workflow also uses the immutable checkout SHA and now fails closed if the synchronized canonical homepage lacks the CSP/referrer security baseline.
+
+Root synchronization run `33315914772` completed successfully. The resulting GitHub Pages build/deployment run `33315920973` also completed successfully.
 
 ## WAF status
 
-Cloudflare Free Managed Ruleset is appropriate for the current Free plan and static architecture. An idempotent installer was prepared, but the current scoped token cannot read account-level managed-ruleset inventory. The attempt failed closed with HTTP 403 / Cloudflare authentication error for the account-rulesets endpoint before any managed WAF mutation occurred.
+Cloudflare Free Managed Ruleset is appropriate for the current Free plan and static architecture. An idempotent installer exists, but the current scoped token cannot read account-level managed-ruleset inventory. The attempt failed closed with HTTP 403 before any managed WAF mutation occurred.
 
 Status: `FREE_MANAGED_WAF = PENDING_AUTHORIZED_RULESET_PERMISSION`.
 
-Do not broaden the token casually. Prefer a dedicated least-privilege credential or a directly connected Cloudflare administrative integration if this control is promoted later.
+Do not broaden the existing token casually. Prefer a dedicated least-privilege credential or directly authorized Cloudflare administrative integration for managed WAF deployment.
 
 ## Residual risks / required governance
 
@@ -115,11 +121,11 @@ Both public-serving repositories currently report `main` branch protection disab
 - require signed commits where operationally practical
 - keep deployment environments least-privileged
 
-This assessment does not mark this control complete because the connected GitHub integration does not expose an authorized branch-protection write operation.
+This control remains open because the connected GitHub integration does not expose an authorized branch-protection write operation.
 
 ### P1 — Managed WAF
 
-Deploy Cloudflare Free Managed Ruleset once a least-privilege token/integration can enumerate and deploy the managed ruleset. Validate normal homepage and legal routes after deployment before marking PASS.
+Deploy Cloudflare Free Managed Ruleset once a least-privilege token/integration can enumerate and deploy managed rulesets. Validate homepage and all legal routes after deployment before marking PASS.
 
 ### P1 — Security reporting
 
@@ -146,11 +152,13 @@ Cloudflare DDoS protection remains part of the edge architecture. Permanent week
 ## Current decision
 
 - Edge transport and browser headers: **PASS / LIVE**
-- Static source security gate: **PASS on hardening branch**
-- Immutable Actions in canonical repo: **PASS on hardening branch**
+- Static source security gate: **PASS / MERGED / DEPLOYED**
+- Immutable Actions in canonical repo: **PASS / MERGED**
 - Immutable checkout in root Pages sync: **PASS / LIVE**
+- Root synchronization security baseline: **PASS**
+- GitHub Pages build/deploy after hardening: **PASS**
 - Cloudflare Free Managed WAF: **PENDING PERMISSION**
 - Canonical branch protection: **PENDING ADMIN CONTROL**
 - Root Pages branch protection: **PENDING ADMIN CONTROL**
 
-Production security is materially stronger, but `SECURITY_FULLY_CLOSED=NO` until repository governance and the optional Free Managed WAF gate are resolved.
+Production security is materially stronger, but `SECURITY_FULLY_CLOSED=NO` until repository governance is enforced and the optional Free Managed WAF gate is resolved.
