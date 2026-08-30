@@ -6,14 +6,24 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/public-access-gate.yml'
+  workflow_run:
+    workflows:
+      - Reconcile Cloudflare DNS for GitHub Pages
+    types:
+      - completed
 
 permissions:
   contents: read
 
+concurrency:
+  group: public-access-gate
+  cancel-in-progress: true
+
 jobs:
   verify-public-access:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     env:
       DOMAIN: jadeltechrd.com
     steps:
@@ -21,6 +31,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          expected=$(printf '%s\n' 185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153 | sort)
+
           echo '=== NS ==='
           dig +short NS "$DOMAIN" | sort | tee /tmp/ns.txt
           echo '=== A via system resolver ==='
@@ -29,18 +41,30 @@ jobs:
           dig @1.1.1.1 +short A "$DOMAIN" | sort | tee /tmp/a-cf.txt
           echo '=== A via Google 8.8.8.8 ==='
           dig @8.8.8.8 +short A "$DOMAIN" | sort | tee /tmp/a-google.txt
+
           test -s /tmp/ns.txt || { echo 'DNS_NS=FAIL'; exit 10; }
-          test -s /tmp/a-cf.txt || { echo 'DNS_A=FAIL'; exit 11; }
+          test "$(cat /tmp/a-cf.txt)" = "$expected" || { echo 'DNS_A_CLOUDFLARE=FAIL'; exit 11; }
+          test "$(cat /tmp/a-google.txt)" = "$expected" || { echo 'DNS_A_GOOGLE=FAIL'; exit 12; }
           echo 'DNS_RESOLUTION=PASS'
 
-      - name: Inspect TLS certificate
+      - name: Wait for GitHub Pages TLS certificate
         shell: bash
         run: |
           set -euo pipefail
-          timeout 20 openssl s_client -connect "$DOMAIN:443" -servername "$DOMAIN" </dev/null 2>/tmp/tls.err \
-            | openssl x509 -noout -subject -issuer -dates -ext subjectAltName | tee /tmp/cert.txt
-          grep -Fq "DNS:$DOMAIN" /tmp/cert.txt
-          echo 'TLS_CERTIFICATE=PASS'
+          for attempt in $(seq 1 18); do
+            cert=$(mktemp)
+            if timeout 20 openssl s_client -connect "$DOMAIN:443" -servername "$DOMAIN" </dev/null 2>/tmp/tls.err \
+              | openssl x509 -noout -subject -issuer -dates -ext subjectAltName >"$cert" 2>/dev/null \
+              && grep -Fq "DNS:$DOMAIN" "$cert"; then
+              cat "$cert"
+              echo 'TLS_CERTIFICATE=PASS'
+              exit 0
+            fi
+            echo "TLS certificate not ready yet (attempt ${attempt}/18)."
+            sleep 20
+          done
+          echo 'TLS_CERTIFICATE=PENDING_OR_FAIL' >&2
+          exit 20
 
       - name: Verify public HTTP endpoints
         shell: bash
