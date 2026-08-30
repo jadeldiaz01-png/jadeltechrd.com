@@ -24,15 +24,22 @@ jobs:
     env:
       DOMAIN: jadeltechrd.com
     steps:
-      - name: Verify public Cloudflare DNS
+      - name: Verify public Cloudflare DNS with bounded propagation
         shell: bash
         run: |
           set -euo pipefail
-          actual=$(dig @1.1.1.1 +short A "$DOMAIN" | sort)
-          printf 'Resolved public A records:\n%s\n' "$actual"
-          test -n "$actual"
-          if grep -qE '^185\.199\.(108|109|110|111)\.153$' <<<"$actual"; then
-            echo 'Public DNS is bypassing the declared Cloudflare edge front door.' >&2
+          converged=false
+          for attempt in $(seq 1 18); do
+            actual=$(dig @1.1.1.1 +short A "$DOMAIN" | sort || true)
+            printf 'DNS attempt %s/18:\n%s\n' "$attempt" "$actual"
+            if [ -n "$actual" ] && ! grep -qE '^185\.199\.(108|109|110|111)\.153$' <<<"$actual"; then
+              converged=true
+              break
+            fi
+            sleep 10
+          done
+          if [ "$converged" != true ]; then
+            echo 'Public DNS did not converge to the declared Cloudflare edge front door.' >&2
             exit 2
           fi
           echo 'DNS_RESOLUTION=PASS'
