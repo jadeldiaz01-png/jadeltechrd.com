@@ -1,0 +1,90 @@
+name: Security baseline CI
+
+on:
+  push:
+    branches: [main, security/hardening-2026]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 9 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  security-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate web source security
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check app.js
+          grep -Fq 'http-equiv="Content-Security-Policy"' index.html
+          grep -Fq "default-src 'none'" index.html
+          grep -Fq "script-src 'self'" index.html
+          grep -Fq "object-src 'none'" index.html
+          grep -Fq "base-uri 'none'" index.html
+          grep -Fq "form-action 'self'" index.html
+          grep -Fq 'strict-origin-when-cross-origin' index.html
+          if grep -nE '<[^>]+ on[a-zA-Z]+=' index.html; then
+            echo 'INLINE_EVENT_HANDLER=FAIL'
+            exit 1
+          fi
+          if grep -nE '\beval\s*\(|new Function\s*\(|document\.write\s*\(' app.js; then
+            echo 'DANGEROUS_JS_PRIMITIVE=FAIL'
+            exit 1
+          fi
+          if grep -nE '(src|href)="http://' index.html; then
+            echo 'INSECURE_RESOURCE_REFERENCE=FAIL'
+            exit 1
+          fi
+          echo 'SOURCE_SECURITY=PASS'
+      - name: Require immutable GitHub Actions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          failures=[]
+          for path in Path('.github/workflows').glob('*.y*ml'):
+              for i,line in enumerate(path.read_text(encoding='utf-8').splitlines(),1):
+                  m=re.search(r'\buses:\s*([^\s#]+)', line)
+                  if not m:
+                      continue
+                  ref=m.group(1)
+                  if ref.startswith('./'):
+                      continue
+                  if not re.search(r'@[0-9a-fA-F]{40}$', ref):
+                      failures.append(f'{path}:{i}: {ref}')
+          if failures:
+              print('UNPINNED_ACTIONS=FAIL')
+              print('\n'.join(failures))
+              raise SystemExit(1)
+          print('IMMUTABLE_ACTIONS=PASS')
+          PY
+      - name: Browser smoke under CSP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8765 >/tmp/jadel-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill $server_pid 2>/dev/null || true' EXIT
+          sleep 1
+          browser=''
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if command -v "$candidate" >/dev/null 2>&1; then browser="$candidate"; break; fi
+          done
+          test -n "$browser"
+          "$browser" --headless=new --no-sandbox --disable-gpu --virtual-time-budget=2500 \
+            --dump-dom http://127.0.0.1:8765/ >/tmp/dom.html
+          grep -Fq 'Agentes de IA que' /tmp/dom.html
+          grep -Fq 'Multi-Agent Orchestration' /tmp/dom.html
+          grep -Fq 'Human-in-the-loop' /tmp/dom.html
+          echo 'CSP_BROWSER_SMOKE=PASS'
