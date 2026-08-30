@@ -1,0 +1,74 @@
+      </div>
+        <div class="pricing-grid">
+          <article class="pricing-card reveal">
+            <span class="plan-label">Discover</span><h3>Agentic Blueprint</h3><div class="plan-price"><strong>US$250</strong><span>desde</span></div>
+            <p>Para identificar el primer workflow con ROI y controles claros.</p>
+            <ul><li>Discovery</li><li>Mapa de automatización</li><li>Arquitectura propuesta</li><li>Backlog y estimación</li></ul>
+            <a href="#configurador" class="button secondary full">Empezar por diagnóstico</a>
+          </article>
+          <article class="pricing-card featured reveal">
+            <div class="popular-pill">Más adaptable</div><span class="plan-label">Build</span><h3>Business Agent</h3><div class="plan-price"><strong>US$1.5k</strong><span>setup desde</span></div>
+            <p>Un agente conectado a procesos reales con supervisión y observabilidad.</p>
+            <ul><li>1 agente principal</li><li>Hasta 3 integraciones estándar</li><li>Guardrails + HITL</li><li>Tests y handoff</li></ul>
+            <a href="#servicios" class="button primary full">Elegir capacidades</a>
+          </article>
+          <article class="pricing-card reveal">
+            <span class="plan-label">Scale</span><h3>Agentic System</h3><div class="plan-price"><strong>US$4.5k</strong><span>setup desde</span></div>
+            <p>Orquestación multi-agente para procesos con datos, estados y operaciones durables.</p>
+            <ul><li>Multi-agent routing</li><li>Workflows durables</li><li>Policy/risk gates</li><li>SLOs + evidence</li></ul>
+            <a href="#configurador" class="button secondary full">Configurar sistema</a>
+          </article>
+          <article class="pricing-card reveal">
+            <span class="plan-label">Enterprise</span><h3>Managed Agent Platform</h3><div class="plan-price"><strong>Custom</strong><span>desde US$10k</span></div>
+            <p>Implementación con seguridad, gobernanza, integraciones especiales y soporte.</p>
+            <ul><li>Arquitectura dedicada</li><li>Seguridad y compliance</li><li>Observabilidad avanzada</li><li>Roadmap y soporte</li></ul>
+            <a href="#gobernanza" class="button secondary full">Ver controles</a>
+          </article>
+        </div>
+      </section>
+
+      <section class="section-block governance-section" id="gobernanza">
+        <div class="governance-panel reveal">
+          <div>
+            <div class="eyebrow">Trust layer</div>
+            <h2>La seguridad no está detrás del producto. Está dentro.</h2>
+            <p>Acciones externas, identidad, dinero, contratos y decisiones críticas requieren controles deterministas y, cuando corresponde, aprobación humana.</p>
+          </div>
+          <div class="governance-grid">
+            <div><span>AUTH</span><strong>Least privilege</strong><small>tokens y permisos mínimos</small></div>
+            <div><span>POLICY</span><strong>Fail-closed</strong><small>sin evidencia, no se ejecuta</small></div>
+            <div><span>HITL</span><strong>Human approval</strong><small>side effects sensibles</small></div>
+            <div><span>AUDIT</span><strong>Evidence ledger</strong><small>qué ocurrió y por qué</small></div>
+            <div><span>SRE</span><strong>Observability</strong><small>SLI, SLO, alertas, health</small></div>
+            <div><span>QA</span><strong>Adversarial evals</strong><small>inyección, permisos, regresión</small></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-block benchmark-section">
+        <div class="section-heading reveal">
+          <div><div class="eyebrow">Posicionamiento</div><h2>Diseñado para competir en 2026 sin copiar a nadie.</h2></div>
+          <p>Tomamos los patrones que convierten en SaaS modernos —valor inmediato, producto visible, pricing, prueba social verificable y demos— y los combinamos con una diferenciación fuerte: gobernanza y madurez explícita.</p>
+        </div>
+        <div class="benchmark-grid">
+          <div class="benchmark-card reveal"><span>01</span><strong>Producto visible</strong><p>El visitante entiende qué hace cada agente antes de hablar con ventas.</p></div>
+          <div class="benchmark-card reveal"><span>02</span><strong>Pricing orientativo</strong><p>Reduce fricción sin prometer un alcance que todavía no fue descubierto.</p></div>
+          <div class="benchmark-card reveal"><span>03</span><strong>Interacción útil</strong><p>Filtros y configurador convierten la web en una mini experiencia de producto.</p></div>
+          <div class="benchmark-card reveal"><span>04</span><strong>Confianza verificable</strong><p>Sin logos inventados, ROI fabricado ni estados de producción falsos.</p></div>
+        </div>
+      </section>
+
+      <section class="section-block faq-section" id="faq">
+        <div class="section-heading reveal"><div><div class="eyebrow">FAQ</div><h2>Preguntas antes de construir.</h2></div></div>
+        <div class="faq-list">
+          <details class="reveal"><summary>¿Los agentes actúan sin aprobación?</summary><p>No por defecto. Las acciones con impacto externo o riesgo elevado se diseñan con gates, permisos mínimos y aprobación humana cuando corresponde.</p></details>
+          <details class="reveal"><summary>¿Los precios incluyen OpenAI, modelos o APIs de terceros?</summary><p>No. Los precios publicados son de implementación/soporte. Consumo de modelos, SaaS, almacenamiento, telefonía, mensajería y otros proveedores se cotizan o trasladan según uso.</p></details>
+          <details class="reveal"><summary>¿CineForge publica automáticamente en redes sociales?</summary><p>El repositorio incluye conectores y gobernanza, pero la publicación live permanece bloqueada hasta validar credenciales, permisos, revisiones de plataforma y contract tests. Se puede ofrecer producción y flujo supervisado sin afirmar autonomía no certificada.</p></details>
+          <details class="reveal"><summary>¿Ofrecen un bot de trading rentable?</summary><p>No se promete rentabilidad ni operación autónoma de capital. El servicio comercializable es investigación cuantitativa, backtesting, diseño de riesgo, testnet y readiness técnico con etapas y aprobación explícitas.</p></details>
+          <details class="reveal"><summary>¿Se puede integrar con mis herramientas actuales?</summary><p>Sí, siempre que exista una API, webhook, MCP o conector autorizado. Priorizamos integraciones oficiales y evitamos automatizaciones que dependan de evadir controles de plataforma.</p></details>
+        </div>
+      </section>
+
+      <section class="final-cta reveal">
+        <div><div class="eyebrow">Jadel Tech RD</div><h2>Tu próximo empleado digital debería empezar como un sistema bien diseñado.</h2><p>Explora el catálogo, arma el alcance y valida el primer caso de uso antes de escalar autonomía.</p></div>
+        <div class="actions"><a class="button primary" href="#configurador">Construir m
