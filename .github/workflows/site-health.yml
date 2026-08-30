@@ -1,0 +1,43 @@
+name: Verify public site health
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify public endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          urls=(
+            "https://jadeltechrd.com/"
+            "https://jadeltechrd.com/?view=privacy"
+            "https://jadeltechrd.com/?view=terms"
+            "https://jadeltechrd.com/?view=data-deletion"
+          )
+          for url in "${urls[@]}"; do
+            echo "Checking $url"
+            curl --fail --silent --show-error --location \
+              --connect-timeout 10 --max-time 20 \
+              --proto '=https' --tlsv1.2 \
+              --output /tmp/site.html \
+              --write-out 'HTTP %{http_code} | remote=%{remote_ip} | tls=%{ssl_verify_result}\n' \
+              "$url"
+            test -s /tmp/site.html
+          done
+
+      - name: Verify expected public content
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            --connect-timeout 10 --max-time 20 \
+            "https://jadeltechrd.com/" | grep -Fq "Jadel Tech RD"
