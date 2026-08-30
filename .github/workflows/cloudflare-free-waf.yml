@@ -1,6 +1,10 @@
 name: Deploy Cloudflare Free Managed WAF
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cloudflare-free-waf.yml'
   workflow_dispatch:
 
 permissions:
@@ -42,7 +46,7 @@ jobs:
           test -n "$zone_id" && test "$zone_id" != null
           echo "zone_id=$zone_id" >> "$GITHUB_OUTPUT"
           echo 'CLOUDFLARE_ZONE_ACCESS=PASS'
-          echo "FREE_MANAGED_RULESET_ID_SOURCE=OFFICIAL_CLOUDFLARE_DOCS"
+          echo 'FREE_MANAGED_RULESET_ID_SOURCE=OFFICIAL_CLOUDFLARE_DOCS'
 
       - name: Deploy Free Managed Ruleset idempotently at zone level
         shell: bash
