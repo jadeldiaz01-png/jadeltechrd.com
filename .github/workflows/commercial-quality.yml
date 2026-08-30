@@ -1,0 +1,96 @@
+name: Validate commercial site quality
+
+on:
+  push:
+    branches: [feat/agent-services-2026]
+    paths:
+      - 'index.html'
+      - 'app.js'
+      - 'styles.css'
+      - 'robots.txt'
+      - 'sitemap.xml'
+      - '.github/workflows/commercial-quality.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/agent-services-2026
+
+      - name: Static validation and budgets
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check app.js
+          test -s index.html
+          test -s app.js
+          test -s styles.css
+          test -s robots.txt
+          test -s sitemap.xml
+          grep -Fq 'Agentes de IA & Automatización | Jadel Tech RD' index.html
+          grep -Fq 'property="og:title"' index.html
+          grep -Fq 'prefers-reduced-motion' styles.css
+          grep -Fq 'data-deletion' app.js
+          grep -Fq 'Sitemap: https://jadeltechrd.com/sitemap.xml' robots.txt
+          grep -Fq 'https://jadeltechrd.com/?view=data-deletion' sitemap.xml
+          js_bytes=$(wc -c < app.js)
+          css_bytes=$(wc -c < styles.css)
+          echo "JS_BYTES=$js_bytes"
+          echo "CSS_BYTES=$css_bytes"
+          test "$js_bytes" -lt 180000
+          test "$css_bytes" -lt 120000
+          echo 'STATIC_QUALITY=PASS'
+
+      - name: Browser-rendered E2E smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8080 --bind 127.0.0.1 >/tmp/jadel-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then break; fi
+            sleep 1
+          done
+
+          browser=''
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if command -v "$candidate" >/dev/null 2>&1; then browser="$candidate"; break; fi
+          done
+          if [ -z "$browser" ]; then
+            echo 'No supported headless browser found on runner.' >&2
+            exit 3
+          fi
+          echo "BROWSER=$browser"
+
+          "$browser" --headless=new --no-sandbox --disable-gpu --virtual-time-budget=2500 \
+            --dump-dom http://127.0.0.1:8080/ > /tmp/home-rendered.html
+          grep -Fq 'Agentes de IA que' /tmp/home-rendered.html
+          grep -Fq 'Arquitectura Agentic &amp; Automatización' /tmp/home-rendered.html || grep -Fq 'Arquitectura Agentic & Automatización' /tmp/home-rendered.html
+          grep -Fq 'Configura una solución' /tmp/home-rendered.html || grep -Fq 'Construye tu alcance' /tmp/home-rendered.html
+          grep -Fq 'Agentic Blueprint' /tmp/home-rendered.html
+          grep -Fq 'AI Governance &amp; Production Readiness' /tmp/home-rendered.html || grep -Fq 'AI Governance & Production Readiness' /tmp/home-rendered.html
+
+          for view in privacy terms data-deletion; do
+            "$browser" --headless=new --no-sandbox --disable-gpu --virtual-time-budget=1200 \
+              --dump-dom "http://127.0.0.1:8080/?view=$view" > "/tmp/$view.html"
+            grep -Fq 'data-view="'"$view"'"' "/tmp/$view.html"
+          done
+          echo 'BROWSER_E2E=PASS'
+
+      - name: Security and claims assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -Eqi 'guaranteed profit|rentabilidad garantizada|100% autonomous|sin supervisión humana' app.js
+          grep -Fq 'Research-only · no live capital' app.js
+          grep -Fq 'sin promesas de ingresos' app.js
+          grep -Fq 'Human-in-the-loop' app.js
+          echo 'CLAIMS_GOVERNANCE=PASS'
