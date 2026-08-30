@@ -99,12 +99,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          home=$(mktemp)
+          app=$(mktemp)
           curl --fail --silent --show-error --location \
             --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 \
-            "https://${DOMAIN}/" | grep -Fq 'Jadel Tech RD'
+            --output "$home" "https://${DOMAIN}/"
           curl --fail --silent --show-error --location \
             --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 \
-            "https://${DOMAIN}/app.js" | grep -Fq 'data-deletion'
+            --output "$app" "https://${DOMAIN}/app.js"
+          grep -Fq 'Jadel Tech RD' "$home"
+          grep -Fq 'data-deletion' "$app"
+          rm -f "$home" "$app"
           echo 'HOME_CONTENT=PASS'
           echo 'DATA_DELETION_IMPLEMENTATION=PASS'
           echo 'PUBLIC_ACCESS_READY=YES'
