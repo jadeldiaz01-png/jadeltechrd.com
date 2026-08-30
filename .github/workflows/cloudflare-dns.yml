@@ -18,32 +18,37 @@ jobs:
     timeout-minutes: 5
     env:
       DOMAIN: jadeltechrd.com
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - name: Diagnose credential placement without exposing values
         shell: bash
         env:
           HAS_EXPECTED_SECRET: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
           HAS_EXPECTED_VARIABLE: ${{ vars.CLOUDFLARE_API_TOKEN != '' }}
-          HAS_CF_API_TOKEN_SECRET: ${{ secrets.CF_API_TOKEN != '' }}
-          HAS_CLOUDFLARE_TOKEN_SECRET: ${{ secrets.CLOUDFLARE_TOKEN != '' }}
         run: |
           set -euo pipefail
           echo 'selected_environment=jadeltechrd'
           echo "expected_secret=${HAS_EXPECTED_SECRET}"
           echo "expected_variable=${HAS_EXPECTED_VARIABLE}"
-          echo "cf_api_token_secret=${HAS_CF_API_TOKEN_SECRET}"
-          echo "cloudflare_token_secret=${HAS_CLOUDFLARE_TOKEN_SECRET}"
 
-      - name: Require least-privilege Cloudflare token
+      - name: Normalize Cloudflare token safely
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-            echo 'CLOUDFLARE_API_TOKEN is not configured as a secret in environment jadeltechrd.' >&2
-            echo 'Required scope: Zone Read + DNS Write, restricted to jadeltechrd.com.' >&2
+          raw="${CLOUDFLARE_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then
+            token="${token:1:${#token}-2}"
+          elif [[ "$token" == \'*\' && "$token" == *\' ]]; then
+            token="${token:1:${#token}-2}"
+          fi
+          if [ -z "$token" ]; then
+            echo 'CLOUDFLARE_API_TOKEN is empty after normalization.' >&2
             exit 2
           fi
+          echo "::add-mask::$token"
+          printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          echo 'Cloudflare token normalized without exposing its value.'
 
       - name: Verify token and resolve zone
         id: zone
@@ -52,10 +57,15 @@ jobs:
           set -euo pipefail
           auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
 
-          verify=$(curl --fail-with-body -sS "${auth[@]}" \
-            https://api.cloudflare.com/client/v4/user/tokens/verify)
-          test "$(jq -r '.success' <<<"$verify")" = 'true'
-          test "$(jq -r '.result.status' <<<"$verify")" = 'active'
+          tmp=$(mktemp)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" https://api.cloudflare.com/client/v4/user/tokens/verify || true)
+          if [ "$code" != '200' ]; then
+            echo "Cloudflare token verification failed with HTTP ${code}." >&2
+            jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' "$tmp" >&2 || true
+            exit 7
+          fi
+          test "$(jq -r '.success' "$tmp")" = 'true'
+          test "$(jq -r '.result.status' "$tmp")" = 'active'
 
           zones=$(curl --fail-with-body -sS "${auth[@]}" \
             "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50")
