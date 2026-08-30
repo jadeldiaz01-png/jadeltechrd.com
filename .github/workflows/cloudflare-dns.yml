@@ -2,11 +2,10 @@ name: Reconcile Cloudflare DNS for GitHub Pages
 
 on:
   workflow_dispatch:
-    inputs:
-      target_environment:
-        description: Environment that contains CLOUDFLARE_API_TOKEN
-        required: true
-        type: environment
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cloudflare-dns.yml'
 
 permissions:
   contents: read
@@ -14,7 +13,7 @@ permissions:
 jobs:
   reconcile-dns:
     environment:
-      name: ${{ inputs.target_environment }}
+      name: jadeltechrd
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -30,7 +29,7 @@ jobs:
           HAS_CLOUDFLARE_TOKEN_SECRET: ${{ secrets.CLOUDFLARE_TOKEN != '' }}
         run: |
           set -euo pipefail
-          echo "selected_environment=${{ inputs.target_environment }}"
+          echo 'selected_environment=jadeltechrd'
           echo "expected_secret=${HAS_EXPECTED_SECRET}"
           echo "expected_variable=${HAS_EXPECTED_VARIABLE}"
           echo "cf_api_token_secret=${HAS_CF_API_TOKEN_SECRET}"
@@ -41,7 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-            echo 'CLOUDFLARE_API_TOKEN is not configured as a secret in the selected environment.' >&2
+            echo 'CLOUDFLARE_API_TOKEN is not configured as a secret in environment jadeltechrd.' >&2
             echo 'Required scope: Zone Read + DNS Write, restricted to jadeltechrd.com.' >&2
             exit 2
           fi
