@@ -20,12 +20,26 @@ jobs:
       DOMAIN: jadeltechrd.com
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
+      - name: Diagnose credential placement without exposing values
+        shell: bash
+        env:
+          HAS_EXPECTED_SECRET: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_EXPECTED_VARIABLE: ${{ vars.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_CF_API_TOKEN_SECRET: ${{ secrets.CF_API_TOKEN != '' }}
+          HAS_CLOUDFLARE_TOKEN_SECRET: ${{ secrets.CLOUDFLARE_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          echo "expected_secret=${HAS_EXPECTED_SECRET}"
+          echo "expected_variable=${HAS_EXPECTED_VARIABLE}"
+          echo "cf_api_token_secret=${HAS_CF_API_TOKEN_SECRET}"
+          echo "cloudflare_token_secret=${HAS_CLOUDFLARE_TOKEN_SECRET}"
+
       - name: Require least-privilege Cloudflare token
         shell: bash
         run: |
           set -euo pipefail
           if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-            echo 'CLOUDFLARE_API_TOKEN is not configured in the github-pages environment.' >&2
+            echo 'CLOUDFLARE_API_TOKEN is not configured as a secret accessible to the github-pages environment.' >&2
             echo 'Required scope: Zone Read + DNS Write, restricted to jadeltechrd.com.' >&2
             exit 2
           fi
