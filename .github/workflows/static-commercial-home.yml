@@ -1,0 +1,46 @@
+name: Promote commercial homepage to source HTML
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/upgrade_static_home.py'
+      - '.github/workflows/static-commercial-home.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Render static commercial homepage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/upgrade_static_home.py
+          grep -Fq 'static-commercial-fallback' index.html
+          grep -Fq 'Agentes de IA que' index.html
+          grep -Fq 'CineForge · Video Premium' index.html
+          grep -Fq 'Agentic Blueprint' index.html
+          grep -Fq 'data-view="privacy" hidden' index.html
+          grep -Fq 'data-view="terms" hidden' index.html
+          node --check app.js
+          echo 'STATIC_SOURCE_VALIDATION=PASS'
+      - name: Commit source homepage
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- index.html; then
+            echo 'No index change required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'site: make commercial agent studio the source homepage'
+          git push origin HEAD:main
