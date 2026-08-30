@@ -36,7 +36,10 @@ jobs:
               IFS=$'\t' read -r code tls <"$meta" || true
               echo "home HTTP=$code TLS_VERIFY=$tls"
               if [ "$code" = '200' ] && [ "$tls" = '0' ] && \
-                 grep -Fq 'Agentes de IA & Automatización | Jadel Tech RD' "$home"; then
+                 grep -Fq 'Agentes de IA & Automatización | Jadel Tech RD' "$home" && \
+                 grep -Fq 'static-commercial-fallback' "$home" && \
+                 grep -Fq 'convierten procesos en sistemas' "$home" && \
+                 ! grep -Fq 'Sitio oficial de información pública para nuestras aplicaciones' "$home"; then
                 ready=true
                 rm -f "$home" "$meta"
                 break
@@ -47,6 +50,7 @@ jobs:
           done
           test "$ready" = true
           echo 'LIVE_TLS_HTTP=PASS'
+          echo 'SERVER_VISIBLE_COMMERCIAL_HOME=PASS'
 
       - name: Verify required public resources and legal routes
         shell: bash
@@ -85,5 +89,6 @@ jobs:
           grep -Fq 'CineForge' /tmp/live-home.html
           grep -Fq 'Research-only' /tmp/live-home.html
           grep -Fq 'Human-in-the-loop' /tmp/live-home.html
+          grep -Fq 'Multi-Agent Orchestration' /tmp/live-home.html
           echo 'LIVE_BROWSER_RENDER=PASS'
           echo 'COMMERCIAL_SITE_LIVE=YES'
