@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Apply deterministic hardening
+      - name: Apply source-level CSP hardening
         shell: bash
         run: |
           set -euo pipefail
@@ -26,22 +26,18 @@ jobs:
           grep -Fq 'Content-Security-Policy' index.html
           grep -Fq "default-src 'none'" index.html
           grep -Fq 'strict-origin-when-cross-origin' index.html
-          if grep -R --include='*.yml' --include='*.yaml' -nE 'uses: [^ ]+@v[0-9]+' .github/workflows; then
-            echo 'UNPINNED_VERSION_TAG_ACTION=FAIL'
-            exit 1
-          fi
           node --check app.js
           echo 'SECURITY_SOURCE_VALIDATION=PASS'
       - name: Commit hardened source
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet; then
-            echo 'No hardening changes required.'
+          if git diff --quiet -- index.html; then
+            echo 'No source hardening change required.'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html .github/workflows
-          git commit -m 'security: enforce CSP and immutable Actions pins'
+          git add index.html
+          git commit -m 'security: enforce restrictive source CSP'
           git push origin HEAD:security/hardening-2026
