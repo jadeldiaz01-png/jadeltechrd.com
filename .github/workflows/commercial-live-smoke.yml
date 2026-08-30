@@ -1,0 +1,89 @@
+name: Verify live commercial site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/commercial-live-smoke.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '23 */6 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  live-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BASE_URL: https://jadeltechrd.com
+    steps:
+      - name: Wait for public deployment and verify HTTP/TLS
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=false
+          for attempt in $(seq 1 24); do
+            echo "Live verification attempt ${attempt}/24"
+            home=$(mktemp)
+            meta=$(mktemp)
+            if curl --silent --show-error --location --fail \
+              --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 \
+              --output "$home" --write-out '%{http_code}\t%{ssl_verify_result}' \
+              "$BASE_URL/" >"$meta"; then
+              code=''; tls=''
+              IFS=$'\t' read -r code tls <"$meta" || true
+              echo "home HTTP=$code TLS_VERIFY=$tls"
+              if [ "$code" = '200' ] && [ "$tls" = '0' ] && \
+                 grep -Fq 'Agentes de IA & Automatización | Jadel Tech RD' "$home"; then
+                ready=true
+                rm -f "$home" "$meta"
+                break
+              fi
+            fi
+            rm -f "$home" "$meta"
+            sleep 10
+          done
+          test "$ready" = true
+          echo 'LIVE_TLS_HTTP=PASS'
+
+      - name: Verify required public resources and legal routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in \
+            "$BASE_URL/?view=privacy" \
+            "$BASE_URL/?view=terms" \
+            "$BASE_URL/?view=data-deletion" \
+            "$BASE_URL/robots.txt" \
+            "$BASE_URL/sitemap.xml"; do
+            code=$(curl --silent --show-error --location --output /tmp/body --write-out '%{http_code}' \
+              --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 "$url")
+            echo "$url -> HTTP=$code"
+            test "$code" = '200'
+            test -s /tmp/body
+          done
+          curl --fail --silent --show-error --location "$BASE_URL/robots.txt" | grep -Fq 'Sitemap: https://jadeltechrd.com/sitemap.xml'
+          curl --fail --silent --show-error --location "$BASE_URL/sitemap.xml" | grep -Fq 'https://jadeltechrd.com/?view=data-deletion'
+          echo 'LIVE_LEGAL_DISCOVERY=PASS'
+
+      - name: Verify rendered commercial experience in Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser=''
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if command -v "$candidate" >/dev/null 2>&1; then browser="$candidate"; break; fi
+          done
+          test -n "$browser"
+          "$browser" --headless=new --no-sandbox --disable-gpu --virtual-time-budget=3000 \
+            --dump-dom "$BASE_URL/" > /tmp/live-home.html
+          grep -Fq 'Agentes de IA que' /tmp/live-home.html
+          grep -Fq 'Agentic Blueprint' /tmp/live-home.html
+          grep -Fq 'Business Agent' /tmp/live-home.html
+          grep -Fq 'CineForge' /tmp/live-home.html
+          grep -Fq 'Research-only' /tmp/live-home.html
+          grep -Fq 'Human-in-the-loop' /tmp/live-home.html
+          echo 'LIVE_BROWSER_RENDER=PASS'
+          echo 'COMMERCIAL_SITE_LIVE=YES'
