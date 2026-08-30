@@ -77,7 +77,7 @@ Positive:
 - server-visible SEO/discovery is present;
 - browser E2E validation gives stronger evidence than syntax-only checks.
 
-Remaining non-blocking follow-up before paid acquisition:
+Post-launch follow-up before paid acquisition:
 - add a real verified business contact/lead destination;
 - add Lighthouse/axe scoring as an optimization gate;
 - add privacy-safe conversion analytics only after an analytics/consent decision;
