@@ -18,18 +18,37 @@ jobs:
     timeout-minutes: 5
     env:
       DOMAIN: jadeltechrd.com
-      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
     steps:
       - name: Diagnose credential placement without exposing values
         shell: bash
         env:
-          HAS_EXPECTED_SECRET: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
-          HAS_EXPECTED_VARIABLE: ${{ vars.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_CLOUDFLARE_API_TOKEN_SECRET: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_CF_API_TOKEN_SECRET: ${{ secrets.CF_API_TOKEN != '' }}
+          HAS_CLOUDFLARE_TOKEN_SECRET: ${{ secrets.CLOUDFLARE_TOKEN != '' }}
+          HAS_CF_TOKEN_SECRET: ${{ secrets.CF_TOKEN != '' }}
+          HAS_CLOUDFLARE_API_TOKEN_VARIABLE: ${{ vars.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_CF_API_TOKEN_VARIABLE: ${{ vars.CF_API_TOKEN != '' }}
+          HAS_CLOUDFLARE_TOKEN_VARIABLE: ${{ vars.CLOUDFLARE_TOKEN != '' }}
+          HAS_CF_TOKEN_VARIABLE: ${{ vars.CF_TOKEN != '' }}
         run: |
           set -euo pipefail
           echo 'selected_environment=jadeltechrd'
-          echo "expected_secret=${HAS_EXPECTED_SECRET}"
-          echo "expected_variable=${HAS_EXPECTED_VARIABLE}"
+          echo "secret.CLOUDFLARE_API_TOKEN=${HAS_CLOUDFLARE_API_TOKEN_SECRET}"
+          echo "secret.CF_API_TOKEN=${HAS_CF_API_TOKEN_SECRET}"
+          echo "secret.CLOUDFLARE_TOKEN=${HAS_CLOUDFLARE_TOKEN_SECRET}"
+          echo "secret.CF_TOKEN=${HAS_CF_TOKEN_SECRET}"
+          echo "variable.CLOUDFLARE_API_TOKEN=${HAS_CLOUDFLARE_API_TOKEN_VARIABLE}"
+          echo "variable.CF_API_TOKEN=${HAS_CF_API_TOKEN_VARIABLE}"
+          echo "variable.CLOUDFLARE_TOKEN=${HAS_CLOUDFLARE_TOKEN_VARIABLE}"
+          echo "variable.CF_TOKEN=${HAS_CF_TOKEN_VARIABLE}"
+
+          if [ "$HAS_CLOUDFLARE_API_TOKEN_VARIABLE" = 'true' ] || \
+             [ "$HAS_CF_API_TOKEN_VARIABLE" = 'true' ] || \
+             [ "$HAS_CLOUDFLARE_TOKEN_VARIABLE" = 'true' ] || \
+             [ "$HAS_CF_TOKEN_VARIABLE" = 'true' ]; then
+            echo 'A Cloudflare credential appears to be stored as an Environment variable. Refusing to consume credentials from vars; move it to Environment secrets.' >&2
+          fi
 
       - name: Normalize Cloudflare token safely
         shell: bash
@@ -43,7 +62,8 @@ jobs:
             token="${token:1:${#token}-2}"
           fi
           if [ -z "$token" ]; then
-            echo 'CLOUDFLARE_API_TOKEN is empty after normalization.' >&2
+            echo 'No supported Cloudflare Environment secret is available.' >&2
+            echo 'Accepted secret names: CLOUDFLARE_API_TOKEN, CF_API_TOKEN, CLOUDFLARE_TOKEN, CF_TOKEN.' >&2
             exit 2
           fi
           echo "::add-mask::$token"
@@ -68,8 +88,6 @@ jobs:
           esac
           echo "token_family=${token_family}"
 
-          # User-owned tokens have a dedicated verification endpoint. Account-owned
-          # tokens are authenticated authoritatively by the zone API request below.
           if [ "$token_family" = 'user_api_token' ] || [ "$token_family" = 'legacy_or_unknown_api_token' ]; then
             verify_tmp=$(mktemp)
             verify_code=$(curl -sS -o "$verify_tmp" -w '%{http_code}' "${auth[@]}" \
