@@ -1,0 +1,68 @@
+name: Apply commercial SEO metadata
+
+on:
+  push:
+    branches: [feat/agent-services-2026]
+    paths:
+      - '.github/workflows/commercial-seo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  seo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/agent-services-2026
+
+      - name: Apply server-visible metadata and discovery files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+
+          path = Path('index.html')
+          html = path.read_text(encoding='utf-8')
+
+          html = html.replace(
+              '<meta name="description" content="Jadel Tech RD - Página principal, Política de Privacidad y Condiciones del Servicio de la aplicación.">',
+              '<meta name="description" content="Jadel Tech RD diseña e integra agentes de IA, automatización, social intelligence, video premium, datos y sistemas agentic con seguridad y supervisión.">'
+          )
+          html = html.replace('<title>Jadel Tech RD</title>', '<title>Agentes de IA & Automatización | Jadel Tech RD</title>')
+
+          marker = '<title>Agentes de IA & Automatización | Jadel Tech RD</title>'
+          additions = '''\n  <link rel="canonical" href="https://jadeltechrd.com/">\n  <meta property="og:type" content="website">\n  <meta property="og:site_name" content="Jadel Tech RD">\n  <meta property="og:title" content="Agentes de IA & Automatización | Jadel Tech RD">\n  <meta property="og:description" content="Diseño e integración de agentes de IA, automatización y sistemas agentic con controles reales.">\n  <meta property="og:url" content="https://jadeltechrd.com/">\n  <meta name="twitter:card" content="summary_large_image">\n  <meta name="twitter:title" content="Agentes de IA & Automatización | Jadel Tech RD">\n  <meta name="twitter:description" content="Agentes, automatización, media intelligence, integraciones y gobernanza para operaciones reales.">\n'''
+          if 'property="og:title"' not in html:
+              html = html.replace(marker, marker + additions)
+
+          class P(HTMLParser):
+              pass
+          P().feed(html)
+          assert 'Agentes de IA & Automatización | Jadel Tech RD' in html
+          assert 'https://jadeltechrd.com/' in html
+          path.write_text(html, encoding='utf-8')
+
+          Path('robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: https://jadeltechrd.com/sitemap.xml\n', encoding='utf-8')
+          Path('sitemap.xml').write_text('''<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>https://jadeltechrd.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://jadeltechrd.com/?view=privacy</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>\n  <url><loc>https://jadeltechrd.com/?view=terms</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>\n  <url><loc>https://jadeltechrd.com/?view=data-deletion</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>\n</urlset>\n''', encoding='utf-8')
+          print('COMMERCIAL_SEO=PASS')
+          PY
+
+      - name: Commit SEO assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html robots.txt sitemap.xml
+          if git diff --cached --quiet; then
+            echo 'No SEO changes to commit.'
+            exit 0
+          fi
+          git commit -m 'feat: add server-visible commercial SEO [skip ci]'
+          git push origin HEAD:feat/agent-services-2026
