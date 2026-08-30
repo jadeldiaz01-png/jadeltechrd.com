@@ -1,0 +1,66 @@
+name: Audit Cloudflare DNS for GitHub Pages TLS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cloudflare-tls-dns-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      DOMAIN: jadeltechrd.com
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Audit apex records relevant to TLS
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          zones=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50")
+          zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name == $d) | .id' <<<"$zones" | head -n1)
+          test -n "$zone_id"
+          records=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=${DOMAIN}&per_page=100")
+
+          echo 'A records:'
+          jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and .type=="A") | "A content=\(.content) proxied=\(.proxied)"' <<<"$records"
+          echo 'AAAA records:'
+          jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and .type=="AAAA") | "AAAA content=\(.content) proxied=\(.proxied)"' <<<"$records"
+          echo 'CAA records:'
+          jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and .type=="CAA") | "CAA data=\(.data|tostring)"' <<<"$records"
+
+          expected_a=$(printf '%s\n' 185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153 | sort)
+          actual_a=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and .type=="A") | .content' <<<"$records" | sort)
+          test "$actual_a" = "$expected_a"
+          bad_proxy=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and (.type=="A" or .type=="AAAA") and .proxied==true) | .type' <<<"$records")
+          if [ -n "$bad_proxy" ]; then
+            echo 'TLS_DNS_AUDIT=FAIL Cloudflare proxy enabled on Pages address record.' >&2
+            exit 4
+          fi
+
+          allowed_v6='^(2606:50c0:8000::153|2606:50c0:8001::153|2606:50c0:8002::153|2606:50c0:8003::153)$'
+          extra_v6=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and .type=="AAAA") | .content' <<<"$records" | grep -vE "$allowed_v6" || true)
+          if [ -n "$extra_v6" ]; then
+            echo 'TLS_DNS_AUDIT=FAIL unexpected apex AAAA record(s).' >&2
+            echo "$extra_v6" >&2
+            exit 5
+          fi
+
+          caa_count=$(jq -r --arg d "$DOMAIN" '[.result[] | select(.name==$d and .type=="CAA")] | length' <<<"$records")
+          if [ "$caa_count" -gt 0 ]; then
+            letsencrypt=$(jq -r --arg d "$DOMAIN" '[.result[] | select(.name==$d and .type=="CAA") | (.data.value // "")] | any(. == "letsencrypt.org")' <<<"$records")
+            if [ "$letsencrypt" != 'true' ]; then
+              echo 'TLS_DNS_AUDIT=FAIL CAA exists but does not authorize letsencrypt.org.' >&2
+              exit 6
+            fi
+          fi
+          echo 'TLS_DNS_AUDIT=PASS'
