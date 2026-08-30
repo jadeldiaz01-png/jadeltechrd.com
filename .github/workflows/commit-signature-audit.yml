@@ -1,0 +1,54 @@
+name: Audit protected-branch commit signatures
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '43 10 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  signature-posture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require verified signature on current protected heads
+        shell: bash
+        env:
+          API_VERSION: '2026-03-10'
+        run: |
+          set -euo pipefail
+
+          audit_head() {
+            local repo="$1" body sha verified reason
+            body=$(curl --fail-with-body --silent --show-error \
+              -H 'Accept: application/vnd.github+json' \
+              -H "X-GitHub-Api-Version: ${API_VERSION}" \
+              "https://api.github.com/repos/${repo}/commits/main")
+            sha=$(jq -r '.sha' <<<"$body")
+            verified=$(jq -r '.commit.verification.verified' <<<"$body")
+            reason=$(jq -r '.commit.verification.reason' <<<"$body")
+
+            if [ "$verified" != true ]; then
+              echo "SIGNATURE_${repo//\//_}=FAIL sha=${sha} reason=${reason}"
+              return 40
+            fi
+            echo "SIGNATURE_${repo//\//_}=PASS sha=${sha} reason=${reason}"
+          }
+
+          audit_head 'jadeldiaz01-png/jadeltechrd.com'
+          audit_head 'jadeldiaz01-png/jadeldiaz01-png.github.io'
+          echo 'PROTECTED_HEAD_SIGNATURES=PASS'
+
+      - name: Explain enforcement boundary
+        shell: bash
+        run: |
+          cat <<'EOF'
+          This is a post-merge drift detector, not a replacement for a ruleset
+          'required_signatures' rule. Required-signature enforcement remains staged
+          until every permitted automation identity can produce verified commits
+          without deadlocking the PR-based Pages publication path.
+          EOF

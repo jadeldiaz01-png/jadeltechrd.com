@@ -1,0 +1,86 @@
+name: Gate future dynamic attack surface
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dynamic-surface-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Detect dynamic public surface
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          dynamic=no
+
+          for path in api functions workers server backend src/api; do
+            if [ -e "$path" ]; then
+              echo "DYNAMIC_PATH_DETECTED=${path}"
+              dynamic=yes
+            fi
+          done
+
+          if grep -RIEq '<form([[:space:]>])|/api/|fetch[[:space:]]*\(|XMLHttpRequest|new[[:space:]]+WebSocket' \
+            --include='*.html' --include='*.js' --include='*.ts' --include='*.tsx' --include='*.jsx' .; then
+            echo 'DYNAMIC_CODE_SIGNAL=YES'
+            dynamic=yes
+          fi
+
+          echo "dynamic=${dynamic}" >> "$GITHUB_OUTPUT"
+          echo "DYNAMIC_PUBLIC_SURFACE=${dynamic}"
+
+      - name: Require security manifest for dynamic surface
+        if: steps.detect.outputs.dynamic == 'yes'
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest='security/api-security-manifest.json'
+          test -s "$manifest" || {
+            echo 'DYNAMIC_SECURITY_MANIFEST=MISSING'
+            exit 40
+          }
+
+          jq -e '.version == 1' "$manifest" >/dev/null
+          for key in \
+            turnstile_on_abuse_prone_public_forms \
+            endpoint_rate_limits_defined \
+            schema_validation \
+            request_size_limits \
+            authn_authz_model_reviewed \
+            csrf_model_reviewed \
+            server_side_secrets_only \
+            idempotency_for_external_side_effects \
+            audit_correlation_ids \
+            ssrf_egress_policy_reviewed; do
+            jq -e --arg k "$key" '.controls[$k] == true' "$manifest" >/dev/null || {
+              echo "DYNAMIC_CONTROL_${key}=FAIL"
+              exit 41
+            }
+          done
+
+          for test_name in injection ssrf replay access_control; do
+            test_path=$(jq -r --arg k "$test_name" '.tests[$k] // empty' "$manifest")
+            test -n "$test_path" && test -e "$test_path" || {
+              echo "DYNAMIC_TEST_${test_name}=MISSING path=${test_path:-unset}"
+              exit 42
+            }
+          done
+
+          echo 'DYNAMIC_SECURITY_CONTRACT=PASS'
+
+      - name: Static-only posture remains valid
+        if: steps.detect.outputs.dynamic != 'yes'
+        shell: bash
+        run: echo 'DYNAMIC_SECURITY_CONTRACT=NOT_APPLICABLE_STATIC_SITE'

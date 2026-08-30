@@ -2,6 +2,11 @@ name: Audit repository branch governance
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/branch-governance-audit.yml'
+      - 'docs/security/rulesets/**'
   schedule:
     - cron: '23 10 * * 1'
 
@@ -13,16 +18,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require active default-branch rulesets
+      - name: Require exact active default-branch rulesets
         shell: bash
         env:
-          API_VERSION: '2022-11-28'
+          API_VERSION: '2026-03-10'
         run: |
           set -euo pipefail
 
           audit_repo() {
-            local repo="$1" required_check="$2"
-            local list ruleset_id detail types contexts include_default
+            local repo="$1" expected_name="$2" required_check="$3"
+            local list ruleset_id detail include_default types contexts strict bypass_count resolution
             echo "Auditing ${repo}"
 
             list=$(curl --fail-with-body --silent --show-error \
@@ -30,9 +35,9 @@ jobs:
               -H "X-GitHub-Api-Version: ${API_VERSION}" \
               "https://api.github.com/repos/${repo}/rulesets")
 
-            ruleset_id=$(jq -r '.[] | select(.target=="branch" and .enforcement=="active") | .id' <<<"$list" | head -n1)
+            ruleset_id=$(jq -r --arg n "$expected_name" '.[] | select(.name==$n and .target=="branch" and .enforcement=="active") | .id' <<<"$list" | head -n1)
             if [ -z "$ruleset_id" ] || [ "$ruleset_id" = null ]; then
-              echo "RULESET_${repo//\//_}=FAIL no active branch ruleset"
+              echo "RULESET_${repo//\//_}=FAIL expected active ruleset not found: ${expected_name}"
               return 30
             fi
 
@@ -41,26 +46,51 @@ jobs:
               -H "X-GitHub-Api-Version: ${API_VERSION}" \
               "https://api.github.com/repos/${repo}/rulesets/${ruleset_id}")
 
+            test "$(jq -r '.name' <<<"$detail")" = "$expected_name"
+            test "$(jq -r '.target' <<<"$detail")" = branch
+            test "$(jq -r '.enforcement' <<<"$detail")" = active
+
             include_default=$(jq -r '.conditions.ref_name.include // [] | any(. == "~DEFAULT_BRANCH")' <<<"$detail")
-            test "$include_default" = true
+            test "$include_default" = true || {
+              echo "RULESET_${repo//\//_}=FAIL default branch is not targeted"
+              return 31
+            }
 
             types=$(jq -r '[.rules[]?.type] | unique | .[]' <<<"$detail")
-            for required in pull_request required_status_checks deletion non_fast_forward; do
+            for required in pull_request required_status_checks required_linear_history deletion non_fast_forward; do
               grep -Fxq "$required" <<<"$types" || {
                 echo "RULESET_${repo//\//_}=FAIL missing rule ${required}"
-                return 31
+                return 32
               }
             done
 
             contexts=$(jq -r '[.rules[]? | select(.type=="required_status_checks") | .parameters.required_status_checks[]?.context] | .[]' <<<"$detail")
             grep -Fxq "$required_check" <<<"$contexts" || {
-              echo "RULESET_${repo//\//_}=FAIL missing check ${required_check}"
-              return 32
+              echo "RULESET_${repo//\//_}=FAIL missing required check ${required_check}"
+              return 33
             }
 
-            echo "RULESET_${repo//\//_}=PASS id=${ruleset_id} check=${required_check}"
+            strict=$(jq -r '[.rules[]? | select(.type=="required_status_checks") | .parameters.strict_required_status_checks_policy] | any(. == true)' <<<"$detail")
+            test "$strict" = true || {
+              echo "RULESET_${repo//\//_}=FAIL strict required-status policy disabled"
+              return 34
+            }
+
+            resolution=$(jq -r '[.rules[]? | select(.type=="pull_request") | .parameters.required_review_thread_resolution] | any(. == true)' <<<"$detail")
+            test "$resolution" = true || {
+              echo "RULESET_${repo//\//_}=FAIL review-thread resolution disabled"
+              return 35
+            }
+
+            bypass_count=$(jq -r '.bypass_actors // [] | length' <<<"$detail")
+            test "$bypass_count" = 0 || {
+              echo "RULESET_${repo//\//_}=FAIL broad bypass actor detected"
+              return 36
+            }
+
+            echo "RULESET_${repo//\//_}=PASS id=${ruleset_id} name=${expected_name} check=${required_check} bypass=none"
           }
 
-          audit_repo 'jadeldiaz01-png/jadeltechrd.com' 'security-baseline'
-          audit_repo 'jadeldiaz01-png/jadeldiaz01-png.github.io' 'root-public-site-validation'
+          audit_repo 'jadeldiaz01-png/jadeltechrd.com' 'Jadel Tech RD canonical main protection' 'security-baseline'
+          audit_repo 'jadeldiaz01-png/jadeldiaz01-png.github.io' 'Jadel Tech RD Pages root main protection' 'root-public-site-validation'
           echo 'BRANCH_GOVERNANCE=PASS'
