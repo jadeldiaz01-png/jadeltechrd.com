@@ -1,0 +1,44 @@
+name: Diagnose GitHub Pages edge TLS routing
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pages-edge-tls-diagnostic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Inspect HTTP routing and edge certificates
+        shell: bash
+        run: |
+          set -euo pipefail
+          domain=jadeltechrd.com
+          ips=(185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153)
+
+          echo 'HTTP apex response:'
+          curl --silent --show-error --max-time 15 -D - -o /tmp/http-body "http://${domain}/" | sed -n '1,12p'
+          echo "http_body_has_brand=$(grep -Fq 'Jadel Tech RD' /tmp/http-body && echo true || echo false)"
+
+          for ip in "${ips[@]}"; do
+            echo "--- edge=${ip} ---"
+            cert=$(mktemp)
+            timeout 12 openssl s_client -connect "${ip}:443" -servername "$domain" -showcerts </dev/null 2>/dev/null \
+              | openssl x509 -outform PEM > "$cert" || true
+            if [ -s "$cert" ]; then
+              openssl x509 -in "$cert" -noout -subject -issuer -dates -ext subjectAltName || true
+              if openssl x509 -in "$cert" -noout -checkhost "$domain" >/dev/null 2>&1; then
+                echo "CERT_HOST_MATCH_${ip}=PASS"
+              else
+                echo "CERT_HOST_MATCH_${ip}=FAIL"
+              fi
+            else
+              echo "CERT_READ_${ip}=FAIL"
+            fi
+          done
