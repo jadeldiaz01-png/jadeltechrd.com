@@ -1,0 +1,59 @@
+name: Assemble commercial site preview
+
+on:
+  push:
+    branches: [feat/agent-services-2026]
+    paths:
+      - '.site-build/**'
+      - '.github/workflows/assemble-commercial-site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/agent-services-2026
+      - name: Assemble and validate site assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -d .site-build ]; then
+            echo 'No staged build chunks remain; nothing to assemble.'
+            exit 0
+          fi
+          cat .site-build/app.part* > app.js
+          cat .site-build/css.part* > styles.css
+          node --check app.js
+          grep -Fq 'data-deletion' app.js
+          grep -Fq 'Agentes de IA que' app.js
+          grep -Fq 'prefers-reduced-motion' styles.css
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class P(HTMLParser):
+              pass
+          P().feed(Path('index.html').read_text(encoding='utf-8'))
+          print('HTML_PARSE=PASS')
+          PY
+          echo 'COMMERCIAL_SITE_ASSETS=PASS'
+      - name: Commit assembled assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -d .site-build ]; then exit 0; fi
+          rm -rf .site-build
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A app.js styles.css .site-build
+          if git diff --cached --quiet; then
+            echo 'No changes to commit.'
+            exit 0
+          fi
+          git commit -m 'feat: assemble 2026 agent services experience [skip ci]'
+          git push origin HEAD:feat/agent-services-2026
