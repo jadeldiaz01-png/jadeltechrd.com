@@ -59,7 +59,6 @@ jobs:
           done
           echo 'CLOUDFLARE_PROXY=ENABLED'
 
-          # Wait until public DNS is served by Cloudflare rather than direct GitHub Pages A records.
           converged=false
           for attempt in $(seq 1 18); do
             actual=$(dig @1.1.1.1 +short A "$DOMAIN" | sort || true)
@@ -91,7 +90,8 @@ jobs:
                    --connect-timeout 10 --max-time 25 --proto '=https' --tlsv1.2 \
                    --output "$body" --write-out '%{http_code}\t%{remote_ip}\t%{ssl_verify_result}' \
                    "$url" >"$meta"; then
-                IFS=$'\t' read -r code remote tls <"$meta"
+                code=''; remote=''; tls=''
+                IFS=$'\t' read -r code remote tls <"$meta" || true
                 echo "$url -> HTTP=$code remote=$remote tls_verify=$tls"
                 if [ "$code" != 200 ] || [ "$tls" != 0 ] || [ ! -s "$body" ]; then all_ok=false; fi
               else
@@ -105,7 +105,6 @@ jobs:
           done
           test "$ready" = true
 
-          # Ensure canonical app assets actually come through the public edge.
           curl --fail --silent --show-error --location "https://${DOMAIN}/" | grep -Fq 'Jadel Tech RD'
           curl --fail --silent --show-error --location "https://${DOMAIN}/app.js" | grep -Fq 'data-deletion'
 
