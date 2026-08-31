@@ -1,5 +1,4 @@
 (() => {
-  const manifestUrl = "/config/agent-production-manifest.json";
   const grid = document.querySelector("#readiness-grid");
   const summary = document.querySelector("#readiness-summary");
   const year = document.querySelector("#year");
@@ -52,24 +51,17 @@
       <div><strong>${commercial}</strong><span>superficies comerciales gobernadas</span></div>`;
   };
 
-  fetch(manifestUrl, { credentials: "same-origin", cache: "no-store" })
-    .then((response) => {
-      if (!response.ok) throw new Error(`manifest_http_${response.status}`);
-      return response.json();
-    })
-    .then((manifest) => {
-      if (!manifest || manifest.schema_version !== "1.0.0" || !Array.isArray(manifest.agents)) {
-        throw new Error("manifest_contract_invalid");
-      }
-      renderSummary(manifest.agents);
-      grid.innerHTML = manifest.agents.map(card).join("");
-    })
-    .catch(() => {
-      grid.innerHTML = `
-        <article class="service-card">
-          <div class="service-topline"><span class="service-icon">!</span><span class="status-badge status-pilot">Fail-closed</span></div>
-          <h2>Manifiesto no disponible</h2>
-          <p>No se mostrará ningún agente como production-ready hasta recuperar y validar el manifiesto.</p>
-        </article>`;
-    });
+  const manifest = window.JADEL_AGENT_READINESS;
+  if (!manifest || manifest.schema_version !== "1.0.0" || !Array.isArray(manifest.agents)) {
+    grid.innerHTML = `
+      <article class="service-card">
+        <div class="service-topline"><span class="service-icon">!</span><span class="status-badge status-pilot">Fail-closed</span></div>
+        <h2>Registro de readiness no disponible</h2>
+        <p>No se mostrará ningún agente como production-ready hasta recuperar un snapshot válido.</p>
+      </article>`;
+    return;
+  }
+
+  renderSummary(manifest.agents);
+  grid.innerHTML = manifest.agents.map(card).join("");
 })();
