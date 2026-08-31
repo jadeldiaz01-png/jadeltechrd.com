@@ -13,7 +13,7 @@ permissions:
 
 env:
   DOMAIN: jadeltechrd.com
-  API_HOST: api.jadeltechrd.com
+  API_HOST: intake.jadeltechrd.com
   WORKER_NAME: jadel-commercial-runtime
   D1_NAME: jadel-commercial-runtime
   TURNSTILE_NAME: Jadel Commercial Runtime
@@ -163,7 +163,7 @@ jobs:
             triggers:{crons:["*/2 * * * *"]}
           }' > commercial-runtime/wrangler.deploy.jsonc
           jq -e '.d1_databases[0].database_id | length > 10' commercial-runtime/wrangler.deploy.jsonc >/dev/null
-          jq -e '.routes[0].pattern == "api.jadeltechrd.com" and .routes[0].custom_domain == true' commercial-runtime/wrangler.deploy.jsonc >/dev/null
+          jq -e --arg api_host "$API_HOST" '.routes[0].pattern == $api_host and .routes[0].custom_domain == true' commercial-runtime/wrangler.deploy.jsonc >/dev/null
           echo 'DEPLOY_CONFIG=PASS'
 
       - name: Install pinned Wrangler
@@ -215,6 +215,7 @@ jobs:
           echo 'D1_SCHEMA=PASS'
 
           health_url="https://${API_HOST}/health"
+          body=""
           for attempt in $(seq 1 18); do
             if body=$(curl --fail --silent --show-error --max-time 15 "$health_url" 2>/dev/null); then
               test "$(jq -r '.status' <<<"$body")" = ok
@@ -224,7 +225,7 @@ jobs:
             fi
             sleep 5
           done
-          test "${body:-}" != "" || { echo 'LIVE_HEALTH_CANARY=FAIL' >&2; exit 51; }
+          test -n "$body" || { echo 'LIVE_HEALTH_CANARY=FAIL' >&2; exit 51; }
           echo 'LIVE_HEALTH_CANARY=PASS'
 
           headers=$(mktemp)
