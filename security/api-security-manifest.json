@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "surface": "commercial-runtime /api/v1/project-requests",
+  "public_write_policy": "anonymous intake only; no privileged action, payment, deployment, publication or agent execution directly from request",
+  "controls": {
+    "turnstile_on_abuse_prone_public_forms": true,
+    "endpoint_rate_limits_defined": true,
+    "schema_validation": true,
+    "request_size_limits": true,
+    "authn_authz_model_reviewed": true,
+    "csrf_model_reviewed": true,
+    "server_side_secrets_only": true,
+    "idempotency_for_external_side_effects": true,
+    "audit_correlation_ids": true,
+    "ssrf_egress_policy_reviewed": true
+  },
+  "implementation": {
+    "turnstile": "commercial-runtime/src/worker.mjs::verifyTurnstile uses fixed Cloudflare Siteverify endpoint and server-only secret",
+    "rate_limit": "PROJECT_REQUEST_RATE_LIMITER binding before parsing/DB writes",
+    "schema": "commercial-runtime/src/validation.mjs rejects unknown fields and invalid service IDs",
+    "request_size": 16384,
+    "authz": "endpoint intentionally public for intake; state can advance only to VALIDATED; policy workflow owns promotion",
+    "csrf": "no cookie/session credentials accepted; exact Origin match when Origin is present",
+    "secrets": "TURNSTILE_SECRET_KEY is an environment secret; never serialized to responses",
+    "idempotency": "Idempotency-Key required; unique D1 constraint; deterministic replay response",
+    "audit": "correlation_id plus immutable-style evidence event inserted in same D1 batch",
+    "ssrf": "only server egress in intake is a compile-time constant Turnstile Siteverify URL",
+    "durability": "D1 transactional batch writes project + evidence + dispatch outbox before asynchronous workflow dispatch"
+  },
+  "tests": {
+    "injection": "commercial-runtime/test/injection.test.mjs",
+    "ssrf": "commercial-runtime/test/ssrf.test.mjs",
+    "replay": "commercial-runtime/test/replay.test.mjs",
+    "access_control": "commercial-runtime/test/access-control.test.mjs"
+  },
+  "promotion_blockers": [
+    "Cloudflare Worker not deployed",
+    "D1 database binding not provisioned",
+    "Turnstile production sitekey/secret not provisioned",
+    "rate-limit namespace not provisioned",
+    "PROJECT_WORKFLOW binding/Nexus policy workflow not deployed",
+    "frontend submit form not enabled",
+    "payment provider/webhook contract not implemented",
+    "production SLO and alert evidence not collected"
+  ]
+}

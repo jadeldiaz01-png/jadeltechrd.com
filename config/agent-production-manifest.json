@@ -1,0 +1,228 @@
+{
+  "schema_version": "1.0.0",
+  "manifest_id": "jadel-tech-agent-production-manifest",
+  "generated_at": "2026-08-30T20:05:00Z",
+  "owner": "Jadel Tech RD",
+  "publication_policy": {
+    "default_execution_enabled": false,
+    "fail_closed": true,
+    "human_approval_required_for": [
+      "external_publication",
+      "financial_side_effect",
+      "credential_or_permission_change",
+      "production_deployment",
+      "destructive_action",
+      "paid_third_party_commitment"
+    ],
+    "forbidden_claims_without_evidence": [
+      "production_ready",
+      "guaranteed_revenue",
+      "guaranteed_profitability",
+      "autonomous_critical_action",
+      "verified_uptime"
+    ]
+  },
+  "control_plane": {
+    "orchestration": {
+      "preferred_patterns": ["deterministic_workflow", "manager_agent_with_specialists", "handoff_when_specialist_owns_turn"],
+      "durability_target": "Temporal-compatible durable workflow semantics for long-running or side-effecting work",
+      "idempotency_required": true,
+      "reconciliation_required_for_external_side_effects": true
+    },
+    "policy": {
+      "engine": "OPA/Rego",
+      "mode": "fail-closed",
+      "required_gates": ["AUTHORIZED", "POLICY_ALLOWED", "TOS_ALLOWED", "GEO_ALLOWED", "RISK_ALLOWED", "IDENTITY_ALLOWED", "AUDITABLE", "IDEMPOTENT", "RECONCILABLE"]
+    },
+    "secrets": {
+      "target": "OpenBao",
+      "requirements": ["TLS", "workload_identity", "least_privilege", "audit_device", "HA_for_production", "no_static_repo_tokens"]
+    },
+    "observability": {
+      "standard": "OpenTelemetry",
+      "signals": ["traces", "metrics", "logs"],
+      "agent_events": ["model_call", "tool_call", "handoff", "guardrail", "approval", "policy_decision", "external_action", "reconciliation"]
+    },
+    "data": {
+      "operational_store": "PostgreSQL",
+      "cache": "Redis when justified",
+      "evidence_store": "immutable/object storage target",
+      "knowledge": "RAG/vector/graph only when retrieval quality is measurable",
+      "lineage_required": true
+    },
+    "supply_chain": {
+      "required": ["dependency_scanning", "secret_scanning", "SBOM", "provenance", "artifact_signing", "pinned_actions", "protected_branches"]
+    }
+  },
+  "maturity_levels": {
+    "service": "Implementable engineering service; production status depends on deployment evidence.",
+    "pilot": "Supervised pilot. External effects remain gated and production claims are prohibited.",
+    "research": "Research-only. No production side effects or financial autonomy."
+  },
+  "agents": [
+    {
+      "id": "cineforge",
+      "name": "CineForge Premium Video Agent",
+      "category": "media",
+      "repository": "jadeldiaz01-png/Agente-CineForge",
+      "maturity": "pilot",
+      "commercial_surface": true,
+      "capabilities": ["creative_direction", "social_trend_intelligence", "video_pipeline", "qc_contracts", "publisher_connectors"],
+      "verified_controls": ["human_approval_gate", "rego_publish_policies", "unit_tests_present", "mcp_contract_schema_present"],
+      "production_blockers": ["verified_platform_credentials", "platform_app_review", "real_video_qc_evidence", "persistent_evidence_ledger", "persistent_rate_limits", "remote_reconciliation", "secret_manager_integration"],
+      "production_state": "DEGRADED_NOT_PRODUCTION_READY",
+      "allowed_service_mode": "creation_planning_qc_and_supervised_connector_engineering",
+      "human_approval_points": ["publish_external", "activate_platform_credentials", "enable_live_connector"]
+    },
+    {
+      "id": "reels-meta-system",
+      "name": "Reels Meta System / CineForge Runtime",
+      "category": "media",
+      "repository": "jadeldiaz01-png/https-jadeldiaz01.github.io-reels-meta-system-",
+      "maturity": "pilot",
+      "commercial_surface": true,
+      "capabilities": ["creative_patterns", "provider_readiness", "render_runtime", "gpu_backend_selection", "quality_gates", "zerogpu_client"],
+      "verified_controls": ["cineforge_gate_workflow", "provider_manifest", "quality_gate_code", "tests_present"],
+      "production_blockers": ["verified_render_provider_runtime", "end_to_end_mp4_evidence", "audio_mastering_evidence", "continuity_validation", "signed_release_artifact", "runtime_slo"],
+      "production_state": "PILOT_RUNTIME",
+      "allowed_service_mode": "supervised_media_generation_pipeline",
+      "human_approval_points": ["paid_provider_enablement", "production_deployment", "external_publish"]
+    },
+    {
+      "id": "social-trend-intelligence",
+      "name": "Social Trend Intelligence",
+      "category": "media",
+      "repository": "jadeldiaz01-png/Agente-CineForge",
+      "maturity": "pilot",
+      "commercial_surface": true,
+      "capabilities": ["trend_normalization", "ranking", "freshness_scoring", "platform_fit", "rights_review_support"],
+      "verified_controls": ["workflow_present", "trend_intelligence_module_present"],
+      "production_blockers": ["official_data_source_coverage", "metric_calibration_dataset", "false_positive_evaluation", "platform_terms_registry", "scheduled_observability"],
+      "production_state": "SUPERVISED_PILOT",
+      "allowed_service_mode": "research_and_creative_briefing",
+      "human_approval_points": ["content_publication", "rights_exception"]
+    },
+    {
+      "id": "meta-facebook-integration",
+      "name": "Meta/Facebook Integration & App Review",
+      "category": "integrations",
+      "repository": "jadeldiaz01-png/jadelapp-meta",
+      "maturity": "service",
+      "commercial_surface": true,
+      "capabilities": ["oauth_design", "pages_api_integration", "app_review_readiness", "compliance_routes"],
+      "verified_controls": ["public_privacy_route", "public_terms_route", "public_data_deletion_route"],
+      "production_blockers": ["customer_specific_app_credentials", "approved_scopes_per_deployment", "live_contract_test_per_customer"],
+      "production_state": "IMPLEMENTABLE_PER_CUSTOMER",
+      "allowed_service_mode": "engineering_and_review_readiness",
+      "human_approval_points": ["oauth_scope_change", "meta_app_live_mode", "external_publish"]
+    },
+    {
+      "id": "revenue-opportunity-intelligence",
+      "name": "Revenue Opportunity Intelligence",
+      "category": "automation",
+      "repository": "jadeldiaz01-png/ai-income-revenue-engine",
+      "maturity": "pilot",
+      "commercial_surface": true,
+      "capabilities": ["opportunity_discovery", "scoring", "cost_model", "evidence", "reconciliation"],
+      "verified_controls": ["private_repository_present"],
+      "production_blockers": ["repository_specific_readiness_evidence_required", "authorized_marketplace_adapters", "settlement_reconciliation", "policy_and_geo_evidence", "auditable_income_attribution"],
+      "production_state": "SUPERVISED_PILOT",
+      "allowed_service_mode": "opportunity_research_and_governed_workflow_engineering",
+      "human_approval_points": ["proposal_submission", "contract_acceptance", "paid_commitment", "settlement_action"]
+    },
+    {
+      "id": "aureus",
+      "name": "AUREUS Revenue Utility Scheduler",
+      "category": "automation",
+      "repository": "jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler",
+      "maturity": "pilot",
+      "commercial_surface": false,
+      "capabilities": ["scheduling", "opportunity_routing", "revenue_workflow_research"],
+      "verified_controls": ["repository_present"],
+      "production_blockers": ["full_contract_inventory", "policy_evidence", "durable_state_machine", "idempotency", "reconciliation", "slo_and_chaos_evidence"],
+      "production_state": "NOT_VERIFIED_FOR_COMMERCIAL_PRODUCTION",
+      "allowed_service_mode": "internal_research_only",
+      "human_approval_points": ["any_external_side_effect"]
+    },
+    {
+      "id": "institutional-trading-bot",
+      "name": "Institutional Trading Bot",
+      "category": "research",
+      "repository": "jadeldiaz01-png/Institutional-Trading-Bot-Status",
+      "maturity": "research",
+      "commercial_surface": true,
+      "capabilities": ["quant_research", "risk_architecture", "oms_ems_design", "testnet_readiness"],
+      "verified_controls": ["repository_present"],
+      "production_blockers": ["reproducible_backtest", "walk_forward", "testnet_evidence", "risk_engine_fail_closed", "durable_order_intent", "unknown_reconciliation", "kill_switches", "human_live_capital_gate"],
+      "production_state": "RESEARCH_ONLY_NO_LIVE_CAPITAL",
+      "allowed_service_mode": "quant_research_and_risk_system_engineering",
+      "human_approval_points": ["testnet_promotion", "live_pilot", "capital_allocation", "credential_enablement"]
+    },
+    {
+      "id": "aegisquant-nexus",
+      "name": "AegisQuant Nexus",
+      "category": "research",
+      "repository": "jadeldiaz01-png/AegisQuant-Nexus",
+      "maturity": "research",
+      "commercial_surface": false,
+      "capabilities": ["quantitative_system_research"],
+      "verified_controls": ["private_repository_present"],
+      "production_blockers": ["repository_specific_readiness_evidence_required"],
+      "production_state": "UNVERIFIED_RESEARCH",
+      "allowed_service_mode": "internal_research_only",
+      "human_approval_points": ["any_live_market_action"]
+    },
+    {
+      "id": "agentic-ai-brief",
+      "name": "Agentic AI Brief",
+      "category": "research",
+      "repository": "jadeldiaz01-png/Agentic-Al-Brief",
+      "maturity": "research",
+      "commercial_surface": false,
+      "capabilities": ["agentic_ai_research_briefing"],
+      "verified_controls": ["repository_present"],
+      "production_blockers": ["repository_empty_or_no_runtime_evidence"],
+      "production_state": "NOT_A_PRODUCTION_RUNTIME",
+      "allowed_service_mode": "research_content_only",
+      "human_approval_points": []
+    },
+    {
+      "id": "support-tickets",
+      "name": "Support & Tickets Agent",
+      "category": "business",
+      "repository": "jadeldiaz01-png/support-tickets",
+      "maturity": "service",
+      "commercial_surface": true,
+      "capabilities": ["support_workflow", "ticket_routing"],
+      "verified_controls": ["repository_present"],
+      "production_blockers": ["customer_specific_integration", "authz", "data_retention_policy", "slo", "escalation_test"],
+      "production_state": "IMPLEMENTABLE_NOT_PREDEPLOYED",
+      "allowed_service_mode": "customer_scoped_implementation",
+      "human_approval_points": ["privileged_ticket_action", "customer_data_export"]
+    }
+  ],
+  "promotion_gates": {
+    "pilot_to_production": [
+      "owner_and_scope_defined",
+      "threat_model_complete",
+      "policy_tests_green",
+      "secrets_externalized",
+      "identity_least_privilege_verified",
+      "unit_integration_contract_e2e_green",
+      "adversarial_eval_green",
+      "idempotency_verified",
+      "reconciliation_verified",
+      "observability_and_slo_defined",
+      "backup_restore_tested_when_stateful",
+      "sbom_provenance_signature_verified",
+      "cost_budget_defined",
+      "human_approval_points_tested",
+      "production_canary_evidence"
+    ]
+  },
+  "site_integration": {
+    "public_path": "/config/agent-production-manifest.json",
+    "consumer_contract": "The commercial site may display maturity and service availability from this manifest, but may never infer production readiness from repository existence alone.",
+    "safe_fallback": "If manifest loading fails, preserve the static catalog and do not upgrade any maturity label."
+  }
+}
