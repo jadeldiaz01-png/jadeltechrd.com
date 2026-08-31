@@ -69,6 +69,11 @@ jobs:
               raise SystemExit(1)
           print('IMMUTABLE_ACTIONS=PASS')
           PY
+      - name: Validate pilot-agent production readiness contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/validate_agent_production_readiness.py
       - name: Browser smoke under CSP
         shell: bash
         run: |
