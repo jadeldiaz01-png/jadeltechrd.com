@@ -1,4 +1,4 @@
-const API_ORIGIN = "https://api.jadeltechrd.com";
+const API_ORIGIN = "https://intake.jadeltechrd.com";
 const CONFIG_URL = `${API_ORIGIN}/api/v1/public-config`;
 const REQUEST_URL = `${API_ORIGIN}/api/v1/project-requests`;
 const IDEMPOTENCY_SESSION_KEY = "jadel-project-request-idempotency-v1";
