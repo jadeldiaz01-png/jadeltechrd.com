@@ -63,7 +63,7 @@
   const observer = new MutationObserver(() => syncRequestCta());
   const start = () => {
     syncRequestCta();
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["href", "aria-disabled"] });
+    observer.observe(document.body, { childList: true, subtree: true });
   };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
