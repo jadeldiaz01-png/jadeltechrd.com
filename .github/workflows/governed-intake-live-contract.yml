@@ -1,0 +1,125 @@
+name: Governed intake live contract
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 */6 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'app.js'
+      - 'index.html'
+      - 'project-intake-bridge.js'
+      - 'project-request.js'
+      - 'solicitar-proyecto.html'
+      - '.github/workflows/governed-intake-live-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SITE: https://jadeltechrd.com
+      API: https://intake.jadeltechrd.com
+    steps:
+      - name: Verify governed intake public assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in \
+            "$SITE/" \
+            "$SITE/project-intake-bridge.js" \
+            "$SITE/project-request.js" \
+            "$SITE/project-request.css" \
+            "$SITE/solicitar-proyecto.html"; do
+            code=$(curl --silent --show-error --location --output /tmp/body --write-out '%{http_code}' \
+              --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 "$url")
+            echo "$url -> HTTP=$code"
+            test "$code" = 200
+            test -s /tmp/body
+          done
+          curl --fail --silent --show-error "$SITE/project-intake-bridge.js" | grep -Fq '/solicitar-proyecto.html'
+          curl --fail --silent --show-error "$SITE/solicitar-proyecto.html" | grep -Fq 'id="project-request-form"'
+          curl --fail --silent --show-error "$SITE/solicitar-proyecto.html" | grep -Fq 'challenges.cloudflare.com/turnstile'
+          echo 'PUBLIC_INTAKE_ASSETS=PASS'
+
+      - name: Verify API health, CORS and public Turnstile config
+        shell: bash
+        run: |
+          set -euo pipefail
+          health=$(curl --fail --silent --show-error --max-time 20 "$API/health")
+          test "$(jq -r '.status' <<<"$health")" = ok
+          test "$(jq -r '.write_mode' <<<"$health")" = fail-closed
+
+          headers=$(mktemp)
+          config=$(curl --fail --silent --show-error -D "$headers" \
+            -H 'Origin: https://jadeltechrd.com' "$API/api/v1/public-config")
+          test "$(jq -r '.turnstile_action' <<<"$config")" = project_request
+          sitekey=$(jq -r '.turnstile_sitekey' <<<"$config")
+          test -n "$sitekey" && test "$sitekey" != null
+          grep -qi '^access-control-allow-origin: https://jadeltechrd.com' "$headers"
+          ! grep -qi 'turnstile_secret' <<<"$config"
+
+          bad=$(curl -sS -o /tmp/bad-origin.json -w '%{http_code}' \
+            -H 'Origin: https://evil.example' "$API/api/v1/public-config")
+          test "$bad" = 403
+
+          preflight_headers=$(mktemp)
+          preflight=$(curl -sS -o /dev/null -D "$preflight_headers" -w '%{http_code}' -X OPTIONS \
+            -H 'Origin: https://jadeltechrd.com' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type,idempotency-key' \
+            "$API/api/v1/project-requests")
+          test "$preflight" = 204
+          grep -qi '^access-control-allow-origin: https://jadeltechrd.com' "$preflight_headers"
+          echo 'API_CORS_TURNSTILE_CONTRACT=PASS'
+
+      - name: Verify browser CTA routes to governed intake, never mailto
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser=''
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if command -v "$candidate" >/dev/null 2>&1; then browser="$candidate"; break; fi
+          done
+          test -n "$browser"
+
+          cat > /tmp/verify-intake.html <<'EOF'
+          <!doctype html><meta charset="utf-8"><script>
+          (async()=>{
+            const target='https://jadeltechrd.com/';
+            const frame=document.createElement('iframe');
+            frame.src=target;
+            document.body.append(frame);
+          })();
+          </script>
+          EOF
+
+          "$browser" --headless=new --no-sandbox --disable-gpu --virtual-time-budget=5000 \
+            --dump-dom "$SITE/" > /tmp/live-home.html
+          grep -Fq 'project-intake-bridge.js' /tmp/live-home.html
+          grep -Fq 'id="request-payment"' /tmp/live-home.html
+
+          # Static source must carry the bridge and must not make mailto the governed CTA implementation.
+          source=$(curl --fail --silent --show-error "$SITE/")
+          grep -Fq '/project-intake-bridge.js' <<<"$source"
+          bridge=$(curl --fail --silent --show-error "$SITE/project-intake-bridge.js")
+          grep -Fq 'Solicitar proyecto' <<<"$bridge"
+          grep -Fq '/solicitar-proyecto.html' <<<"$bridge"
+          ! grep -Fq 'mailto:' <<<"$bridge"
+          echo 'GOVERNED_CTA_CONTRACT=PASS'
+
+      - name: Verify intake page security policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          page=$(curl --fail --silent --show-error "$SITE/solicitar-proyecto.html")
+          grep -Fq "connect-src https://intake.jadeltechrd.com https://challenges.cloudflare.com" <<<"$page"
+          grep -Fq "frame-src https://challenges.cloudflare.com" <<<"$page"
+          grep -Fq "form-action 'none'" <<<"$page"
+          grep -Fq 'Enviar solicitud segura' <<<"$page"
+          grep -Fq 'no autoriza pagos' <<<"$page"
+          echo 'INTAKE_SECURITY_POLICY=PASS'
