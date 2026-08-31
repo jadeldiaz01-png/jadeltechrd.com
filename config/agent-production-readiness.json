@@ -1,0 +1,243 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-08-30T23:29:00-04:00",
+  "policy": {
+    "promotion_rule": "A catalog pilot may be promoted only when every declared gate is true, blocking_gates is empty, the exact source SHA is verified, and service-specific external evidence is current. No probabilistic model output may grant production authority by itself.",
+    "common_gates": [
+      "architecture_contract",
+      "deterministic_policy_boundary",
+      "human_approval_boundary",
+      "idempotency_and_reconciliation",
+      "secrets_externalized",
+      "least_privilege_tools",
+      "automated_tests",
+      "adversarial_agent_evals",
+      "observability_traces_metrics_logs",
+      "slo_and_alerting",
+      "incident_runbook",
+      "data_lineage_and_retention",
+      "cost_and_quota_limits",
+      "dependency_and_supply_chain_controls",
+      "artifact_provenance_or_equivalent",
+      "protected_default_branch",
+      "verified_head_signature",
+      "live_or_sandbox_contract_evidence"
+    ],
+    "standards": {
+      "agent_security": "OWASP GenAI Top 10 2025/2026 guidance",
+      "observability": "OpenTelemetry GenAI semantic conventions",
+      "supply_chain": "SLSA Build provenance + GitHub artifact attestations where artifacts are released",
+      "web_abuse": "Cloudflare Turnstile server-side validation and endpoint-specific rate limiting when dynamic public endpoints are introduced"
+    }
+  },
+  "services": [
+    {
+      "id": "sales",
+      "name": "Sales & Lead Intelligence",
+      "catalog_status": "pilot",
+      "target_status": "PRODUCTION_READY",
+      "decision": "BLOCKED",
+      "primary_repository": "jadeldiaz01-png/ai-income-revenue-engine",
+      "supporting_repositories": ["jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler"],
+      "source_sha": "c960a0e807b6d9add96bbb36c873a840ca4728c9",
+      "gates": {
+        "architecture_contract": true,
+        "deterministic_policy_boundary": true,
+        "human_approval_boundary": true,
+        "idempotency_and_reconciliation": false,
+        "secrets_externalized": true,
+        "least_privilege_tools": true,
+        "automated_tests": false,
+        "adversarial_agent_evals": false,
+        "observability_traces_metrics_logs": false,
+        "slo_and_alerting": false,
+        "incident_runbook": false,
+        "data_lineage_and_retention": false,
+        "cost_and_quota_limits": false,
+        "dependency_and_supply_chain_controls": false,
+        "artifact_provenance_or_equivalent": false,
+        "protected_default_branch": false,
+        "verified_head_signature": false,
+        "live_or_sandbox_contract_evidence": false
+      },
+      "service_specific_gates": {
+        "crm_or_delivery_connector_verified": false,
+        "consent_and_contact_policy_verified": false,
+        "external_outreach_requires_human_approval": true,
+        "identity_and_tos_checks": false
+      },
+      "blocking_gates": [
+        {"id": "runtime", "owner": "engineering", "reason": "The revenue-engine repository describes a bootstrap platform but does not yet provide sufficient runtime, migration, observability and test evidence for a production sales service."},
+        {"id": "delivery_connector", "owner": "human_admin", "reason": "A real CRM/email delivery destination and least-privilege credentials must be selected and authorized before external outreach can be production tested."}
+      ]
+    },
+    {
+      "id": "social",
+      "name": "Social Trend Intelligence",
+      "catalog_status": "pilot",
+      "target_status": "PRODUCTION_READY",
+      "decision": "BLOCKED",
+      "primary_repository": "jadeldiaz01-png/Agente-CineForge",
+      "supporting_repositories": ["jadeldiaz01-png/https-jadeldiaz01.github.io-reels-meta-system-"],
+      "source_sha": "e18d0b87c5b395d418df04a57e615ade698ff17c",
+      "gates": {
+        "architecture_contract": true,
+        "deterministic_policy_boundary": true,
+        "human_approval_boundary": true,
+        "idempotency_and_reconciliation": true,
+        "secrets_externalized": true,
+        "least_privilege_tools": true,
+        "automated_tests": true,
+        "adversarial_agent_evals": false,
+        "observability_traces_metrics_logs": false,
+        "slo_and_alerting": false,
+        "incident_runbook": false,
+        "data_lineage_and_retention": true,
+        "cost_and_quota_limits": true,
+        "dependency_and_supply_chain_controls": false,
+        "artifact_provenance_or_equivalent": false,
+        "protected_default_branch": false,
+        "verified_head_signature": false,
+        "live_or_sandbox_contract_evidence": false
+      },
+      "service_specific_gates": {
+        "official_or_terms_allowed_signal_sources": false,
+        "rights_and_originality_review": true,
+        "freshness_and_velocity_scoring": true,
+        "policy_review": true,
+        "post_publish_feedback_loop_evidence": false
+      },
+      "blocking_gates": [
+        {"id": "source_connectors", "owner": "platform", "reason": "At least one production trend data connector must be verified against current platform permissions/terms and exercised with fresh evidence."},
+        {"id": "repository_governance", "owner": "human_admin", "reason": "The CineForge and reels source default branches are currently unprotected; their current heads are also unsigned."}
+      ]
+    },
+    {
+      "id": "cineforge",
+      "name": "CineForge · Video Premium",
+      "catalog_status": "pilot",
+      "target_status": "PRODUCTION_READY",
+      "decision": "BLOCKED",
+      "primary_repository": "jadeldiaz01-png/Agente-CineForge",
+      "supporting_repositories": ["jadeldiaz01-png/https-jadeldiaz01.github.io-reels-meta-system-"],
+      "source_sha": "e18d0b87c5b395d418df04a57e615ade698ff17c",
+      "gates": {
+        "architecture_contract": true,
+        "deterministic_policy_boundary": true,
+        "human_approval_boundary": true,
+        "idempotency_and_reconciliation": true,
+        "secrets_externalized": true,
+        "least_privilege_tools": true,
+        "automated_tests": true,
+        "adversarial_agent_evals": false,
+        "observability_traces_metrics_logs": false,
+        "slo_and_alerting": false,
+        "incident_runbook": false,
+        "data_lineage_and_retention": true,
+        "cost_and_quota_limits": true,
+        "dependency_and_supply_chain_controls": false,
+        "artifact_provenance_or_equivalent": false,
+        "protected_default_branch": false,
+        "verified_head_signature": false,
+        "live_or_sandbox_contract_evidence": false
+      },
+      "service_specific_gates": {
+        "video_qc": true,
+        "originality_review": true,
+        "per_platform_credentials_verified": false,
+        "per_platform_public_posting_review_verified": false,
+        "live_publish_contract_tests": false
+      },
+      "blocking_gates": [
+        {"id": "platform_credentials", "owner": "human_admin", "reason": "Live publishing credentials/account permissions must be authorized and stored as managed secrets."},
+        {"id": "platform_reviews", "owner": "platform", "reason": "Public posting/audit requirements must be verified per enabled platform before live publishing."},
+        {"id": "repository_governance", "owner": "human_admin", "reason": "The primary and supporting repositories do not currently protect main and their current heads are unsigned."}
+      ]
+    },
+    {
+      "id": "revenue",
+      "name": "Revenue Opportunity Intelligence",
+      "catalog_status": "pilot",
+      "target_status": "PRODUCTION_READY",
+      "decision": "BLOCKED",
+      "primary_repository": "jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler",
+      "supporting_repositories": ["jadeldiaz01-png/ai-income-revenue-engine"],
+      "source_sha": "b6ea95d809323b045d663d09b89e11c4327d60fa",
+      "gates": {
+        "architecture_contract": true,
+        "deterministic_policy_boundary": true,
+        "human_approval_boundary": true,
+        "idempotency_and_reconciliation": true,
+        "secrets_externalized": true,
+        "least_privilege_tools": true,
+        "automated_tests": true,
+        "adversarial_agent_evals": false,
+        "observability_traces_metrics_logs": true,
+        "slo_and_alerting": false,
+        "incident_runbook": true,
+        "data_lineage_and_retention": true,
+        "cost_and_quota_limits": true,
+        "dependency_and_supply_chain_controls": true,
+        "artifact_provenance_or_equivalent": false,
+        "protected_default_branch": false,
+        "verified_head_signature": true,
+        "live_or_sandbox_contract_evidence": false
+      },
+      "service_specific_gates": {
+        "external_settlement_verified": false,
+        "complete_cost_attribution": false,
+        "multiple_positive_independent_windows": false,
+        "financial_and_provider_write_authority_fail_closed": true
+      },
+      "blocking_gates": [
+        {"id": "economic_evidence", "owner": "evidence", "reason": "Production GO requires authenticated external settlement, complete cost attribution and multiple independent positive settlement windows; internal balances are not sufficient."},
+        {"id": "repository_governance", "owner": "human_admin", "reason": "AUREUS main is currently unprotected even though its current head is signed."}
+      ]
+    },
+    {
+      "id": "multiagent",
+      "name": "Multi-Agent Orchestration",
+      "catalog_status": "pilot",
+      "target_status": "PRODUCTION_READY",
+      "decision": "BLOCKED",
+      "primary_repository": "jadeldiaz01-png/ai-income-revenue-engine",
+      "supporting_repositories": [
+        "jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler",
+        "jadeldiaz01-png/Agente-CineForge"
+      ],
+      "source_sha": "c960a0e807b6d9add96bbb36c873a840ca4728c9",
+      "gates": {
+        "architecture_contract": true,
+        "deterministic_policy_boundary": true,
+        "human_approval_boundary": true,
+        "idempotency_and_reconciliation": false,
+        "secrets_externalized": true,
+        "least_privilege_tools": true,
+        "automated_tests": false,
+        "adversarial_agent_evals": false,
+        "observability_traces_metrics_logs": false,
+        "slo_and_alerting": false,
+        "incident_runbook": false,
+        "data_lineage_and_retention": false,
+        "cost_and_quota_limits": false,
+        "dependency_and_supply_chain_controls": false,
+        "artifact_provenance_or_equivalent": false,
+        "protected_default_branch": false,
+        "verified_head_signature": false,
+        "live_or_sandbox_contract_evidence": false
+      },
+      "service_specific_gates": {
+        "agent_registry": false,
+        "tool_capability_registry": false,
+        "handoff_contracts": false,
+        "recursion_and_budget_limits": false,
+        "cross_agent_prompt_injection_tests": false,
+        "deterministic_critical_action_gate": true
+      },
+      "blocking_gates": [
+        {"id": "control_plane", "owner": "engineering", "reason": "A service-neutral multi-agent runtime with registry, routing, durable state, tool scopes, cross-agent evals and observability has not yet been independently certified on an exact SHA."},
+        {"id": "repository_governance", "owner": "human_admin", "reason": "The primary control-plane repository needs protected main and verified signed promotion evidence before it can back a production service."}
+      ]
+    }
+  ]
+}
