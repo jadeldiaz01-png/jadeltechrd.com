@@ -181,7 +181,9 @@ jobs:
         run: |
           set -euo pipefail
           npm install --no-save --ignore-scripts "wrangler@${WRANGLER_VERSION}"
-          test "$(npx wrangler --version | awk '{print $2}')" = "$WRANGLER_VERSION"
+          actual=$(npx wrangler --version | tr -d '\r\n[:space:]')
+          test "$actual" = "$WRANGLER_VERSION" || { echo "WRANGLER_VERSION_MISMATCH expected=$WRANGLER_VERSION actual=$actual" >&2; exit 40; }
+          echo "WRANGLER_VERSION=PASS version=${actual}"
 
       - name: Apply D1 migrations
         shell: bash
