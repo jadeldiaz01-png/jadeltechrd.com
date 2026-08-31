@@ -1,5 +1,4 @@
 import { validateIdempotencyKey, validateProjectRequest } from "./validation.mjs";
-export { ProjectLifecycleWorkflow } from "./project-workflow.mjs";
 
 const MAX_BODY_BYTES = 16 * 1024;
 const TURNSTILE_SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
