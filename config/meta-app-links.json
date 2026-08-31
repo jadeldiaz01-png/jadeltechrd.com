@@ -10,6 +10,20 @@
   },
   "privacy_contact_email": "darklife_jadel@hotmail.com",
   "paypal_receiving_account": "darklife_jadel@hotmail.com",
+  "nexus_public_service_automation": {
+    "agent_version": "nexus_ai_automation_v0.3.0",
+    "public_mode": "catalog_configurator_request_intake",
+    "payment_mode": "paypal_reconciliation_only_until_verified_official_link",
+    "human_approval_required_for": [
+      "scope_confirmation",
+      "payment_request_or_invoice",
+      "external_messages",
+      "publication",
+      "contracts",
+      "production_agent_execution",
+      "financial_or_trading_actions"
+    ]
+  },
   "compliance_readiness": {
     "public_pages_implemented": true,
     "privacy_contact_configured": true,
