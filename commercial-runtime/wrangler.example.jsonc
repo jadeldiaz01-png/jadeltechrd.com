@@ -1,0 +1,37 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "jadel-commercial-runtime",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-08-31",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "PUBLIC_ORIGIN": "https://jadeltechrd.com"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "jadel-commercial-runtime",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "PROJECT_REQUEST_RATE_LIMITER",
+      "namespace_id": "REPLACE_WITH_POSITIVE_INTEGER_NAMESPACE",
+      "simple": { "limit": 5, "period": 60 }
+    }
+  ],
+  "workflows": [
+    {
+      "name": "jadel-project-lifecycle",
+      "binding": "PROJECT_WORKFLOW",
+      "class_name": "ProjectLifecycleWorkflow"
+    }
+  ],
+  "triggers": {
+    "crons": ["*/2 * * * *"]
+  }
+}
