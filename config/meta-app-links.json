@@ -5,20 +5,22 @@
     "homepage": "https://jadeltechrd.com/",
     "privacy_policy": "https://jadeltechrd.com/?view=privacy",
     "terms_of_service": "https://jadeltechrd.com/?view=terms",
-    "data_deletion_instructions": "https://jadeltechrd.com/?view=data-deletion"
+    "data_deletion_instructions": "https://jadeltechrd.com/?view=data-deletion",
+    "payments_section": "https://jadeltechrd.com/#pagos"
   },
-  "privacy_contact_email": null,
+  "privacy_contact_email": "darklife_jadel@hotmail.com",
+  "paypal_receiving_account": "darklife_jadel@hotmail.com",
   "compliance_readiness": {
     "public_pages_implemented": true,
-    "privacy_contact_configured": false,
+    "privacy_contact_configured": true,
     "pages_hosting_enabled": false,
     "custom_domain_verified": false,
     "https_verified": false,
-    "status": "PENDING_PAGES_ENABLEMENT_AND_PRIVACY_CONTACT"
+    "status": "PENDING_DNS_AND_HTTPS_VERIFICATION"
   },
   "notes": [
-    "Do not invent or publish a privacy email address that has not been created and verified.",
-    "GitHub Pages must be enabled with GitHub Actions as the publishing source before deployment can succeed.",
+    "The privacy and PayPal contact is user-authorized in the 2026-08-30 request.",
+    "Use an official PayPal Payment Link or PayPal.Me URL after it is created and verified in PayPal.",
     "The custom domain jadeltechrd.com must be configured and verified in repository Pages settings.",
     "Update readiness fields only after externally verifying each condition."
   ]

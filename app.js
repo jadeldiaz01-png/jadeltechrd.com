@@ -291,7 +291,7 @@
       <section class="section-block pricing-section" id="precios">
         <div class="section-heading reveal">
           <div>
-            <div class="eyebrow">Paquetes de lanzamiento</div>
+          <div class="eyebrow">Paquetes de lanzamiento</div>
             <h2>Precios claros para empezar. Escala solo cuando genera valor.</h2>
           </div>
           <p>Posicionamiento entre herramientas self-service y consultoría enterprise: más implementación que un SaaS genérico, sin empezar en tickets de US$10k para cada proyecto.</p>
@@ -321,6 +321,21 @@
             <ul><li>Arquitectura dedicada</li><li>Seguridad y compliance</li><li>Observabilidad avanzada</li><li>Roadmap y soporte</li></ul>
             <a href="#gobernanza" class="button secondary full">Ver controles</a>
           </article>
+        </div>
+      </section>
+
+      <section class="section-block payment-section" id="pagos">
+        <div class="payment-panel reveal">
+          <div>
+            <div class="eyebrow">Pagos</div>
+            <h2>Contrata con PayPal y alcance confirmado.</h2>
+            <p>Cuenta PayPal autorizada por el propietario: <strong>darklife_jadel@hotmail.com</strong>. Antes de enviar fondos, confirma alcance, moneda, entregables y fecha estimada de entrega.</p>
+          </div>
+          <div class="payment-actions">
+            <a class="button primary full" href="https://www.paypal.com/" rel="noopener noreferrer">Abrir PayPal</a>
+            <a class="button secondary full" href="mailto:darklife_jadel@hotmail.com?subject=Solicitud%20Jadel%20Tech%20RD&body=Hola%20Jadel%20Tech%20RD%2C%20quiero%20confirmar%20alcance%20y%20pago%20por%20PayPal.">Confirmar alcance</a>
+            <span>Recomendado: reemplazar este acceso por un PayPal Payment Link o PayPal.Me verificado.</span>
+          </div>
         </div>
       </section>
 
@@ -413,6 +428,7 @@
       <a href="/" data-nav="home">Inicio</a>
       <a href="/#servicios" data-home-nav>Servicios</a>
       <a href="/#precios" data-home-nav>Precios</a>
+      <a href="/#pagos" data-home-nav>Pagos</a>
       <a href="/#gobernanza" data-home-nav>Seguridad</a>
       <a href="/?view=privacy" data-nav="privacy">Privacidad</a>
       <a href="/?view=terms" data-nav="terms">Condiciones</a>
@@ -424,6 +440,7 @@
     footerNav.innerHTML = `
       <a href="/#servicios">Servicios</a>
       <a href="/#precios">Precios</a>
+      <a href="/#pagos">Pagos</a>
       <a href="/?view=privacy">Privacidad</a>
       <a href="/?view=terms">Condiciones</a>
       <a href="${DATA_DELETION_URL}">Eliminación de datos</a>`;
