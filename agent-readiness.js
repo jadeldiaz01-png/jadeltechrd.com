@@ -22,7 +22,7 @@
     const approvals = Array.isArray(agent.human_approval_points) ? agent.human_approval_points : [];
     const controls = Array.isArray(agent.verified_controls) ? agent.verified_controls : [];
     return `
-      <article class="service-card reveal">
+      <article class="service-card">
         <div class="service-topline">
           <span class="service-icon" aria-hidden="true">${agent.category === "media" ? "▶" : agent.category === "research" ? "∑" : "◇"}</span>
           <span class="status-badge status-${statusClass(agent.maturity)}">${escapeHtml(agent.maturity)}</span>
