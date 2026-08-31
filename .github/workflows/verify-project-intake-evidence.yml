@@ -1,0 +1,120 @@
+name: Verify project intake evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_id:
+        description: 'Project UUID returned by the governed public intake'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  DOMAIN: jadeltechrd.com
+  D1_NAME: jadel-commercial-runtime
+
+jobs:
+  verify:
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+      PROJECT_ID: ${{ inputs.project_id }}
+    steps:
+      - name: Normalize inputs and credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$PROJECT_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ ]]; then
+            echo 'PROJECT_ID_FORMAT=FAIL_CLOSED' >&2
+            exit 2
+          fi
+          raw="${CLOUDFLARE_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then token="${token:1:${#token}-2}"; fi
+          test -n "$token" || { echo 'CLOUDFLARE_TOKEN_PRESENT=NO' >&2; exit 3; }
+          echo "::add-mask::$token"
+          printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          echo 'INPUT_VALIDATION=PASS'
+
+      - name: Resolve account and D1 database
+        id: cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          zones=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50")
+          test "$(jq -r '.success' <<<"$zones")" = true
+          account_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .account.id' <<<"$zones" | head -n1)
+          test -n "$account_id" && test "$account_id" != null
+
+          listed=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${account_id}/d1/database?name=${D1_NAME}&per_page=100")
+          test "$(jq -r '.success' <<<"$listed")" = true
+          matches=$(jq -r --arg n "$D1_NAME" '[.result[] | select(.name==$n)] | length' <<<"$listed")
+          test "$matches" = 1 || { echo "D1_NAME_MATCHES=${matches}_FAIL_CLOSED" >&2; exit 10; }
+          database_id=$(jq -r --arg n "$D1_NAME" '.result[] | select(.name==$n) | .uuid' <<<"$listed")
+          test -n "$database_id" && test "$database_id" != null
+          echo "account_id=$account_id" >> "$GITHUB_OUTPUT"
+          echo "database_id=$database_id" >> "$GITHUB_OUTPUT"
+          echo 'D1_RESOLUTION=PASS'
+
+      - name: Verify request, evidence ledger and outbox reconciliation
+        shell: bash
+        env:
+          ACCOUNT_ID: ${{ steps.cloudflare.outputs.account_id }}
+          DATABASE_ID: ${{ steps.cloudflare.outputs.database_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          endpoint="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/d1/database/${DATABASE_ID}/query"
+
+          query() {
+            local sql="$1"
+            curl --fail-with-body -sS -X POST "${auth[@]}" "$endpoint" \
+              --data "$(jq -nc --arg sql "$sql" --arg project_id "$PROJECT_ID" '{sql:$sql,params:[$project_id]}')"
+          }
+
+          request=$(query 'SELECT project_id,state,policy_status,created_at,updated_at FROM project_requests WHERE project_id=? LIMIT 1')
+          test "$(jq -r '.success' <<<"$request")" = true
+          count=$(jq '[.result[].results[]?] | length' <<<"$request")
+          test "$count" = 1 || { echo 'PROJECT_REQUEST_NOT_FOUND=FAIL_CLOSED' >&2; exit 20; }
+
+          evidence=$(query 'SELECT event_type,state,correlation_id,created_at FROM evidence_events WHERE project_id=? ORDER BY created_at,event_type')
+          test "$(jq -r '.success' <<<"$evidence")" = true
+          evidence_count=$(jq '[.result[].results[]?] | length' <<<"$evidence")
+          test "$evidence_count" -ge 1 || { echo 'EVIDENCE_LEDGER_EMPTY=FAIL_CLOSED' >&2; exit 21; }
+          jq -e '[.result[].results[]?.event_type] | index("PROJECT_REQUEST_ACCEPTED") != null' <<<"$evidence" >/dev/null || { echo 'PROJECT_REQUEST_ACCEPTED_EVIDENCE=MISSING' >&2; exit 22; }
+
+          outbox=$(query 'SELECT workflow_instance_id,status,attempts,last_error,created_at,updated_at FROM dispatch_outbox WHERE project_id=? ORDER BY created_at')
+          test "$(jq -r '.success' <<<"$outbox")" = true
+          outbox_count=$(jq '[.result[].results[]?] | length' <<<"$outbox")
+          test "$outbox_count" = 1 || { echo "OUTBOX_CARDINALITY=${outbox_count}_FAIL_CLOSED" >&2; exit 23; }
+
+          state=$(jq -r '.result[].results[0].state' <<<"$request")
+          policy=$(jq -r '.result[].results[0].policy_status' <<<"$request")
+          outbox_status=$(jq -r '.result[].results[0].status' <<<"$outbox")
+          attempts=$(jq -r '.result[].results[0].attempts' <<<"$outbox")
+          workflow_id=$(jq -r '.result[].results[0].workflow_instance_id' <<<"$outbox")
+
+          echo "PROJECT_ID=${PROJECT_ID}"
+          echo "PROJECT_STATE=${state}"
+          echo "POLICY_STATUS=${policy}"
+          echo "EVIDENCE_EVENT_COUNT=${evidence_count}"
+          echo "OUTBOX_STATUS=${outbox_status}"
+          echo "OUTBOX_ATTEMPTS=${attempts}"
+          echo "WORKFLOW_INSTANCE_ID=${workflow_id}"
+          echo 'PII_OUTPUT=NONE'
+
+          if [ "$outbox_status" = 'PENDING' ]; then
+            echo 'OUTBOX_RECONCILIATION=PENDING'
+          elif [ "$outbox_status" = 'DISPATCHED' ]; then
+            echo 'OUTBOX_RECONCILIATION=DISPATCHED'
+          else
+            echo "OUTBOX_RECONCILIATION=${outbox_status}_REVIEW_REQUIRED" >&2
+            exit 24
+          fi
+          echo 'PROJECT_INTAKE_EVIDENCE=PASS'
