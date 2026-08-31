@@ -25,6 +25,9 @@ for (const agent of manifest.agents ?? []) {
 
   const state = String(agent.production_state ?? "").toUpperCase();
   const claimsReady = state.includes("PRODUCTION_READY") && !state.includes("NOT_PRODUCTION_READY");
+  if (claimsReady && agent.maturity !== "service") {
+    errors.push(`${agent.id}: only service maturity may claim production-ready`);
+  }
   if (claimsReady && agent.production_blockers?.length) {
     errors.push(`${agent.id}: cannot claim production-ready while blockers remain`);
   }
