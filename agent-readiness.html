@@ -23,13 +23,13 @@
     <section class="section-block">
       <div class="section-heading">
         <div><div class="eyebrow">Production Readiness Registry</div><h1>Madurez basada en evidencia, no en etiquetas.</h1></div>
-        <p>Este registro se alimenta del manifiesto de producción. Un repositorio existente no equivale a un servicio listo para producción.</p>
+        <p>Este registro publica un snapshot estático y gobernado del estado de los agentes. Un repositorio existente no equivale a un servicio listo para producción.</p>
       </div>
       <div class="signal-strip" id="readiness-summary" aria-live="polite">
         <div><strong>—</strong><span>agentes registrados</span></div><div><strong>—</strong><span>pilotos supervisados</span></div><div><strong>—</strong><span>research-only</span></div><div><strong>HITL</strong><span>acciones críticas</span></div>
       </div>
       <div class="services-grid" id="readiness-grid" aria-live="polite">
-        <article class="service-card"><h2>Cargando manifiesto…</h2><p>Si el manifiesto no está disponible, ningún agente será promovido visualmente.</p></article>
+        <article class="service-card"><h2>Cargando registro…</h2><p>Si el snapshot no es válido, ningún agente será promovido visualmente.</p></article>
       </div>
     </section>
     <section class="section-block">
@@ -37,6 +37,7 @@
     </section>
   </main>
   <footer class="site-footer"><div class="shell footer-inner"><p>© <span id="year"></span> Jadel Tech RD.</p><nav><a href="/">Inicio</a><a href="/config/agent-production-manifest.json">Manifiesto JSON</a></nav></div></footer>
+  <script src="/config/agent-readiness-data.js" defer></script>
   <script src="/agent-readiness.js" defer></script>
 </body>
 </html>
