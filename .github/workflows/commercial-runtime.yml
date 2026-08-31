@@ -1,0 +1,63 @@
+name: commercial-runtime
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'commercial-runtime/**'
+      - 'security/api-security-manifest.json'
+      - '.github/workflows/commercial-runtime.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'commercial-runtime/**'
+      - 'security/api-security-manifest.json'
+      - '.github/workflows/commercial-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Setup Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Syntax check runtime
+        run: |
+          node --check commercial-runtime/src/validation.mjs
+          node --check commercial-runtime/src/worker.mjs
+
+      - name: Run adversarial and contract tests
+        run: node --test commercial-runtime/test/*.test.mjs
+
+      - name: Validate D1 migration
+        run: |
+          sqlite3 /tmp/jadel-commercial.db < commercial-runtime/migrations/0001_init.sql
+          test "$(sqlite3 /tmp/jadel-commercial.db 'PRAGMA integrity_check;')" = "ok"
+          sqlite3 /tmp/jadel-commercial.db ".schema project_requests" | grep -q 'idempotency_key'
+          sqlite3 /tmp/jadel-commercial.db ".schema dispatch_outbox" | grep -q 'workflow_instance_id'
+
+      - name: Validate security manifest
+        run: |
+          jq -e '.version == 1' security/api-security-manifest.json >/dev/null
+          jq -e '.controls | to_entries | all(.value == true)' security/api-security-manifest.json >/dev/null
+          for p in $(jq -r '.tests[]' security/api-security-manifest.json); do test -f "$p"; done
+
+      - name: Fail closed on accidental production claim
+        run: |
+          ! grep -RIEq 'PRODUCTION_READY|production ready|production-ready' commercial-runtime --include='*.mjs' --include='*.json' || {
+            echo 'RUNTIME_PRODUCTION_CLAIM=BLOCKED'
+            exit 51
+          }
+          echo 'COMMERCIAL_RUNTIME_CONTRACT=PASS'
