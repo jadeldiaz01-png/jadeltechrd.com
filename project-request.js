@@ -18,6 +18,8 @@ let widgetId = null;
 let turnstileToken = "";
 let turnstileAction = "project_request";
 let submitting = false;
+let completed = false;
+let fallbackIdempotencyKey = crypto.randomUUID();
 
 function setStatus(message, kind = "") {
   if (!status) return;
@@ -32,16 +34,25 @@ function selectedServices() {
 function updateSubmitState() {
   if (!submit || !form) return;
   const validSelection = selectedServices().length >= 1 && selectedServices().length <= 8;
-  submit.disabled = submitting || !turnstileToken || !consent?.checked || !validSelection;
+  submit.disabled = completed || submitting || !turnstileToken || !consent?.checked || !validSelection;
 }
 
 function getIdempotencyKey() {
-  let key = sessionStorage.getItem(IDEMPOTENCY_SESSION_KEY);
-  if (!key || !/^[A-Za-z0-9_-]{16,128}$/.test(key)) {
-    key = crypto.randomUUID();
-    sessionStorage.setItem(IDEMPOTENCY_SESSION_KEY, key);
+  try {
+    let key = sessionStorage.getItem(IDEMPOTENCY_SESSION_KEY);
+    if (!key || !/^[A-Za-z0-9_-]{16,128}$/.test(key)) {
+      key = crypto.randomUUID();
+      sessionStorage.setItem(IDEMPOTENCY_SESSION_KEY, key);
+    }
+    return key;
+  } catch {
+    return fallbackIdempotencyKey;
   }
-  return key;
+}
+
+function clearIdempotencyKey() {
+  fallbackIdempotencyKey = crypto.randomUUID();
+  try { sessionStorage.removeItem(IDEMPOTENCY_SESSION_KEY); } catch { /* storage may be unavailable */ }
 }
 
 function resetTurnstile() {
@@ -116,11 +127,11 @@ function payloadFromForm() {
 }
 
 form?.addEventListener("change", updateSubmitState);
-form?.addEventListener("input", () => setStatus(""));
+form?.addEventListener("input", () => { if (!completed) setStatus(""); });
 
 form?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (submitting) return;
+  if (submitting || completed) return;
   const services = selectedServices();
   if (!form.reportValidity()) return;
   if (services.length < 1 || services.length > 8) {
@@ -158,12 +169,12 @@ form?.addEventListener("submit", async (event) => {
       throw new Error(body.error || `HTTP_${response.status}`);
     }
 
-    sessionStorage.removeItem(IDEMPOTENCY_SESSION_KEY);
+    completed = true;
+    clearIdempotencyKey();
     const projectId = body.project_id || "registrado";
     setStatus(`Solicitud recibida. ID de seguimiento: ${projectId}. Estado: ${body.state || "VALIDATED"}.`, "success");
     form.querySelectorAll("input,textarea,button").forEach((node) => { node.disabled = true; });
     turnstileStatus.textContent = body.replayed ? "Reintento reconciliado sin duplicar la solicitud." : "Verificación completada.";
-    return;
   } catch (error) {
     const code = String(error?.message || "REQUEST_FAILED");
     const messages = {
