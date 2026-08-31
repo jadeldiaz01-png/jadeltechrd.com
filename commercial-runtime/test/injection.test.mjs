@@ -15,6 +15,6 @@ test("hostile text remains data and SQL writes use bound placeholders", async ()
   });
   assert.equal(payload.serviceIds[0], "architecture");
   const source = await readFile(new URL("../src/worker.mjs", import.meta.url), "utf8");
-  assert.match(source, /VALUES \(\?,\?,\?,\?,\?,\?,\?,\?,\?,\?,\?,\?\)/);
+  assert.match(source, /VALUES \(\?,\?,\?,\?,\?,\?,\?,\?,\?,\?,\?,\?,\?\)/);
   assert.doesNotMatch(source, /INSERT INTO project_requests[\s\S]*\$\{input\./);
 });
