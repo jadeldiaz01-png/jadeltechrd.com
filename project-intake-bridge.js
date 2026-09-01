@@ -85,6 +85,17 @@
     queueSync();
   });
 
+  // Production browser evidence showed CDP mouse dispatch blocking for >60s
+  // while app.js' decorative homepage pointermove handler synchronously forced
+  // layout (getBoundingClientRect) and CSS-variable writes. Stop only pointermove
+  // propagation inside the commercial home; click/pointerdown/pointerup remain
+  // untouched. This containment is temporary and is removed with the bridge
+  // when app.js becomes the sole configurator owner.
+  document.addEventListener("pointermove", (event) => {
+    if (!event.target.closest?.(".commercial-home")) return;
+    event.stopPropagation();
+  }, true);
+
   function start() {
     ensureIntakeNav();
     syncRequestCta();
