@@ -67,6 +67,13 @@ if (expectedIdentities.size !== actualIdentities.size || [...expectedIdentities]
 if (bao.static_root_tokens_forbidden !== true || bao.tls_required !== true || bao.audit_device_required !== true) {
   fail('OpenBao baseline security requirements must remain enabled');
 }
+for (const identity of bao.identities || []) {
+  const policyPath = `infra/openbao/policies/${identity.id}.hcl`;
+  if (!fs.existsSync(policyPath)) fail(`OpenBao identity ${identity.id}: missing policy file`);
+  const hcl = fs.readFileSync(policyPath, 'utf8');
+  if (/capabilities\s*=\s*\[[^\]]*"sudo"/s.test(hcl)) fail(`${identity.id}: sudo capability forbidden`);
+  if (/path\s+"\*"/.test(hcl)) fail(`${identity.id}: wildcard root path forbidden`);
+}
 
 const serialized = JSON.stringify({ control, platforms, slo, bao }).toLowerCase();
 for (const forbidden of ['sk-proj-', 'bearer ey', '-----begin private key-----']) {
