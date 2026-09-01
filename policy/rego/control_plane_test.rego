@@ -54,6 +54,17 @@ test_verified_platform_and_human_can_allow if {
 	}
 }
 
+test_integration_ready_platform_denied_for_external_side_effect if {
+	not allow with input as {
+		"action": "external_publication",
+		"execution_enabled": true,
+		"external_side_effect": true,
+		"platform_status": "integration_ready",
+		"human_approval": true,
+		"gates": full_gates,
+	}
+}
+
 test_blocked_platform_denied if {
 	not allow with input as {
 		"action": "external_publication",
