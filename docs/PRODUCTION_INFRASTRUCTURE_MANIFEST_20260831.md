@@ -20,11 +20,10 @@ Jadel Tech RD should evolve from a static commercial site into a gated productio
 
 ## Production blockers
 
-- No public backend endpoint is deployed for secure intake.
-- No PayPal webhook ledger exists yet.
-- No customer/admin identity boundary exists yet.
-- No production approval console exists yet.
-- No durable job queue is connected to Nexus.
+- Public backend deployment requires verified Cloudflare credentials and runtime secrets.
+- PayPal webhook ledger exists in code, but production requires `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and `PAYPAL_WEBHOOK_ID`.
+- Admin approval endpoint exists in code, but production requires `ADMIN_API_TOKEN` and an operator console/client.
+- Durable workflow exists in code, but Nexus private service binding remains fail-closed until provisioned.
 - No service-specific fulfillment evidence is attached to completed purchases.
 - No SLO, alerting, backup/restore or incident runbook evidence exists for dynamic production services.
 
@@ -45,3 +44,20 @@ Jadel Tech RD should evolve from a static commercial site into a gated productio
 - No verified connector, no external side effect.
 - No risk evidence, no production promotion.
 - No human capital gate, no trading or financial execution.
+
+## Implemented P1/P2/P3 scaffold
+
+- `POST /api/v1/project-requests`: Turnstile-protected intake with origin checks, rate limiting, idempotency and D1 evidence.
+- `POST /api/v1/paypal/webhooks`: PayPal signature verification through PayPal's verification API before D1 writes.
+- `payment_events`: deduplicated provider event store.
+- `payment_ledger`: human-reconciled payment ledger; no automatic `PAID` transition.
+- `GET /api/v1/admin/approvals`: Bearer-token protected pending approval/payment review feed.
+- `POST /api/v1/admin/approvals`: records approval evidence and promotes only policy status.
+
+Required GitHub/Cloudflare secrets before production deployment:
+
+- `CLOUDFLARE_API_TOKEN`
+- `PAYPAL_CLIENT_ID`
+- `PAYPAL_CLIENT_SECRET`
+- `PAYPAL_WEBHOOK_ID`
+- `ADMIN_API_TOKEN`

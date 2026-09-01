@@ -37,16 +37,22 @@ jobs:
         run: |
           node --check commercial-runtime/src/validation.mjs
           node --check commercial-runtime/src/worker.mjs
+          node --check commercial-runtime/src/project-workflow.mjs
 
       - name: Run adversarial and contract tests
         run: node --test commercial-runtime/test/*.test.mjs
 
       - name: Validate D1 migration
         run: |
-          sqlite3 /tmp/jadel-commercial.db < commercial-runtime/migrations/0001_init.sql
+          for migration in commercial-runtime/migrations/*.sql; do
+            sqlite3 /tmp/jadel-commercial.db < "$migration"
+          done
           test "$(sqlite3 /tmp/jadel-commercial.db 'PRAGMA integrity_check;')" = "ok"
           sqlite3 /tmp/jadel-commercial.db ".schema project_requests" | grep -q 'idempotency_key'
           sqlite3 /tmp/jadel-commercial.db ".schema dispatch_outbox" | grep -q 'workflow_instance_id'
+          sqlite3 /tmp/jadel-commercial.db ".schema payment_events" | grep -q 'provider_event_id'
+          sqlite3 /tmp/jadel-commercial.db ".schema payment_ledger" | grep -q 'ledger_state'
+          sqlite3 /tmp/jadel-commercial.db ".schema approval_events" | grep -q 'approval_type'
 
       - name: Validate security manifest
         run: |
