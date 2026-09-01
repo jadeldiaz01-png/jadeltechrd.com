@@ -97,16 +97,35 @@ jobs:
             const browser = await puppeteer.launch({
               executablePath: process.env.BROWSER,
               headless: true,
-              args: ['--no-sandbox', '--disable-gpu'],
+              protocolTimeout: 30000,
+              args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
             });
             try {
               const page = await browser.newPage();
-              page.setDefaultTimeout(8000);
-              await page.goto(`${process.env.SITE}/`, { waitUntil: 'networkidle2', timeout: 20000 });
+              page.setDefaultTimeout(10000);
+              const pageErrors = [];
+              page.on('pageerror', (error) => pageErrors.push(String(error)));
+              await page.goto(`${process.env.SITE}/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+              await page.waitForSelector('[data-add-service="architecture"]');
 
-              await page.click('[data-add-service="architecture"]');
-              await page.click('[data-add-service="support"]');
-              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 2);
+              const interaction = await page.evaluate(async () => {
+                const click = (selector) => {
+                  const node = document.querySelector(selector);
+                  if (!node) throw new Error(`missing:${selector}`);
+                  node.click();
+                };
+                const started = performance.now();
+                click('[data-add-service="architecture"]');
+                click('[data-add-service="support"]');
+                await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+                return {
+                  elapsed_ms: performance.now() - started,
+                  selected: document.querySelectorAll('[data-remove-service]').length,
+                };
+              });
+              assert.equal(interaction.selected, 2);
+              assert.ok(interaction.elapsed_ms < 1500, `configurator interaction too slow: ${interaction.elapsed_ms}ms`);
+              assert.deepEqual(pageErrors, []);
 
               const state = await page.evaluate(() => ({
                 setup: document.getElementById('estimate-setup')?.textContent?.trim(),
@@ -123,15 +142,14 @@ jobs:
               assert.match(state.href || '', /^\/solicitar-proyecto\.html\?services=/);
               assert.ok(!String(state.href).startsWith('mailto:'));
 
-              await Promise.all([
-                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }),
-                page.click('#request-payment'),
-              ]);
+              await page.evaluate(() => document.getElementById('request-payment').click());
+              await page.waitForFunction(() => location.pathname === '/solicitar-proyecto.html', { timeout: 10000 });
               const destination = new URL(page.url());
               assert.equal(destination.origin, process.env.SITE);
               assert.equal(destination.pathname, '/solicitar-proyecto.html');
               const ids = new Set((destination.searchParams.get('services') || '').split(','));
               assert.deepEqual(ids, new Set(['architecture', 'support']));
+              console.log(`CONFIGURATOR_INTERACTION_MS=${interaction.elapsed_ms.toFixed(1)}`);
               console.log('GOVERNED_CTA_BROWSER_E2E=PASS');
             } finally {
               await browser.close();
