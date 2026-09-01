@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0.0",
+  "registry_id": "jadel-tech-platform-registry",
+  "generated_at": "2026-09-01T13:00:00Z",
+  "default_execution_enabled": false,
+  "fail_closed": true,
+  "status_model": {
+    "verified_runtime": "A live runtime has current contract evidence for the declared capability.",
+    "integration_ready": "Engineering integration exists but customer/platform-specific production evidence is still required.",
+    "pilot": "Supervised pilot; external side effects remain gated.",
+    "blocked": "Not authorized for production side effects until listed blockers are resolved."
+  },
+  "platforms": [
+    {
+      "id": "cloudflare-commercial-runtime",
+      "name": "Cloudflare Commercial Runtime",
+      "kind": "edge_runtime",
+      "status": "verified_runtime",
+      "capabilities": ["project_intake", "turnstile_siteverify", "rate_limit", "d1", "workflow_dispatch", "structured_logs"],
+      "required_gates": ["AUTHORIZED", "POLICY_ALLOWED", "AUDITABLE", "IDEMPOTENT", "RECONCILABLE"],
+      "evidence": ["custom_domain_health", "exact_cors", "turnstile_hostname_action", "d1_schema", "transactional_outbox"],
+      "production_blockers": ["human_real_intake_evidence", "slo_alerting_evidence", "recovery_test"],
+      "external_side_effects": false
+    },
+    {
+      "id": "paypal",
+      "name": "PayPal",
+      "kind": "payments",
+      "status": "pilot",
+      "capabilities": ["payment_links", "verified_webhook_contract", "payment_ledger", "human_reconciliation"],
+      "required_gates": ["AUTHORIZED", "POLICY_ALLOWED", "IDENTITY_ALLOWED", "AUDITABLE", "IDEMPOTENT", "RECONCILABLE"],
+      "evidence": ["webhook_verification_code", "payment_event_schema", "approval_ledger"],
+      "production_blockers": ["live_webhook_reconciliation_evidence", "project_payment_binding_evidence", "operator_runbook"],
+      "external_side_effects": true,
+      "human_approval_required": true
+    },
+    {
+      "id": "meta-facebook",
+      "name": "Meta / Facebook Pages",
+      "kind": "social_platform",
+      "status": "integration_ready",
+      "capabilities": ["oauth_design", "pages_api", "app_review_readiness", "compliance_routes"],
+      "required_gates": ["AUTHORIZED", "POLICY_ALLOWED", "TOS_ALLOWED", "GEO_ALLOWED", "IDENTITY_ALLOWED", "AUDITABLE", "IDEMPOTENT", "RECONCILABLE"],
+      "production_blockers": ["verified_app_live_mode", "approved_scopes", "page_token_workload_identity", "sandbox_publish_contract", "remote_id_reconciliation"],
+      "external_side_effects": true,
+      "human_approval_required": true
+    },
+    {
+      "id": "youtube",
+      "name": "YouTube",
+      "kind": "social_platform",
+      "status": "blocked",
+      "capabilities": ["publisher_adapter_target"],
+      "required_gates": ["AUTHORIZED", "POLICY_ALLOWED", "TOS_ALLOWED", "IDENTITY_ALLOWED", "AUDITABLE", "IDEMPOTENT", "RECONCILABLE"],
+      "production_blockers": ["official_api_adapter", "oauth_scopes", "quota_model", "sandbox_or_test_channel_evidence", "remote_id_reconciliation"],
+      "external_side_effects": true,
+      "human_approval_required": true
+    },
+    {
+      "id": "tiktok",
+      "name": "TikTok",
+      "kind": "social_platform",
+      "status": "blocked",
+      "capabilities": ["publisher_adapter_target"],
+      "required_gates": ["AUTHORIZED", "POLICY_ALLOWED", "TOS_ALLOWED", "GEO_ALLOWED", "IDENTITY_ALLOWED", "AUDITABLE", "IDEMPOTENT", "RECONCILABLE"],
+      "production_blockers": ["official_api_adapter", "app_approval", "scope_evidence", "test_publish_contract", "remote_id_reconciliation"],
+      "external_side_effects": true,
+      "human_approval_required": true
+    },
+    {
+      "id": "x",
+      "name": "X",
+      "kind": "social_platform",
+      "status": "blocked",
+      "capabilities": ["publisher_adapter_target"],
+      "required_gates": ["AUTHORIZED", "POLICY_ALLOWED", "TOS_ALLOWED", "IDENTITY_ALLOWED", "AUDITABLE", "IDEMPOTENT", "RECONCILABLE"],
+      "production_blockers": ["official_api_adapter", "write_permission", "rate_limit_contract", "test_publish_evidence", "remote_id_reconciliation"],
+      "external_side_effects": true,
+      "human_approval_required": true
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "kind": "engineering_platform",
+      "status": "verified_runtime",
+      "capabilities": ["protected_branch_delivery", "pull_request_gates", "actions_ci_cd", "pages_deploy"],
+      "required_gates": ["AUTHORIZED", "POLICY_ALLOWED", "IDENTITY_ALLOWED", "AUDITABLE"],
+      "evidence": ["protected_main", "required_checks", "pinned_actions", "pages_deployment"],
+      "production_blockers": ["complete_sbom_provenance_attestation"],
+      "external_side_effects": true,
+      "human_approval_required": false
+    }
+  ]
+}
