@@ -4,23 +4,20 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '41 */6 * * *'
-  push:
-    branches: [main]
-    paths:
-      - 'app.js'
-      - 'index.html'
-      - 'project-intake-bridge.js'
-      - 'project-request.js'
-      - 'solicitar-proyecto.html'
-      - '.github/workflows/governed-intake-live-contract.yml'
+  workflow_run:
+    workflows: ['Deploy public site to GitHub Pages']
+    types: [completed]
 
 permissions:
   contents: read
 
 jobs:
   verify-live-contract:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     env:
       SITE: https://jadeltechrd.com
       API: https://intake.jadeltechrd.com
@@ -60,8 +57,8 @@ jobs:
           test "$(jq -r '.turnstile_action' <<<"$config")" = project_request
           sitekey=$(jq -r '.turnstile_sitekey' <<<"$config")
           test -n "$sitekey" && test "$sitekey" != null
+          test "$(jq -c 'keys | sort' <<<"$config")" = '["turnstile_action","turnstile_sitekey"]'
           grep -qi '^access-control-allow-origin: https://jadeltechrd.com' "$headers"
-          ! grep -qi 'turnstile_secret' <<<"$config"
 
           bad=$(curl -sS -o /tmp/bad-origin.json -w '%{http_code}' \
             -H 'Origin: https://evil.example' "$API/api/v1/public-config")
@@ -77,40 +74,73 @@ jobs:
           grep -qi '^access-control-allow-origin: https://jadeltechrd.com' "$preflight_headers"
           echo 'API_CORS_TURNSTILE_CONTRACT=PASS'
 
-      - name: Verify browser CTA routes to governed intake, never mailto
+      - name: Exercise configurator and governed CTA in a real browser
         shell: bash
         run: |
           set -euo pipefail
           browser=''
           for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
-            if command -v "$candidate" >/dev/null 2>&1; then browser="$candidate"; break; fi
+            if command -v "$candidate" >/dev/null 2>&1; then browser=$(command -v "$candidate"); break; fi
           done
           test -n "$browser"
 
-          cat > /tmp/verify-intake.html <<'EOF'
-          <!doctype html><meta charset="utf-8"><script>
-          (async()=>{
-            const target='https://jadeltechrd.com/';
-            const frame=document.createElement('iframe');
-            frame.src=target;
-            document.body.append(frame);
-          })();
-          </script>
-          EOF
+          work=$(mktemp -d)
+          cd "$work"
+          npm init -y >/dev/null 2>&1
+          npm install --ignore-scripts --no-audit --no-fund --save-exact puppeteer-core@24.16.0 >/dev/null
 
-          "$browser" --headless=new --no-sandbox --disable-gpu --virtual-time-budget=5000 \
-            --dump-dom "$SITE/" > /tmp/live-home.html
-          grep -Fq 'project-intake-bridge.js' /tmp/live-home.html
-          grep -Fq 'id="request-payment"' /tmp/live-home.html
+          BROWSER="$browser" SITE="$SITE" node <<'NODE'
+          const puppeteer = require('puppeteer-core');
+          const assert = require('node:assert/strict');
 
-          # Static source must carry the bridge and must not make mailto the governed CTA implementation.
-          source=$(curl --fail --silent --show-error "$SITE/")
-          grep -Fq '/project-intake-bridge.js' <<<"$source"
-          bridge=$(curl --fail --silent --show-error "$SITE/project-intake-bridge.js")
-          grep -Fq 'Solicitar proyecto' <<<"$bridge"
-          grep -Fq '/solicitar-proyecto.html' <<<"$bridge"
-          ! grep -Fq 'mailto:' <<<"$bridge"
-          echo 'GOVERNED_CTA_CONTRACT=PASS'
+          (async () => {
+            const browser = await puppeteer.launch({
+              executablePath: process.env.BROWSER,
+              headless: true,
+              args: ['--no-sandbox', '--disable-gpu'],
+            });
+            try {
+              const page = await browser.newPage();
+              page.setDefaultTimeout(8000);
+              await page.goto(`${process.env.SITE}/`, { waitUntil: 'networkidle2', timeout: 20000 });
+
+              await page.click('[data-add-service="architecture"]');
+              await page.click('[data-add-service="support"]');
+              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 2);
+
+              const state = await page.evaluate(() => ({
+                setup: document.getElementById('estimate-setup')?.textContent?.trim(),
+                monthly: document.getElementById('estimate-monthly')?.textContent?.trim(),
+                text: document.getElementById('request-payment')?.textContent?.trim(),
+                href: document.getElementById('request-payment')?.getAttribute('href'),
+                governed: document.getElementById('request-payment')?.dataset?.governedIntake,
+              }));
+
+              assert.equal(state.setup, '$1,150');
+              assert.equal(state.monthly, '$149');
+              assert.equal(state.text, 'Solicitar proyecto');
+              assert.equal(state.governed, 'true');
+              assert.match(state.href || '', /^\/solicitar-proyecto\.html\?services=/);
+              assert.ok(!String(state.href).startsWith('mailto:'));
+
+              await Promise.all([
+                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }),
+                page.click('#request-payment'),
+              ]);
+              const destination = new URL(page.url());
+              assert.equal(destination.origin, process.env.SITE);
+              assert.equal(destination.pathname, '/solicitar-proyecto.html');
+              const ids = new Set((destination.searchParams.get('services') || '').split(','));
+              assert.deepEqual(ids, new Set(['architecture', 'support']));
+              console.log('GOVERNED_CTA_BROWSER_E2E=PASS');
+            } finally {
+              await browser.close();
+            }
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
 
       - name: Verify intake page security policy
         shell: bash
