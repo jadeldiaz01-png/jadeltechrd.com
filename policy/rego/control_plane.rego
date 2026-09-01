@@ -42,12 +42,12 @@ human_gate_satisfied if {
 	object.get(input, "human_approval", false) == true
 }
 
-platform_is_eligible if {
-	object.get(input, "platform_status", "UNVERIFIED") in {"verified_runtime", "integration_ready"}
+platform_is_verified if {
+	object.get(input, "platform_status", "UNVERIFIED") == "verified_runtime"
 }
 
 platform_certified if {
-	platform_is_eligible
+	platform_is_verified
 }
 
 platform_certified if {
@@ -78,7 +78,7 @@ deny contains "human_approval_required" if {
 
 deny contains "platform_not_certified" if {
 	object.get(input, "external_side_effect", false) == true
-	not platform_is_eligible
+	not platform_is_verified
 }
 
 decision := {
