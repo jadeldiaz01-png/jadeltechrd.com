@@ -1,0 +1,75 @@
+name: Control-plane registry gate
+
+on:
+  pull_request:
+    paths:
+      - 'config/agent-production-manifest.json'
+      - 'config/control-plane-registry.json'
+      - 'config/platform-registry.json'
+      - 'config/slo-policy.json'
+      - 'infra/openbao/**'
+      - 'policy/rego/**'
+      - 'scripts/validate-control-plane-registries.mjs'
+      - '.github/workflows/control-plane-registry.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'config/agent-production-manifest.json'
+      - 'config/control-plane-registry.json'
+      - 'config/platform-registry.json'
+      - 'config/slo-policy.json'
+      - 'infra/openbao/**'
+      - 'policy/rego/**'
+      - 'scripts/validate-control-plane-registries.mjs'
+      - '.github/workflows/control-plane-registry.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-control-plane:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout immutable source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Validate registry contracts
+        run: node scripts/validate-control-plane-registries.mjs
+
+      - name: Install pinned OPA
+        shell: bash
+        env:
+          OPA_VERSION: v1.17.0
+          OPA_SHA256: e83da46804832578e9d9e1733dffbe4d3b5f8cc9c26eb124da9ceea4abfe189f
+        run: |
+          set -euo pipefail
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 3 \
+            -o /tmp/opa "https://github.com/open-policy-agent/opa/releases/download/${OPA_VERSION}/opa_linux_amd64_static"
+          echo "${OPA_SHA256}  /tmp/opa" | sha256sum --check --strict
+          chmod 0755 /tmp/opa
+          /tmp/opa version
+
+      - name: Format and test Rego policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/opa fmt --fail policy/rego
+          /tmp/opa test policy/rego --format=pretty
+
+      - name: Enforce no static OpenBao token pattern
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'OPENBAO_TOKEN[[:space:]]*[:=][[:space:]]*[^$<{[:space:]]+' . \
+            --exclude-dir=.git --exclude='*.md'; then
+            echo 'Static OPENBAO_TOKEN material is forbidden.' >&2
+            exit 1
+          fi
+          echo 'OPENBAO_STATIC_TOKEN_SCAN=PASS'
