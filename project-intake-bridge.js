@@ -4,7 +4,7 @@
   const INTAKE_PATH = "/solicitar-proyecto.html";
   const SERVICE_ID_PATTERN = /^[a-z0-9-]{1,64}$/;
   const MAX_SERVICES = 8;
-  let syncQueued = false;
+  let syncTimer = 0;
 
   function selectedServiceIds() {
     return [...document.querySelectorAll("[data-remove-service]")]
@@ -24,7 +24,7 @@
   }
 
   function syncRequestCta() {
-    syncQueued = false;
+    syncTimer = 0;
     const request = document.getElementById("request-payment");
     if (!request) return;
 
@@ -43,9 +43,13 @@
   }
 
   function queueSync() {
-    if (syncQueued) return;
-    syncQueued = true;
-    queueMicrotask(syncRequestCta);
+    if (syncTimer) return;
+    // Use a new task rather than a microtask. CDP evidence showed the browser's
+    // Runtime.callFunctionOn never returned after an application DOM click even
+    // though the generic mouse-input probe passed. Keeping compatibility
+    // reconciliation outside the originating click's microtask checkpoint makes
+    // the legacy bridge non-reentrant with app.js' synchronous renderEstimate().
+    syncTimer = window.setTimeout(syncRequestCta, 0);
   }
 
   function ensureIntakeNav() {
@@ -77,20 +81,14 @@
     window.location.assign(intakeUrl(ids));
   }, true);
 
-  // app.js updates its selection synchronously in the service/remove button
-  // handlers. This document-level bubbling listener runs after those handlers
-  // and schedules exactly one CTA reconciliation without observing DOM writes.
   document.addEventListener("click", (event) => {
     if (!event.target.closest?.("[data-add-service], [data-remove-service]")) return;
     queueSync();
   });
 
-  // Production browser evidence showed CDP mouse dispatch blocking for >60s
-  // while app.js' decorative homepage pointermove handler synchronously forced
-  // layout (getBoundingClientRect) and CSS-variable writes. Stop only pointermove
-  // propagation inside the commercial home; click/pointerdown/pointerup remain
-  // untouched. This containment is temporary and is removed with the bridge
-  // when app.js becomes the sole configurator owner.
+  // Temporary containment retained until the bridge is removed. It affects only
+  // decorative pointer movement inside the commercial home; click semantics are
+  // unchanged.
   document.addEventListener("pointermove", (event) => {
     if (!event.target.closest?.(".commercial-home")) return;
     event.stopPropagation();
