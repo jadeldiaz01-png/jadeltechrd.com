@@ -1,0 +1,101 @@
+name: Intake bridge isolation
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/intake-bridge-isolation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SITE: https://jadeltechrd.com
+      PUPPETEER_VERSION: 25.9.0
+    steps:
+      - name: Install pinned browser harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/jadel-bridge-isolation"
+          mkdir -p "$work"
+          cd "$work"
+          npm init -y >/dev/null 2>&1
+          npm install --ignore-scripts --no-audit --no-fund --save-exact "puppeteer@${PUPPETEER_VERSION}"
+          npx puppeteer browsers install chrome
+
+      - name: Compare live page with and without bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/jadel-bridge-isolation"
+          SITE="$SITE" node <<'NODE'
+          const puppeteer = require('puppeteer');
+          const assert = require('node:assert/strict');
+
+          async function launch() {
+            return puppeteer.launch({
+              headless: true,
+              protocolTimeout: 12000,
+              args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+            });
+          }
+
+          async function exercise({ blockBridge }) {
+            const browser = await launch();
+            try {
+              const page = await browser.newPage();
+              page.setDefaultTimeout(8000);
+              if (blockBridge) {
+                await page.setRequestInterception(true);
+                page.on('request', (request) => {
+                  if (request.url().endsWith('/project-intake-bridge.js')) request.abort();
+                  else request.continue();
+                });
+              }
+              await page.goto(`${process.env.SITE}/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+              await page.waitForSelector('[data-add-service="architecture"]');
+              const started = Date.now();
+              await page.evaluate(() => document.querySelector('[data-add-service="architecture"]')?.click());
+              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 1);
+              const elapsed = Date.now() - started;
+              const state = await page.evaluate(() => ({
+                selected: document.querySelectorAll('[data-remove-service]').length,
+                href: document.getElementById('request-payment')?.getAttribute('href'),
+                text: document.getElementById('request-payment')?.textContent?.trim(),
+              }));
+              assert.equal(state.selected, 1);
+              return { elapsed, state };
+            } finally {
+              await browser.close();
+            }
+          }
+
+          (async () => {
+            const withoutBridge = await exercise({ blockBridge: true });
+            console.log(`WITHOUT_BRIDGE_MS=${withoutBridge.elapsed}`);
+            console.log(`WITHOUT_BRIDGE_HREF=${withoutBridge.state.href}`);
+            console.log('WITHOUT_BRIDGE_DOM_CLICK=PASS');
+
+            try {
+              const withBridge = await exercise({ blockBridge: false });
+              console.log(`WITH_BRIDGE_MS=${withBridge.elapsed}`);
+              console.log(`WITH_BRIDGE_HREF=${withBridge.state.href}`);
+              console.log('WITH_BRIDGE_DOM_CLICK=PASS');
+            } catch (error) {
+              console.error(`WITH_BRIDGE_DOM_CLICK=FAIL ${error?.stack || error}`);
+              console.error('BRIDGE_ISOLATION_RESULT=BRIDGE_PATH_SUSPECT');
+              process.exit(2);
+            }
+
+            console.log('BRIDGE_ISOLATION_RESULT=NO_BRIDGE_DIFFERENTIAL');
+          })().catch((error) => {
+            console.error(`WITHOUT_BRIDGE_DOM_CLICK=FAIL ${error?.stack || error}`);
+            console.error('BRIDGE_ISOLATION_RESULT=APP_OR_OTHER_PAGE_SCRIPT_SUSPECT');
+            process.exit(3);
+          });
+          NODE
