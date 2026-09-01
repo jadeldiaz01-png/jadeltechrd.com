@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "surface": "commercial-runtime /api/v1/project-requests",
-  "public_write_policy": "anonymous intake only; no privileged action, payment, deployment, publication or agent execution directly from request",
+  "surface": "commercial-runtime /api/v1/project-requests, /api/v1/paypal/webhooks, /api/v1/admin/approvals",
+  "public_write_policy": "anonymous intake and verified PayPal webhooks only; no privileged action, payout, deployment, publication or agent execution directly from request",
   "controls": {
     "turnstile_on_abuse_prone_public_forms": true,
     "endpoint_rate_limits_defined": true,
@@ -12,26 +12,34 @@
     "server_side_secrets_only": true,
     "idempotency_for_external_side_effects": true,
     "audit_correlation_ids": true,
-    "ssrf_egress_policy_reviewed": true
+    "ssrf_egress_policy_reviewed": true,
+    "payment_webhook_signature_validation": true,
+    "payment_event_deduplication": true,
+    "admin_approval_authentication": true,
+    "fulfillment_requires_human_reconciliation": true
   },
   "implementation": {
     "turnstile": "commercial-runtime/src/worker.mjs::verifyTurnstile uses fixed Cloudflare Siteverify endpoint and server-only secret",
     "rate_limit": "PROJECT_REQUEST_RATE_LIMITER binding before parsing/DB writes",
     "schema": "commercial-runtime/src/validation.mjs rejects unknown fields and invalid service IDs",
     "request_size": 16384,
-    "authz": "endpoint intentionally public for intake; state can advance only to VALIDATED; policy workflow owns promotion",
+    "authz": "project intake is intentionally public; admin approval requires Bearer token; payment webhook must verify PayPal signature",
     "csrf": "no cookie/session credentials accepted; exact Origin match when Origin is present",
     "secrets": "TURNSTILE_SECRET_KEY is an environment secret; never serialized to responses",
     "idempotency": "Idempotency-Key required; unique D1 constraint; deterministic replay response",
     "audit": "correlation_id plus immutable-style evidence event inserted in same D1 batch",
     "ssrf": "only server egress in intake is a compile-time constant Turnstile Siteverify URL",
-    "durability": "D1 transactional batch writes project + evidence + dispatch outbox before asynchronous workflow dispatch"
+    "durability": "D1 transactional batch writes project + evidence + dispatch outbox before asynchronous workflow dispatch",
+    "payments": "verified PayPal webhooks write payment_events plus payment_ledger in REQUIRES_HUMAN; no automatic PAID transition",
+    "approvals": "admin approval endpoint records approval_events and can promote only policy status, not payment, deployment or ACTIVE state"
   },
   "tests": {
     "injection": "commercial-runtime/test/injection.test.mjs",
     "ssrf": "commercial-runtime/test/ssrf.test.mjs",
     "replay": "commercial-runtime/test/replay.test.mjs",
-    "access_control": "commercial-runtime/test/access-control.test.mjs"
+    "access_control": "commercial-runtime/test/access-control.test.mjs",
+    "paypal_webhook": "commercial-runtime/test/paypal-webhook.test.mjs",
+    "approvals": "commercial-runtime/test/approvals.test.mjs"
   },
   "promotion_blockers": [
     "Cloudflare Worker not deployed",
@@ -40,7 +48,8 @@
     "rate-limit namespace not provisioned",
     "PROJECT_WORKFLOW binding/Nexus policy workflow not deployed",
     "frontend submit form not enabled",
-    "payment provider/webhook contract not implemented",
+    "PayPal webhook deployed credentials and webhook ID not provisioned",
+    "payment-provider-to-project matching and quote reconciliation not fully automated",
     "production SLO and alert evidence not collected"
   ]
 }
