@@ -34,10 +34,11 @@ unique((slo.services || []).map((x) => x.service_id), 'SLO policy');
 unique((bao.identities || []).map((x) => x.id), 'OpenBao identities');
 
 const allowedMaturity = new Set(['service', 'pilot', 'research']);
+const positiveProductionClaims = new Set(['PRODUCTION_READY', 'PRODUCTION_VERIFIED', 'PRODUCTION_GO']);
 for (const agent of agents.agents || []) {
   if (!allowedMaturity.has(agent.maturity)) fail(`agent ${agent.id}: invalid maturity`);
   if (!Array.isArray(agent.production_blockers)) fail(`agent ${agent.id}: blockers must be array`);
-  if (agent.maturity !== 'service' && /PRODUCTION_READY/.test(agent.production_state || '')) {
+  if (agent.maturity !== 'service' && positiveProductionClaims.has(agent.production_state || '')) {
     fail(`agent ${agent.id}: non-service agent cannot claim production ready`);
   }
 }
