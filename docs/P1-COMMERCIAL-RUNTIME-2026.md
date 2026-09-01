@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation scaffold integrated in `feat/agent-production-manifest-v1`. This increment is **not production-deployed** and does not enable payments, external publication, credentials, financial actions or production promotion by itself.
+Implementation scaffold integrated in `feat/agent-production-manifest-v1` and extended on 2026-08-31 with PayPal webhook ledger and authenticated approval endpoints. This increment does not enable payouts, external publication, credentials, financial actions or production promotion by itself.
 
 ## Target flow
 
@@ -23,6 +23,8 @@ Frontend / Configurator
   -> Service Registry / Agent Adapter
   -> Quote / human approval
   -> payment provider only after approved contract
+  -> verified PayPal webhook
+  -> payment_ledger REQUIRES_HUMAN
   -> provisioning
   -> ACTIVE only after promotion gates
   -> reconciliation + evidence + observability
@@ -102,7 +104,14 @@ Adversarial tests cover injection, SSRF, replay/idempotency and cross-origin acc
 
 ## Payment integration decision
 
-Use a hosted provider checkout rather than collecting card data on Jadel Tech infrastructure. Provider webhooks must be signature-verified, event IDs de-duplicated, amounts/currency checked against the accepted quote, and settlement reconciled before moving `PAYMENT_PENDING -> PAID`. No payment implementation belongs in this PR until the provider account, webhook secret lifecycle and legal/commercial terms are approved.
+Use a hosted provider checkout rather than collecting card data on Jadel Tech infrastructure. Provider webhooks must be signature-verified, event IDs de-duplicated, amounts/currency checked against the accepted quote, and settlement reconciled before moving `PAYMENT_PENDING -> PAID`.
+
+Implemented scaffold:
+
+- `POST /api/v1/paypal/webhooks` validates PayPal signatures through PayPal's verification API.
+- `payment_events` stores verified provider events by provider event ID.
+- `payment_ledger` records events as `REQUIRES_HUMAN`; no automatic fulfillment follows from webhook receipt.
+- `/api/v1/admin/approvals` requires `ADMIN_API_TOKEN` and records approval evidence.
 
 ## SLO draft for canary
 
@@ -124,6 +133,7 @@ These are targets, not verified SLO claims until runtime measurements exist.
 5. Implement/bind `ProjectLifecycleWorkflow`.
 6. Implement Nexus policy/readiness service binding and OPA/Rego decision contract.
 7. Enable frontend submit UI only after health/contract tests pass.
-8. Add verified payment provider webhook and reconciliation.
-9. Configure alerting, SLO dashboards and runbooks.
-10. Execute canary and collect evidence before any `PRODUCTION_VERIFIED` claim.
+8. Provision PayPal webhook credentials and set `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`.
+9. Set `ADMIN_API_TOKEN` and deploy an operator-only approval client.
+10. Configure alerting, SLO dashboards and runbooks.
+11. Execute canary and collect evidence before any `PRODUCTION_VERIFIED` claim.

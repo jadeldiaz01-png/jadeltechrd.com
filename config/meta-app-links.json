@@ -10,10 +10,17 @@
   },
   "privacy_contact_email": "darklife_jadel@hotmail.com",
   "paypal_receiving_account": "darklife_jadel@hotmail.com",
+  "paypal_payment_links": {
+    "architecture_setup": "https://www.paypal.com/ncp/payment/8XFP5NDQUN9J2",
+    "support_setup": "https://www.paypal.com/ncp/payment/NN639WR9P7LPW",
+    "support_monthly": "https://www.paypal.com/ncp/payment/G7EJQLHYUKLG8",
+    "meta_facebook_setup": "https://www.paypal.com/ncp/payment/5EX2AGMB85P62",
+    "ai_governance_setup": "https://www.paypal.com/ncp/payment/3TQUF8WU2WHR2"
+  },
   "nexus_public_service_automation": {
     "agent_version": "nexus_ai_automation_v0.3.0",
     "public_mode": "catalog_configurator_request_intake",
-    "payment_mode": "paypal_reconciliation_only_until_verified_official_link",
+    "payment_mode": "official_paypal_payment_links_for_supported_services",
     "human_approval_required_for": [
       "scope_confirmation",
       "payment_request_or_invoice",
