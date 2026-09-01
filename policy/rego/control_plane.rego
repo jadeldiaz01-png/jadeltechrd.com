@@ -83,5 +83,5 @@ deny contains "platform_not_certified" if {
 
 decision := {
 	"allow": allow,
-	"deny":  sort([reason | deny[reason]]),
+	"deny": sort([reason | deny[reason]]),
 }
