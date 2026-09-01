@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0.0",
+  "registry_id": "jadel-control-plane-registry",
+  "generated_at": "2026-09-01T13:00:00Z",
+  "agent_registry": "/config/agent-production-manifest.json",
+  "platform_registry": "/config/platform-registry.json",
+  "slo_policy": "/config/slo-policy.json",
+  "policy_bundle_root": "/policy/rego",
+  "secrets_identity_contract": "/infra/openbao/workload-identities.json",
+  "execution_defaults": {
+    "enabled": false,
+    "fail_closed": true,
+    "critical_action_requires_human_or_deterministic_authority": true
+  },
+  "required_gates": [
+    "AUTHORIZED",
+    "POLICY_ALLOWED",
+    "TOS_ALLOWED",
+    "GEO_ALLOWED",
+    "RISK_ALLOWED",
+    "IDENTITY_ALLOWED",
+    "AUDITABLE",
+    "IDEMPOTENT",
+    "RECONCILABLE"
+  ],
+  "certification_states": [
+    "UNVERIFIED",
+    "RESEARCH",
+    "PILOT",
+    "TESTNET_OR_SANDBOX",
+    "EVIDENCE_COMPLETE",
+    "HUMAN_REVIEW",
+    "PRODUCTION_CANARY",
+    "PRODUCTION_VERIFIED"
+  ]
+}
