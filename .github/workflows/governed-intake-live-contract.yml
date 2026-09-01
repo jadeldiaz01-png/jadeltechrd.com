@@ -38,9 +38,11 @@ jobs:
             test "$code" = 200
             test -s /tmp/body
           done
-          curl --fail --silent --show-error "$SITE/project-intake-bridge.js" | grep -Fq '/solicitar-proyecto.html'
-          curl --fail --silent --show-error "$SITE/solicitar-proyecto.html" | grep -Fq 'id="project-request-form"'
-          curl --fail --silent --show-error "$SITE/solicitar-proyecto.html" | grep -Fq 'challenges.cloudflare.com/turnstile'
+          curl --fail --silent --show-error --output /tmp/bridge.js "$SITE/project-intake-bridge.js"
+          curl --fail --silent --show-error --output /tmp/intake.html "$SITE/solicitar-proyecto.html"
+          grep -Fq '/solicitar-proyecto.html' /tmp/bridge.js
+          grep -Fq 'id="project-request-form"' /tmp/intake.html
+          grep -Fq 'challenges.cloudflare.com/turnstile' /tmp/intake.html
           echo 'PUBLIC_INTAKE_ASSETS=PASS'
 
       - name: Verify API health, CORS and public Turnstile config
@@ -97,7 +99,7 @@ jobs:
             const browser = await puppeteer.launch({
               executablePath: process.env.BROWSER,
               headless: true,
-              protocolTimeout: 30000,
+              protocolTimeout: 60000,
               args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
             });
             try {
@@ -108,26 +110,16 @@ jobs:
               await page.goto(`${process.env.SITE}/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
               await page.waitForSelector('[data-add-service="architecture"]');
 
-              const interaction = await page.evaluate(async () => {
-                const click = (selector) => {
-                  const node = document.querySelector(selector);
-                  if (!node) throw new Error(`missing:${selector}`);
-                  node.click();
-                };
-                const started = performance.now();
-                click('[data-add-service="architecture"]');
-                click('[data-add-service="support"]');
-                await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-                return {
-                  elapsed_ms: performance.now() - started,
-                  selected: document.querySelectorAll('[data-remove-service]').length,
-                };
-              });
-              assert.equal(interaction.selected, 2);
-              assert.ok(interaction.elapsed_ms < 1500, `configurator interaction too slow: ${interaction.elapsed_ms}ms`);
+              const started = Date.now();
+              await page.click('[data-add-service="architecture"]');
+              await page.click('[data-add-service="support"]');
+              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 2);
+              const elapsedMs = Date.now() - started;
+              assert.ok(elapsedMs < 1500, `configurator interaction too slow: ${elapsedMs}ms`);
               assert.deepEqual(pageErrors, []);
 
               const state = await page.evaluate(() => ({
+                selected: document.querySelectorAll('[data-remove-service]').length,
                 setup: document.getElementById('estimate-setup')?.textContent?.trim(),
                 monthly: document.getElementById('estimate-monthly')?.textContent?.trim(),
                 text: document.getElementById('request-payment')?.textContent?.trim(),
@@ -135,6 +127,7 @@ jobs:
                 governed: document.getElementById('request-payment')?.dataset?.governedIntake,
               }));
 
+              assert.equal(state.selected, 2);
               assert.equal(state.setup, '$1,150');
               assert.equal(state.monthly, '$149');
               assert.equal(state.text, 'Solicitar proyecto');
@@ -142,14 +135,16 @@ jobs:
               assert.match(state.href || '', /^\/solicitar-proyecto\.html\?services=/);
               assert.ok(!String(state.href).startsWith('mailto:'));
 
-              await page.evaluate(() => document.getElementById('request-payment').click());
-              await page.waitForFunction(() => location.pathname === '/solicitar-proyecto.html', { timeout: 10000 });
+              await Promise.all([
+                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }),
+                page.click('#request-payment'),
+              ]);
               const destination = new URL(page.url());
               assert.equal(destination.origin, process.env.SITE);
               assert.equal(destination.pathname, '/solicitar-proyecto.html');
               const ids = new Set((destination.searchParams.get('services') || '').split(','));
               assert.deepEqual(ids, new Set(['architecture', 'support']));
-              console.log(`CONFIGURATOR_INTERACTION_MS=${interaction.elapsed_ms.toFixed(1)}`);
+              console.log(`CONFIGURATOR_INTERACTION_MS=${elapsedMs}`);
               console.log('GOVERNED_CTA_BROWSER_E2E=PASS');
             } finally {
               await browser.close();
