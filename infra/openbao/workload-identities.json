@@ -1,0 +1,79 @@
+{
+  "schema_version": "1.0.0",
+  "target": "OpenBao",
+  "mode": "workload_identity",
+  "static_root_tokens_forbidden": true,
+  "tls_required": true,
+  "audit_device_required": true,
+  "default_secret_ttl": "15m",
+  "max_secret_ttl": "1h",
+  "identities": [
+    {
+      "id": "agia-control",
+      "purpose": "control-plane orchestration and policy clients",
+      "allowed_secret_prefixes": ["kv/data/control/*"],
+      "allowed_transit_keys": ["control-plane"],
+      "production_side_effects": false
+    },
+    {
+      "id": "agia-research",
+      "purpose": "research and read-only data workflows",
+      "allowed_secret_prefixes": ["kv/data/research/*"],
+      "allowed_transit_keys": [],
+      "production_side_effects": false
+    },
+    {
+      "id": "agia-execution",
+      "purpose": "authorized external adapters after policy and human gates",
+      "allowed_secret_prefixes": ["kv/data/execution/*"],
+      "allowed_transit_keys": ["external-action-intent"],
+      "production_side_effects": true,
+      "requires_policy_decision": true,
+      "requires_human_gate_for_critical_actions": true
+    },
+    {
+      "id": "agia-migration",
+      "purpose": "database schema migrations",
+      "allowed_secret_prefixes": ["kv/data/migration/*"],
+      "allowed_transit_keys": [],
+      "production_side_effects": true,
+      "short_lived_only": true
+    },
+    {
+      "id": "agia-backup",
+      "purpose": "backup and recovery jobs",
+      "allowed_secret_prefixes": ["kv/data/backup/*"],
+      "allowed_transit_keys": ["backup"],
+      "production_side_effects": true,
+      "short_lived_only": true
+    },
+    {
+      "id": "agia-observability",
+      "purpose": "telemetry export with no business-secret access",
+      "allowed_secret_prefixes": ["kv/data/observability/*"],
+      "allowed_transit_keys": [],
+      "production_side_effects": false
+    },
+    {
+      "id": "agia-ci",
+      "purpose": "CI verification and deployment bootstrap",
+      "allowed_secret_prefixes": ["kv/data/ci/*"],
+      "allowed_transit_keys": ["artifact-signing"],
+      "production_side_effects": false,
+      "short_lived_only": true
+    }
+  ],
+  "promotion_gate": {
+    "live_state": "NOT_DEPLOYED_BY_THIS_CHANGE",
+    "requires": [
+      "openbao_tls_endpoint",
+      "ha_or_documented_single_node_pilot_exception",
+      "audit_device_verified",
+      "auth_method_configured",
+      "short_lived_identity_login_evidence",
+      "least_privilege_policy_tests",
+      "token_revocation_or_short_ttl_strategy",
+      "no_static_openbao_token_in_ci_or_runtime"
+    ]
+  }
+}
