@@ -4,6 +4,7 @@
   const INTAKE_PATH = "/solicitar-proyecto.html";
   const SERVICE_ID_PATTERN = /^[a-z0-9-]{1,64}$/;
   const MAX_SERVICES = 8;
+  let syncQueued = false;
 
   function selectedServiceIds() {
     return [...document.querySelectorAll("[data-remove-service]")]
@@ -23,6 +24,7 @@
   }
 
   function syncRequestCta() {
+    syncQueued = false;
     const request = document.getElementById("request-payment");
     if (!request) return;
 
@@ -40,6 +42,12 @@
     setAttributeIfChanged(request, "data-governed-intake", "true");
   }
 
+  function queueSync() {
+    if (syncQueued) return;
+    syncQueued = true;
+    queueMicrotask(syncRequestCta);
+  }
+
   function ensureIntakeNav() {
     const nav = document.querySelector(".site-header .nav");
     if (!nav || nav.querySelector('[data-intake-nav="true"]')) return;
@@ -50,8 +58,9 @@
     nav.appendChild(link);
   }
 
-  // Capture phase intentionally wins over the legacy app.js mailto default.
-  // This remains a compatibility shim until app.js owns the governed intake URL directly.
+  // Capture phase prevents the legacy app.js mailto/checkout URL from becoming
+  // the external action. The next increment moves this ownership into app.js
+  // itself and removes this compatibility layer entirely.
   document.addEventListener("click", (event) => {
     const request = event.target.closest?.("#request-payment");
     if (!request) return;
@@ -68,17 +77,17 @@
     window.location.assign(intakeUrl(ids));
   }, true);
 
+  // app.js updates its selection synchronously in the service/remove button
+  // handlers. This document-level bubbling listener runs after those handlers
+  // and schedules exactly one CTA reconciliation without observing DOM writes.
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest?.("[data-add-service], [data-remove-service]")) return;
+    queueSync();
+  });
+
   function start() {
     ensureIntakeNav();
     syncRequestCta();
-
-    const selectedContainer = document.getElementById("selected-services");
-    if (!selectedContainer) return;
-
-    // Observe only the selection model. Observing document.body caused a feedback loop
-    // because rewriting the CTA text itself generated additional childList mutations.
-    const observer = new MutationObserver(() => syncRequestCta());
-    observer.observe(selectedContainer, { childList: true, subtree: true });
   }
 
   if (document.readyState === "loading") {
