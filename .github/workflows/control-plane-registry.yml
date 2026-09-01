@@ -56,11 +56,11 @@ jobs:
           chmod 0755 /tmp/opa
           /tmp/opa version
 
-      - name: Show formatting diff and test Rego policy
+      - name: Format and test Rego policy
         shell: bash
         run: |
           set -euo pipefail
-          /tmp/opa fmt --diff policy/rego || true
+          /tmp/opa fmt --fail policy/rego
           /tmp/opa test policy/rego --format=pretty
 
       - name: Enforce no static OpenBao token pattern
