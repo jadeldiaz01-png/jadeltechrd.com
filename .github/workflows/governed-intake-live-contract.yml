@@ -16,11 +16,12 @@ jobs:
     if: >-
       github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     env:
       SITE: https://jadeltechrd.com
       API: https://intake.jadeltechrd.com
+      PUPPETEER_VERSION: 25.9.0
     steps:
       - name: Verify governed intake public assets
         shell: bash
@@ -76,33 +77,51 @@ jobs:
           grep -qi '^access-control-allow-origin: https://jadeltechrd.com' "$preflight_headers"
           echo 'API_CORS_TURNSTILE_CONTRACT=PASS'
 
-      - name: Exercise configurator and governed CTA in a real browser
+      - name: Install pinned Puppeteer and managed Chrome for Testing
         shell: bash
         run: |
           set -euo pipefail
-          browser=''
-          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
-            if command -v "$candidate" >/dev/null 2>&1; then browser=$(command -v "$candidate"); break; fi
-          done
-          test -n "$browser"
-
-          work=$(mktemp -d)
+          work="$RUNNER_TEMP/jadel-browser-e2e"
+          mkdir -p "$work"
           cd "$work"
           npm init -y >/dev/null 2>&1
-          npm install --ignore-scripts --no-audit --no-fund --save-exact puppeteer-core@24.16.0 >/dev/null
+          npm install --ignore-scripts --no-audit --no-fund --save-exact "puppeteer@${PUPPETEER_VERSION}"
+          npx puppeteer browsers install chrome
+          actual=$(node -p "require('puppeteer/package.json').version")
+          test "$actual" = "$PUPPETEER_VERSION"
+          echo "PUPPETEER_VERSION=PASS version=$actual"
+          node - <<'NODE'
+          const puppeteer = require('puppeteer');
+          console.log(`PUPPETEER_EXECUTABLE=${puppeteer.executablePath()}`);
+          NODE
 
-          BROWSER="$browser" SITE="$SITE" node <<'NODE'
-          const puppeteer = require('puppeteer-core');
+      - name: Diagnose browser input and exercise governed CTA
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/jadel-browser-e2e"
+          SITE="$SITE" node <<'NODE'
+          const puppeteer = require('puppeteer');
           const assert = require('node:assert/strict');
 
           (async () => {
             const browser = await puppeteer.launch({
-              executablePath: process.env.BROWSER,
               headless: true,
-              protocolTimeout: 60000,
+              protocolTimeout: 30000,
               args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
             });
             try {
+              console.log(`BROWSER_VERSION=${await browser.version()}`);
+              console.log(`BROWSER_EXECUTABLE=${puppeteer.executablePath()}`);
+
+              // Infrastructure control: prove CDP mouse input works before loading the site.
+              const probe = await browser.newPage();
+              await probe.setContent('<button id="probe" onclick="window.__clicked=true">probe</button>');
+              await probe.click('#probe');
+              assert.equal(await probe.evaluate(() => window.__clicked), true);
+              console.log('BROWSER_INPUT_PROBE=PASS');
+              await probe.close();
+
               const page = await browser.newPage();
               page.setDefaultTimeout(10000);
               const pageErrors = [];
@@ -110,11 +129,26 @@ jobs:
               await page.goto(`${process.env.SITE}/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
               await page.waitForSelector('[data-add-service="architecture"]');
 
-              const started = Date.now();
+              // First isolate the application event path without mouse hit-testing.
+              const domStarted = Date.now();
+              await page.evaluate(() => document.querySelector('[data-add-service="architecture"]')?.click());
+              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 1);
+              await page.evaluate(() => document.querySelector('[data-add-service="support"]')?.click());
+              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 2);
+              const domElapsedMs = Date.now() - domStarted;
+              console.log(`DOM_CLICK_INTERACTION_MS=${domElapsedMs}`);
+              console.log('DOM_CLICK_CONFIGURATOR=PASS');
+
+              // Reset via the application remove controls so the physical-mouse path is independent.
+              await page.evaluate(() => document.querySelectorAll('[data-remove-service]').forEach((node) => node.click()));
+              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 0);
+
+              const physicalStarted = Date.now();
               await page.click('[data-add-service="architecture"]');
+              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 1);
               await page.click('[data-add-service="support"]');
               await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 2);
-              const elapsedMs = Date.now() - started;
+              const elapsedMs = Date.now() - physicalStarted;
               assert.ok(elapsedMs < 1500, `configurator interaction too slow: ${elapsedMs}ms`);
               assert.deepEqual(pageErrors, []);
 
