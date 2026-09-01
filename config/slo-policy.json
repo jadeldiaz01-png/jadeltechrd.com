@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0.0",
+  "policy_id": "jadel-control-plane-slo-v1",
+  "measurement_window_days": 30,
+  "error_budget_policy": {
+    "burn_alert_windows": ["1h", "6h", "24h"],
+    "freeze_noncritical_releases_on_exhaustion": true,
+    "never_relax_security_gates_to_recover_slo": true
+  },
+  "services": [
+    {
+      "service_id": "public-site",
+      "sli": "successful_https_page_load_ratio",
+      "objective": 0.999,
+      "latency_sli": "p95_document_response_ms",
+      "latency_objective_ms": 1500
+    },
+    {
+      "service_id": "commercial-intake",
+      "sli": "durable_project_request_acceptance_ratio_excluding_client_and_turnstile_rejections",
+      "objective": 0.9995,
+      "latency_sli": "p95_server_acceptance_ms_excluding_human_challenge",
+      "latency_objective_ms": 1500,
+      "hard_invariants": ["zero_duplicate_projects_for_same_idempotency_fingerprint", "zero_unverified_turnstile_acceptance"]
+    },
+    {
+      "service_id": "dispatch-outbox",
+      "sli": "outbox_resolution_ratio",
+      "objective": 0.9999,
+      "latency_sli": "p95_pending_to_dispatched_seconds",
+      "latency_objective_seconds": 120,
+      "hard_invariants": ["zero_unresolved_ambiguous_external_actions"]
+    },
+    {
+      "service_id": "policy-control-plane",
+      "sli": "policy_decision_availability_ratio",
+      "objective": 0.999,
+      "hard_invariants": ["policy_unavailable_means_deny", "critical_action_never_model_only"]
+    }
+  ],
+  "telemetry_privacy": {
+    "pii_in_operational_logs": false,
+    "allowed_identifiers": ["correlation_id", "project_id", "workflow_instance_id", "policy_decision_id"],
+    "forbidden_fields": ["name", "email", "notes", "turnstile_token", "authorization", "payment_secret", "access_token"]
+  }
+}
