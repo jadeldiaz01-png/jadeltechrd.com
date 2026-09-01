@@ -1,0 +1,155 @@
+name: Governed intake live contract
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 */6 * * *'
+  workflow_run:
+    workflows: ['Deploy public site to GitHub Pages']
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live-contract:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SITE: https://jadeltechrd.com
+      API: https://intake.jadeltechrd.com
+    steps:
+      - name: Verify governed intake public assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in \
+            "$SITE/" \
+            "$SITE/project-intake-bridge.js" \
+            "$SITE/project-request.js" \
+            "$SITE/project-request.css" \
+            "$SITE/solicitar-proyecto.html"; do
+            code=$(curl --silent --show-error --location --output /tmp/body --write-out '%{http_code}' \
+              --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 "$url")
+            echo "$url -> HTTP=$code"
+            test "$code" = 200
+            test -s /tmp/body
+          done
+          curl --fail --silent --show-error "$SITE/project-intake-bridge.js" | grep -Fq '/solicitar-proyecto.html'
+          curl --fail --silent --show-error "$SITE/solicitar-proyecto.html" | grep -Fq 'id="project-request-form"'
+          curl --fail --silent --show-error "$SITE/solicitar-proyecto.html" | grep -Fq 'challenges.cloudflare.com/turnstile'
+          echo 'PUBLIC_INTAKE_ASSETS=PASS'
+
+      - name: Verify API health, CORS and public Turnstile config
+        shell: bash
+        run: |
+          set -euo pipefail
+          health=$(curl --fail --silent --show-error --max-time 20 "$API/health")
+          test "$(jq -r '.status' <<<"$health")" = ok
+          test "$(jq -r '.write_mode' <<<"$health")" = fail-closed
+
+          headers=$(mktemp)
+          config=$(curl --fail --silent --show-error -D "$headers" \
+            -H 'Origin: https://jadeltechrd.com' "$API/api/v1/public-config")
+          test "$(jq -r '.turnstile_action' <<<"$config")" = project_request
+          sitekey=$(jq -r '.turnstile_sitekey' <<<"$config")
+          test -n "$sitekey" && test "$sitekey" != null
+          test "$(jq -c 'keys | sort' <<<"$config")" = '["turnstile_action","turnstile_sitekey"]'
+          grep -qi '^access-control-allow-origin: https://jadeltechrd.com' "$headers"
+
+          bad=$(curl -sS -o /tmp/bad-origin.json -w '%{http_code}' \
+            -H 'Origin: https://evil.example' "$API/api/v1/public-config")
+          test "$bad" = 403
+
+          preflight_headers=$(mktemp)
+          preflight=$(curl -sS -o /dev/null -D "$preflight_headers" -w '%{http_code}' -X OPTIONS \
+            -H 'Origin: https://jadeltechrd.com' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type,idempotency-key' \
+            "$API/api/v1/project-requests")
+          test "$preflight" = 204
+          grep -qi '^access-control-allow-origin: https://jadeltechrd.com' "$preflight_headers"
+          echo 'API_CORS_TURNSTILE_CONTRACT=PASS'
+
+      - name: Exercise configurator and governed CTA in a real browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser=''
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if command -v "$candidate" >/dev/null 2>&1; then browser=$(command -v "$candidate"); break; fi
+          done
+          test -n "$browser"
+
+          work=$(mktemp -d)
+          cd "$work"
+          npm init -y >/dev/null 2>&1
+          npm install --ignore-scripts --no-audit --no-fund --save-exact puppeteer-core@24.16.0 >/dev/null
+
+          BROWSER="$browser" SITE="$SITE" node <<'NODE'
+          const puppeteer = require('puppeteer-core');
+          const assert = require('node:assert/strict');
+
+          (async () => {
+            const browser = await puppeteer.launch({
+              executablePath: process.env.BROWSER,
+              headless: true,
+              args: ['--no-sandbox', '--disable-gpu'],
+            });
+            try {
+              const page = await browser.newPage();
+              page.setDefaultTimeout(8000);
+              await page.goto(`${process.env.SITE}/`, { waitUntil: 'networkidle2', timeout: 20000 });
+
+              await page.click('[data-add-service="architecture"]');
+              await page.click('[data-add-service="support"]');
+              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 2);
+
+              const state = await page.evaluate(() => ({
+                setup: document.getElementById('estimate-setup')?.textContent?.trim(),
+                monthly: document.getElementById('estimate-monthly')?.textContent?.trim(),
+                text: document.getElementById('request-payment')?.textContent?.trim(),
+                href: document.getElementById('request-payment')?.getAttribute('href'),
+                governed: document.getElementById('request-payment')?.dataset?.governedIntake,
+              }));
+
+              assert.equal(state.setup, '$1,150');
+              assert.equal(state.monthly, '$149');
+              assert.equal(state.text, 'Solicitar proyecto');
+              assert.equal(state.governed, 'true');
+              assert.match(state.href || '', /^\/solicitar-proyecto\.html\?services=/);
+              assert.ok(!String(state.href).startsWith('mailto:'));
+
+              await Promise.all([
+                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }),
+                page.click('#request-payment'),
+              ]);
+              const destination = new URL(page.url());
+              assert.equal(destination.origin, process.env.SITE);
+              assert.equal(destination.pathname, '/solicitar-proyecto.html');
+              const ids = new Set((destination.searchParams.get('services') || '').split(','));
+              assert.deepEqual(ids, new Set(['architecture', 'support']));
+              console.log('GOVERNED_CTA_BROWSER_E2E=PASS');
+            } finally {
+              await browser.close();
+            }
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Verify intake page security policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          page=$(curl --fail --silent --show-error "$SITE/solicitar-proyecto.html")
+          grep -Fq "connect-src https://intake.jadeltechrd.com https://challenges.cloudflare.com" <<<"$page"
+          grep -Fq "frame-src https://challenges.cloudflare.com" <<<"$page"
+          grep -Fq "form-action 'none'" <<<"$page"
+          grep -Fq 'Enviar solicitud segura' <<<"$page"
+          grep -Fq 'no autoriza pagos' <<<"$page"
+          echo 'INTAKE_SECURITY_POLICY=PASS'
