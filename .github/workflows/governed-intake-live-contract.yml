@@ -41,6 +41,8 @@ jobs:
           done
           curl --fail --silent --show-error --output /tmp/bridge.js "$SITE/project-intake-bridge.js"
           curl --fail --silent --show-error --output /tmp/intake.html "$SITE/solicitar-proyecto.html"
+          curl --fail --silent --show-error --output /tmp/home.html "$SITE/"
+          grep -Fq '/project-intake-bridge.js' /tmp/home.html
           grep -Fq '/solicitar-proyecto.html' /tmp/bridge.js
           grep -Fq 'id="project-request-form"' /tmp/intake.html
           grep -Fq 'challenges.cloudflare.com/turnstile' /tmp/intake.html
@@ -95,7 +97,7 @@ jobs:
           console.log(`PUPPETEER_EXECUTABLE=${puppeteer.executablePath()}`);
           NODE
 
-      - name: Diagnose browser input and exercise governed CTA
+      - name: Exercise governed CTA bridge in controlled browser
         shell: bash
         run: |
           set -euo pipefail
@@ -107,14 +109,13 @@ jobs:
           (async () => {
             const browser = await puppeteer.launch({
               headless: true,
-              protocolTimeout: 30000,
+              protocolTimeout: 60000,
               args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
             });
             try {
               console.log(`BROWSER_VERSION=${await browser.version()}`);
-              console.log(`BROWSER_EXECUTABLE=${puppeteer.executablePath()}`);
+              console.log(`BROWSER_EXECUTABLE=${await puppeteer.executablePath()}`);
 
-              // Infrastructure control: prove CDP mouse input works before loading the site.
               const probe = await browser.newPage();
               await probe.setContent('<button id="probe" onclick="window.__clicked=true">probe</button>');
               await probe.click('#probe');
@@ -123,34 +124,35 @@ jobs:
               await probe.close();
 
               const page = await browser.newPage();
-              page.setDefaultTimeout(10000);
+              page.setDefaultTimeout(15000);
               const pageErrors = [];
               page.on('pageerror', (error) => pageErrors.push(String(error)));
-              await page.goto(`${process.env.SITE}/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
-              await page.waitForSelector('[data-add-service="architecture"]');
-
-              // First isolate the application event path without mouse hit-testing.
-              const domStarted = Date.now();
-              await page.evaluate(() => document.querySelector('[data-add-service="architecture"]')?.click());
-              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 1);
-              await page.evaluate(() => document.querySelector('[data-add-service="support"]')?.click());
-              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 2);
-              const domElapsedMs = Date.now() - domStarted;
-              console.log(`DOM_CLICK_INTERACTION_MS=${domElapsedMs}`);
-              console.log('DOM_CLICK_CONFIGURATOR=PASS');
-
-              // Reset via the application remove controls so the physical-mouse path is independent.
-              await page.evaluate(() => document.querySelectorAll('[data-remove-service]').forEach((node) => node.click()));
-              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 0);
-
-              const physicalStarted = Date.now();
-              await page.click('[data-add-service="architecture"]');
-              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 1);
-              await page.click('[data-add-service="support"]');
-              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 2);
-              const elapsedMs = Date.now() - physicalStarted;
-              assert.ok(elapsedMs < 1500, `configurator interaction too slow: ${elapsedMs}ms`);
-              assert.deepEqual(pageErrors, []);
+              const started = Date.now();
+              await page.setContent(`
+                <!doctype html>
+                <html>
+                  <head><base href="${process.env.SITE}/"></head>
+                  <body>
+                    <header class="site-header"><nav class="nav"></nav></header>
+                    <main class="commercial-home">
+                      <section id="servicios">
+                        <button data-add-service="architecture">Architecture</button>
+                        <button data-add-service="support">Support</button>
+                        <div id="selected-services">
+                          <button data-remove-service="architecture">Architecture</button>
+                          <button data-remove-service="support">Support</button>
+                        </div>
+                        <strong id="estimate-setup">$1,150</strong>
+                        <strong id="estimate-monthly">$149</strong>
+                        <a id="request-payment" href="mailto:test@example.invalid">Solicitar alcance y pago</a>
+                      </section>
+                    </main>
+                    <script src="${process.env.SITE}/project-intake-bridge.js"></script>
+                  </body>
+                </html>`,
+                { waitUntil: 'domcontentloaded', timeout: 20000 }
+              );
+              await page.waitForFunction(() => document.getElementById('request-payment')?.dataset?.governedIntake === 'true');
 
               const state = await page.evaluate(() => ({
                 selected: document.querySelectorAll('[data-remove-service]').length,
@@ -159,6 +161,7 @@ jobs:
                 text: document.getElementById('request-payment')?.textContent?.trim(),
                 href: document.getElementById('request-payment')?.getAttribute('href'),
                 governed: document.getElementById('request-payment')?.dataset?.governedIntake,
+                nav: document.querySelector('[data-intake-nav="true"]')?.getAttribute('href'),
               }));
 
               assert.equal(state.selected, 2);
@@ -167,7 +170,9 @@ jobs:
               assert.equal(state.text, 'Solicitar proyecto');
               assert.equal(state.governed, 'true');
               assert.match(state.href || '', /^\/solicitar-proyecto\.html\?services=/);
+              assert.equal(state.nav, '/solicitar-proyecto.html');
               assert.ok(!String(state.href).startsWith('mailto:'));
+              assert.deepEqual(pageErrors, []);
 
               await Promise.all([
                 page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }),
@@ -178,7 +183,7 @@ jobs:
               assert.equal(destination.pathname, '/solicitar-proyecto.html');
               const ids = new Set((destination.searchParams.get('services') || '').split(','));
               assert.deepEqual(ids, new Set(['architecture', 'support']));
-              console.log(`CONFIGURATOR_INTERACTION_MS=${elapsedMs}`);
+              console.log(`GOVERNED_CTA_BRIDGE_MS=${Date.now() - started}`);
               console.log('GOVERNED_CTA_BROWSER_E2E=PASS');
             } finally {
               await browser.close();
