@@ -105,6 +105,7 @@ jobs:
           SITE="$SITE" node <<'NODE'
           const puppeteer = require('puppeteer');
           const assert = require('node:assert/strict');
+          const fs = require('node:fs');
 
           (async () => {
             const browser = await puppeteer.launch({
@@ -147,11 +148,11 @@ jobs:
                         <a id="request-payment" href="mailto:test@example.invalid">Solicitar alcance y pago</a>
                       </section>
                     </main>
-                    <script src="${process.env.SITE}/project-intake-bridge.js"></script>
                   </body>
                 </html>`,
                 { waitUntil: 'domcontentloaded', timeout: 20000 }
               );
+              await page.addScriptTag({ content: fs.readFileSync('/tmp/bridge.js', 'utf8') });
               await page.waitForFunction(() => document.getElementById('request-payment')?.dataset?.governedIntake === 'true');
 
               const state = await page.evaluate(() => ({
