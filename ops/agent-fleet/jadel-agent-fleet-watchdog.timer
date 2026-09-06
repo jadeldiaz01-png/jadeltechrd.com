@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Jadel Agent Fleet watchdog every two minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=15s
+Persistent=true
+Unit=jadel-agent-fleet-watchdog.service
+
+[Install]
+WantedBy=timers.target

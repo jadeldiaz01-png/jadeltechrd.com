@@ -1,0 +1,11 @@
+[Unit]
+Description=Jadel Tech RD Agent Fleet Watchdog
+After=docker.service jadel-agent-fleet.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/jadeltechrd.com/ops/agent-fleet
+Environment=JADEL_SOURCES_DIR=/opt/jadel-agent-fleet/sources
+EnvironmentFile=-/etc/jadel-agent-fleet/runtime.env
+ExecStart=/bin/bash /opt/jadeltechrd.com/ops/agent-fleet/watchdog.sh
