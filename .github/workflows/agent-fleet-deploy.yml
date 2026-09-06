@@ -1,0 +1,104 @@
+name: Deploy Jadel Agent Fleet 24x7
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact main SHA approved for deployment
+        required: true
+        type: string
+      confirmation:
+        description: Type DEPLOY_JADEL_AGENT_FLEET
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jadel-agent-fleet-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: inputs.confirmation == 'DEPLOY_JADEL_AGENT_FLEET'
+    runs-on: [self-hosted, linux, x64, jadel-agent-runtime]
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+
+      - name: Verify exact deployment SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = '${{ inputs.expected_sha }}'
+          test "$(git status --porcelain)" = ''
+          echo "DEPLOYMENT_SHA_VERIFIED=${actual}"
+
+      - name: Production host preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v git
+          command -v curl
+          command -v docker
+          docker version >/dev/null
+          docker compose version >/dev/null
+          test -w /opt/jadel-agent-fleet || test -w /opt || {
+            echo 'RUNTIME_PATH_WRITABLE=FAIL path=/opt/jadel-agent-fleet'
+            exit 60
+          }
+          free -m
+          df -h /
+          echo 'JADEL_RUNTIME_HOST_PREFLIGHT=PASS'
+
+      - name: Bootstrap pinned governed fleet
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          JADEL_FLEET_HOME: /opt/jadel-agent-fleet
+          JADEL_SOURCES_DIR: /opt/jadel-agent-fleet/sources
+        run: |
+          set -euo pipefail
+          if [ -n "${OPENAI_API_KEY:-}" ]; then
+            export ENABLE_CHATBOT=true
+          else
+            export ENABLE_CHATBOT=false
+          fi
+          bash ops/agent-fleet/bootstrap.sh
+
+      - name: Install persistent systemd lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install -d -m 0755 /opt/jadeltechrd.com
+          sudo rsync -a --delete --exclude '.git/' "$GITHUB_WORKSPACE/" /opt/jadeltechrd.com/
+          sudo install -m 0644 ops/agent-fleet/jadel-agent-fleet.service /etc/systemd/system/jadel-agent-fleet.service
+          sudo systemctl daemon-reload
+          sudo systemctl enable jadel-agent-fleet.service
+          sudo systemctl restart jadel-agent-fleet.service
+          sudo systemctl is-active --quiet jadel-agent-fleet.service
+          echo 'JADEL_AGENT_FLEET_SYSTEMD=PASS'
+
+      - name: Verify post-deploy health
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          curl -fsS http://127.0.0.1:9090/health/live
+          curl -fsS http://127.0.0.1:8501/_stcore/health
+          curl -fsS http://127.0.0.1:8000/health/live
+          if [ -n "${OPENAI_API_KEY:-}" ]; then
+            curl -fsS http://127.0.0.1:8502/_stcore/health
+          fi
+          curl -fsS http://127.0.0.1:9090/v1/agents/status | python3 -m json.tool
+          echo 'JADEL_AGENT_FLEET_DEPLOYMENT=PASS'
+          echo 'LIVE_CAPITAL_ENABLED=false'
+          echo 'AUTONOMOUS_PUBLICATION_ENABLED=false'
