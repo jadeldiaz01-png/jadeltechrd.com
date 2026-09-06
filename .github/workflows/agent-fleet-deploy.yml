@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       expected_sha:
-        description: Exact main SHA approved for deployment
+        description: Exact protected main SHA approved for deployment
         required: true
         type: string
       confirmation:
@@ -26,20 +26,46 @@ jobs:
     timeout-minutes: 30
     environment: production
     steps:
+      - name: Validate dispatch input before checkout
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'EXPECTED_SHA_FORMAT=FAIL'
+            exit 40
+          fi
+          echo 'EXPECTED_SHA_FORMAT=PASS'
+
       - name: Checkout immutable revision
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ inputs.expected_sha }}
           fetch-depth: 1
+          persist-credentials: false
 
-      - name: Verify exact deployment SHA
+      - name: Verify deployment SHA equals protected main tip
         shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
           set -euo pipefail
+          if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'EXPECTED_SHA_FORMAT=FAIL'
+            exit 41
+          fi
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
           actual="$(git rev-parse HEAD)"
-          test "$actual" = '${{ inputs.expected_sha }}'
+          main_sha="$(git rev-parse refs/remotes/origin/main)"
+          test "$actual" = "$EXPECTED_SHA"
+          test "$main_sha" = "$EXPECTED_SHA" || {
+            echo "PROTECTED_MAIN_SHA_MATCH=FAIL expected=$EXPECTED_SHA main=$main_sha"
+            exit 42
+          }
           test "$(git status --porcelain)" = ''
           echo "DEPLOYMENT_SHA_VERIFIED=${actual}"
+          echo 'PROTECTED_MAIN_SHA_MATCH=PASS'
 
       - name: Production host preflight
         shell: bash
@@ -61,10 +87,34 @@ jobs:
           df -h /
           echo 'JADEL_RUNTIME_HOST_PREFLIGHT=PASS'
 
+      - name: Install root-readable runtime configuration
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+        run: |
+          set -euo pipefail
+          umask 077
+          runtime_env="$(mktemp)"
+          printf '%s\n' 'JADEL_FLEET_HOME=/opt/jadel-agent-fleet' > "$runtime_env"
+          printf '%s\n' 'JADEL_SOURCES_DIR=/opt/jadel-agent-fleet/sources' >> "$runtime_env"
+          if [ -n "${OPENAI_API_KEY:-}" ]; then
+            printf '%s\n' 'ENABLE_CHATBOT=true' >> "$runtime_env"
+            printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY" >> "$runtime_env"
+          else
+            printf '%s\n' 'ENABLE_CHATBOT=false' >> "$runtime_env"
+          fi
+          printf 'OPENAI_MODEL=%s\n' "${OPENAI_MODEL:-gpt-5.6-luna}" >> "$runtime_env"
+          sudo install -d -m 0750 /etc/jadel-agent-fleet
+          sudo install -m 0600 "$runtime_env" /etc/jadel-agent-fleet/runtime.env
+          rm -f "$runtime_env"
+          echo 'JADEL_RUNTIME_ENV_INSTALLED=PASS'
+
       - name: Bootstrap pinned governed fleet
         shell: bash
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
           JADEL_FLEET_HOME: /opt/jadel-agent-fleet
           JADEL_SOURCES_DIR: /opt/jadel-agent-fleet/sources
         run: |
@@ -74,6 +124,7 @@ jobs:
           else
             export ENABLE_CHATBOT=false
           fi
+          export OPENAI_MODEL="${OPENAI_MODEL:-gpt-5.6-luna}"
           bash ops/agent-fleet/bootstrap.sh
 
       - name: Install persistent systemd lifecycle and watchdog
