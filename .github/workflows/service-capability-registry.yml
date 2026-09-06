@@ -1,0 +1,42 @@
+name: Service capability registry
+
+on:
+  pull_request:
+    paths:
+      - 'app.js'
+      - 'config/service-capability-registry.json'
+      - 'config/agent-readiness-data.js'
+      - 'config/agent-production-readiness.json'
+      - 'scripts/validate-service-capability-registry.mjs'
+      - 'scripts/validate_agent_production_readiness.py'
+      - '.github/workflows/service-capability-registry.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'app.js'
+      - 'config/service-capability-registry.json'
+      - 'config/agent-readiness-data.js'
+      - 'config/agent-production-readiness.json'
+      - 'scripts/validate-service-capability-registry.mjs'
+      - 'scripts/validate_agent_production_readiness.py'
+      - '.github/workflows/service-capability-registry.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Validate canonical capability registry
+        run: node scripts/validate-service-capability-registry.mjs
+      - name: Validate pilot production-readiness contract
+        run: python3 scripts/validate_agent_production_readiness.py
