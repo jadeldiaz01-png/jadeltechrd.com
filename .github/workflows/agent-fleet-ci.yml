@@ -1,0 +1,69 @@
+name: Agent fleet 24x7 contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ops/agent-fleet/**'
+      - '.github/workflows/agent-fleet-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ops/agent-fleet/**'
+      - '.github/workflows/agent-fleet-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  agent-fleet-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Validate registry and governance
+        run: python ops/agent-fleet/test_contract.py
+      - name: Validate Python and shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile ops/agent-fleet/control_plane.py ops/agent-fleet/test_contract.py
+          bash -n ops/agent-fleet/bootstrap.sh
+      - name: Validate Compose contract
+        shell: bash
+        env:
+          OPENAI_API_KEY: ci-placeholder-not-a-secret
+          JADEL_SOURCES_DIR: /tmp/jadel-agent-fleet-sources
+        run: |
+          set -euo pipefail
+          mkdir -p "$JADEL_SOURCES_DIR"/{support-tickets,chatbot,aureus}
+          docker compose -f ops/agent-fleet/docker-compose.prod.yml config >/dev/null
+          echo 'AGENT_FLEET_COMPOSE_CONFIG=PASS'
+      - name: Build and smoke control plane
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --pull -t jadel-agent-fleet-control:${GITHUB_SHA} ops/agent-fleet
+          docker run -d --name fleet-control-test -p 19090:9090 jadel-agent-fleet-control:${GITHUB_SHA}
+          trap 'docker logs fleet-control-test || true; docker rm -f fleet-control-test || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:19090/health/live >/dev/null; then
+              curl -fsS http://127.0.0.1:19090/v1/agents/status | python -m json.tool >/dev/null
+              echo 'AGENT_FLEET_CONTROL_PLANE=PASS'
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'AGENT_FLEET_CONTROL_PLANE=FAIL'
+          exit 1
+      - name: Reject committed runtime secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RIEq '(^|[^A-Z])(sk-[A-Za-z0-9_-]{20,}|-----BEGIN (RSA )?PRIVATE KEY-----)' ops/agent-fleet; then
+            echo 'AGENT_FLEET_SECRET_SCAN=FAIL'
+            exit 50
+          fi
+          echo 'AGENT_FLEET_SECRET_SCAN=PASS'
