@@ -10,9 +10,8 @@ RemainAfterExit=yes
 WorkingDirectory=/opt/jadeltechrd.com/ops/agent-fleet
 Environment=JADEL_FLEET_HOME=/opt/jadel-agent-fleet
 Environment=JADEL_SOURCES_DIR=/opt/jadel-agent-fleet/sources
-EnvironmentFile=-/etc/jadel-agent-fleet/runtime.env
-ExecStart=/usr/bin/docker compose -f /opt/jadeltechrd.com/ops/agent-fleet/docker-compose.prod.yml up -d --remove-orphans control-plane support-tickets aureus
-ExecStop=/usr/bin/docker compose -f /opt/jadeltechrd.com/ops/agent-fleet/docker-compose.prod.yml stop
+ExecStart=/bin/bash /opt/jadeltechrd.com/ops/agent-fleet/start.sh
+ExecStop=/usr/bin/docker compose --profile chatbot -f /opt/jadeltechrd.com/ops/agent-fleet/docker-compose.prod.yml stop
 TimeoutStartSec=300
 TimeoutStopSec=60
 
