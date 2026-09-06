@@ -28,22 +28,36 @@ expected = {
 }
 assert set(ids) == expected
 
+by_id = {agent["id"]: agent for agent in agents}
 sha_re = re.compile(r"^[0-9a-f]{40}$")
 for agent in agents:
     assert agent["authority"], agent["id"]
     if agent.get("repository") and agent.get("source_sha"):
         assert sha_re.fullmatch(agent["source_sha"]), f"mutable or invalid source ref for {agent['id']}"
-    if agent.get("deployable") and agent["id"] != "control-plane":
+
+    if not agent.get("deployable"):
+        continue
+
+    assert agent.get("health_url"), f"deployable service {agent['id']} needs health URL"
+    shared_runtime = agent.get("runtime_service")
+    if shared_runtime:
+        assert shared_runtime != agent["id"], f"shared runtime cannot self-reference for {agent['id']}"
+        assert shared_runtime in by_id, f"unknown shared runtime {shared_runtime} for {agent['id']}"
+        target = by_id[shared_runtime]
+        assert target.get("deployable") is True, f"shared runtime target {shared_runtime} must be deployable"
+        assert agent["health_url"] == target.get("health_url"), f"shared health drift for {agent['id']}"
+        continue
+
+    if agent["id"] != "control-plane":
         assert agent.get("repository"), f"deployable service {agent['id']} needs repository"
         assert sha_re.fullmatch(agent.get("source_sha", "")), f"deployable service {agent['id']} must be SHA-pinned"
-        assert agent.get("health_url"), f"deployable service {agent['id']} needs health URL"
 
-by_id = {agent["id"]: agent for agent in agents}
 assert by_id["aegis-quant"]["authority"] == "NO_LIVE_CAPITAL"
 assert by_id["aureus"]["desired_state"] != "ONLINE"
 assert "NO_PAYMENT" in by_id["aureus"]["authority"]
 assert "NO_AUTO_PUBLISH" in by_id["cineforge"]["authority"]
 assert "NO_AUTONOMOUS_OUTREACH" in by_id["chatbot"]["authority"]
+assert by_id["governance"]["runtime_service"] == "control-plane"
 
 bootstrap = (ROOT / "bootstrap.sh").read_text(encoding="utf-8")
 for service_id in ("support-tickets", "chatbot", "aureus"):
