@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 
 SUPPORT_REPO='https://github.com/jadeldiaz01-png/support-tickets.git'
-SUPPORT_SHA='402f7ef50342b138e88d9bc99af551843c882905'
+SUPPORT_SHA='894082e7f0717fc7e7407c07a927bcb813a5286e'
 CHATBOT_REPO='https://github.com/jadeldiaz01-png/chatbot.git'
 CHATBOT_SHA='27d6c202905d73dd417c38c75c083ade5ae26278'
 AUREUS_REPO='https://github.com/jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler.git'
