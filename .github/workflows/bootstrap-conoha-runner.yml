@@ -104,7 +104,7 @@ jobs:
           set -euo pipefail
           port="${VPS_SSH_PORT:-22}"
           [[ "$port" =~ ^[0-9]{1,5}$ ]] && (( port >= 1 && port <= 65535 ))
-          [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*[$]?$ ]]
+          [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
           [[ "$VPS_HOST" != -* ]]
 
           ssh \
@@ -127,21 +127,7 @@ jobs:
           auth=(-H 'Accept: application/vnd.github+json' -H "Authorization: Bearer $RUNNER_ADMIN_TOKEN" -H 'X-GitHub-Api-Version: 2026-03-10')
           for attempt in $(seq 1 12); do
             runners="$(curl -fsS "${auth[@]}" "$api/repos/$GITHUB_REPOSITORY/actions/runners?per_page=100")"
-            state="$(python3 - "$RUNNER_NAME" <<'PY' <<<"$runners"
-import json, sys
-name = sys.argv[1]
-data = json.load(sys.stdin)
-for runner in data.get('runners', []):
-    if runner.get('name') == name:
-        labels = {x.get('name', '').lower() for x in runner.get('labels', [])}
-        required = {'self-hosted', 'linux', 'x64', 'jadel-agent-runtime'}
-        ok = runner.get('status') == 'online' and runner.get('busy') is False and required.issubset(labels)
-        print('READY' if ok else f"NOT_READY:{runner.get('status')}:{runner.get('busy')}")
-        break
-else:
-    print('MISSING')
-PY
-)"
+            state="$(python3 -c 'import json,sys; name=sys.argv[1]; data=json.load(sys.stdin); found=next((r for r in data.get("runners",[]) if r.get("name")==name),None); required={"self-hosted","linux","x64","jadel-agent-runtime"}; labels={x.get("name","").lower() for x in (found or {}).get("labels",[])}; print("MISSING" if found is None else ("READY" if found.get("status")=="online" and found.get("busy") is False and required.issubset(labels) else "NOT_READY:%s:%s"%(found.get("status"),found.get("busy"))))' "$RUNNER_NAME" <<<"$runners")"
             echo "RUNNER_STATE_ATTEMPT_${attempt}=$state"
             if [ "$state" = READY ]; then
               echo 'RUNNER_ONLINE=PASS'
