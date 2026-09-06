@@ -1,0 +1,90 @@
+name: Purge frontend cache after Pages
+
+on:
+  workflow_run:
+    workflows: ["Deploy public site to GitHub Pages"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  purge:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment:
+      name: jadeltechrd
+    env:
+      DOMAIN: jadeltechrd.com
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+    steps:
+      - name: Normalize Cloudflare token and resolve zone
+        id: zone
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then token="${token:1:${#token}-2}"; fi
+          test -n "$token" || { echo 'CLOUDFLARE_TOKEN_PRESENT=NO'; exit 2; }
+          echo "::add-mask::$token"
+          printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          tmp=$(mktemp)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}' \
+            -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' \
+            "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50" || true)
+          test "$code" = 200
+          zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .id' "$tmp" | head -n1)
+          test -n "$zone_id" && test "$zone_id" != null
+          echo "zone_id=$zone_id" >> "$GITHUB_OUTPUT"
+          echo 'CLOUDFLARE_ZONE_ACCESS=PASS'
+
+      - name: Purge mutable frontend assets
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.zone.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+          payload=$(jq -nc --arg domain "$DOMAIN" '{files:[
+            ("https://" + $domain + "/"),
+            ("https://" + $domain + "/app.js"),
+            ("https://" + $domain + "/project-intake-bridge.js"),
+            ("https://" + $domain + "/styles.css")
+          ]}')
+          tmp=$(mktemp)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data "$payload" \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/purge_cache" || true)
+          if [ "$code" != 200 ] || [ "$(jq -r '.success // false' "$tmp")" != true ]; then
+            echo "CLOUDFLARE_CACHE_PURGE=FAIL_HTTP_${code}"
+            jq -c '{success,errors}' "$tmp" || true
+            exit 3
+          fi
+          echo 'CLOUDFLARE_CACHE_PURGE=PASS'
+
+      - name: Verify deployed bridge fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            curl --fail --silent --show-error --location \
+              -H 'Cache-Control: no-cache' \
+              "https://${DOMAIN}/project-intake-bridge.js?verify=${GITHUB_RUN_ID}-${attempt}" \
+              --output /tmp/bridge.js
+            if grep -Fq 'const grid = document.getElementById("services-grid")' /tmp/bridge.js \
+              && ! grep -Fq 'pointermove' /tmp/bridge.js \
+              && ! grep -Fq 'event.stopPropagation()' /tmp/bridge.js; then
+              echo "DEPLOYED_BRIDGE_FINGERPRINT=PASS attempt=${attempt}"
+              exit 0
+            fi
+            echo "DEPLOYED_BRIDGE_FINGERPRINT=STALE attempt=${attempt}"
+            sleep 5
+          done
+          echo 'DEPLOYED_BRIDGE_FINGERPRINT=FAIL'
+          exit 4
