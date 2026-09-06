@@ -14,48 +14,33 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Compare GitHub Pages origin and Cloudflare edge
+      - name: Compare deployed paths
         shell: bash
         run: |
           set -euo pipefail
-          domain=jadeltechrd.com
-          path=/project-intake-bridge.js
           expected='const grid = document.getElementById("services-grid")'
 
-          check_body() {
+          check_url() {
             label="$1"
-            file="$2"
-            echo "${label}_SHA256=$(sha256sum "$file" | awk '{print $1}')"
-            if grep -Fq "$expected" "$file" && ! grep -Fq 'pointermove' "$file" && ! grep -Fq 'event.stopPropagation()' "$file"; then
-              echo "${label}_FINGERPRINT=FIXED"
-            else
-              echo "${label}_FINGERPRINT=STALE"
+            url="$2"
+            file="/tmp/${label}.js"
+            headers="/tmp/${label}.headers"
+            code=$(curl -sSL -D "$headers" -o "$file" -w '%{http_code}' "$url" || true)
+            echo "${label}_HTTP=${code}"
+            if [ "$code" = 200 ]; then
+              echo "${label}_SHA256=$(sha256sum "$file" | awk '{print $1}')"
+              if grep -Fq "$expected" "$file" && ! grep -Fq 'pointermove' "$file" && ! grep -Fq 'event.stopPropagation()' "$file"; then
+                echo "${label}_FINGERPRINT=FIXED"
+              else
+                echo "${label}_FINGERPRINT=STALE_OR_OTHER"
+              fi
+              grep -Ei '^(HTTP/|age:|cache-control:|cf-cache-status:|etag:|last-modified:|server:|location:|x-github-request-id:)' "$headers" || true
             fi
-            echo "${label}_FIRST_LINE=$(head -n1 "$file" | tr -d '\r' | cut -c1-160)"
           }
 
-          curl -fsSL -D /tmp/edge.headers "https://${domain}${path}?diag=${GITHUB_RUN_ID}" -o /tmp/edge.js
-          check_body EDGE /tmp/edge.js
-          echo 'EDGE_HEADERS_BEGIN'
-          grep -Ei '^(HTTP/|age:|cache-control:|cf-cache-status:|etag:|last-modified:|server:|x-github-request-id:)' /tmp/edge.headers || true
-          echo 'EDGE_HEADERS_END'
+          check_url EDGE_ROOT "https://jadeltechrd.com/project-intake-bridge.js?diag=${GITHUB_RUN_ID}"
+          check_url EDGE_PROJECT_PATH "https://jadeltechrd.com/jadeltechrd.com/project-intake-bridge.js?diag=${GITHUB_RUN_ID}"
+          check_url GITHUB_IO_PROJECT "https://jadeldiaz01-png.github.io/jadeltechrd.com/project-intake-bridge.js?diag=${GITHUB_RUN_ID}"
+          check_url GITHUB_IO_ROOT "https://jadeldiaz01-png.github.io/project-intake-bridge.js?diag=${GITHUB_RUN_ID}"
 
-          for ip in 185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153; do
-            suffix=${ip//./_}
-            curl -fsSL -D "/tmp/origin-${suffix}.headers" \
-              --resolve "${domain}:443:${ip}" \
-              "https://${domain}${path}?diag=${GITHUB_RUN_ID}-${suffix}" \
-              -o "/tmp/origin-${suffix}.js"
-            check_body "ORIGIN_${suffix}" "/tmp/origin-${suffix}.js"
-            echo "ORIGIN_${suffix}_HEADERS_BEGIN"
-            grep -Ei '^(HTTP/|age:|cache-control:|etag:|last-modified:|server:|x-github-request-id:)' "/tmp/origin-${suffix}.headers" || true
-            echo "ORIGIN_${suffix}_HEADERS_END"
-          done
-
-          fixed_origins=$(grep -lF "$expected" /tmp/origin-*.js | wc -l | tr -d ' ')
-          echo "FIXED_ORIGIN_COUNT=${fixed_origins}"
-          if [ "$fixed_origins" -eq 4 ]; then
-            echo 'GITHUB_PAGES_ORIGIN_FRESH=YES'
-          else
-            echo 'GITHUB_PAGES_ORIGIN_FRESH=NO'
-          fi
+          echo 'DIAG_COMPLETE=YES'
