@@ -32,12 +32,12 @@
       "id": "chatbot",
       "website_service": "Sales & Lead Intelligence",
       "runtime_mode": "ALWAYS_ON_UI",
-      "desired_state": "ONLINE_AFTER_CI",
+      "desired_state": "ONLINE_IF_CONFIGURED",
       "authority": "NO_AUTONOMOUS_OUTREACH",
       "repository": "jadeldiaz01-png/chatbot",
-      "source_sha": "aa3d3dedc0165d1c383239d05e212125517f3c63",
+      "source_sha": "27d6c202905d73dd417c38c75c083ade5ae26278",
       "health_url": "http://chatbot:8501/_stcore/health",
-      "deployable": false
+      "deployable": true
     },
     {
       "id": "social-intelligence",
