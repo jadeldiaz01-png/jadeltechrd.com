@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0.0",
-  "generated_at": "2026-08-30T23:29:00-04:00",
+  "generated_at": "2026-09-06T21:15:00Z",
   "policy": {
-    "promotion_rule": "A catalog pilot may be promoted only when every declared gate is true, blocking_gates is empty, the exact source SHA is verified, and service-specific external evidence is current. No probabilistic model output may grant production authority by itself.",
+    "promotion_rule": "A catalog pilot may be promoted only when every declared gate is true, blocking_gates is empty, the exact source SHA is verified, and service-specific external evidence is current. Repository implementation alone never grants production authority and no probabilistic model output may grant production authority by itself.",
     "common_gates": [
       "architecture_contract",
       "deterministic_policy_boundary",
@@ -24,10 +24,10 @@
       "live_or_sandbox_contract_evidence"
     ],
     "standards": {
-      "agent_security": "OWASP GenAI Top 10 2025/2026 guidance",
-      "observability": "OpenTelemetry GenAI semantic conventions",
-      "supply_chain": "SLSA Build provenance + GitHub artifact attestations where artifacts are released",
-      "web_abuse": "Cloudflare Turnstile server-side validation and endpoint-specific rate limiting when dynamic public endpoints are introduced"
+      "agent_security": "OWASP GenAI guidance plus deterministic tool authorization and human approval for sensitive external actions",
+      "observability": "OpenTelemetry traces/metrics/logs and service-specific SLO/error-budget evidence",
+      "supply_chain": "Pinned dependencies/actions plus SBOM/provenance/signature or equivalent verification where artifacts are promoted",
+      "web_abuse": "Cloudflare Turnstile server-side validation and endpoint-specific rate limiting for public dynamic intake"
     }
   },
   "services": [
@@ -38,25 +38,25 @@
       "target_status": "PRODUCTION_READY",
       "decision": "BLOCKED",
       "primary_repository": "jadeldiaz01-png/ai-income-revenue-engine",
-      "supporting_repositories": ["jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler"],
-      "source_sha": "c960a0e807b6d9add96bbb36c873a840ca4728c9",
+      "supporting_repositories": ["jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler", "jadeldiaz01-png/jadeltechrd.com"],
+      "source_sha": "914324c794d18624c52f8adb0f8b2f1a39cb972f",
       "gates": {
         "architecture_contract": true,
         "deterministic_policy_boundary": true,
         "human_approval_boundary": true,
-        "idempotency_and_reconciliation": false,
+        "idempotency_and_reconciliation": true,
         "secrets_externalized": true,
         "least_privilege_tools": true,
-        "automated_tests": false,
-        "adversarial_agent_evals": false,
-        "observability_traces_metrics_logs": false,
-        "slo_and_alerting": false,
-        "incident_runbook": false,
-        "data_lineage_and_retention": false,
-        "cost_and_quota_limits": false,
-        "dependency_and_supply_chain_controls": false,
-        "artifact_provenance_or_equivalent": false,
-        "protected_default_branch": false,
+        "automated_tests": true,
+        "adversarial_agent_evals": true,
+        "observability_traces_metrics_logs": true,
+        "slo_and_alerting": true,
+        "incident_runbook": true,
+        "data_lineage_and_retention": true,
+        "cost_and_quota_limits": true,
+        "dependency_and_supply_chain_controls": true,
+        "artifact_provenance_or_equivalent": true,
+        "protected_default_branch": true,
         "verified_head_signature": false,
         "live_or_sandbox_contract_evidence": false
       },
@@ -64,11 +64,14 @@
         "crm_or_delivery_connector_verified": false,
         "consent_and_contact_policy_verified": false,
         "external_outreach_requires_human_approval": true,
-        "identity_and_tos_checks": false
+        "identity_and_tos_checks": false,
+        "owner_only_certification_dispatch_available": true,
+        "protected_runtime_certifier_available": true
       },
       "blocking_gates": [
-        {"id": "runtime", "owner": "engineering", "reason": "The revenue-engine repository describes a bootstrap platform but does not yet provide sufficient runtime, migration, observability and test evidence for a production sales service."},
-        {"id": "delivery_connector", "owner": "human_admin", "reason": "A real CRM/email delivery destination and least-privilege credentials must be selected and authorized before external outreach can be production tested."}
+        {"id": "delivery_connector", "owner": "human_admin", "reason": "A real CRM/email or marketplace delivery destination and least-privilege credentials must be selected and authorized before supervised external outreach can be certified."},
+        {"id": "external_policy_evidence", "owner": "platform", "reason": "Consent/contact policy, platform TOS and identity eligibility must be verified against the selected delivery platform."},
+        {"id": "external_campaign_evidence", "owner": "evidence", "reason": "A real authorized supervised campaign with auditable delivery/reconciliation evidence has not yet been certified."}
       ]
     },
     {
@@ -79,7 +82,7 @@
       "decision": "BLOCKED",
       "primary_repository": "jadeldiaz01-png/Agente-CineForge",
       "supporting_repositories": ["jadeldiaz01-png/https-jadeldiaz01.github.io-reels-meta-system-"],
-      "source_sha": "e18d0b87c5b395d418df04a57e615ade698ff17c",
+      "source_sha": "8eb2e6dc6c9fc208a79dc71e0a9d1e8cbc6cbdce",
       "gates": {
         "architecture_contract": true,
         "deterministic_policy_boundary": true,
@@ -88,13 +91,13 @@
         "secrets_externalized": true,
         "least_privilege_tools": true,
         "automated_tests": true,
-        "adversarial_agent_evals": false,
-        "observability_traces_metrics_logs": false,
-        "slo_and_alerting": false,
-        "incident_runbook": false,
+        "adversarial_agent_evals": true,
+        "observability_traces_metrics_logs": true,
+        "slo_and_alerting": true,
+        "incident_runbook": true,
         "data_lineage_and_retention": true,
         "cost_and_quota_limits": true,
-        "dependency_and_supply_chain_controls": false,
+        "dependency_and_supply_chain_controls": true,
         "artifact_provenance_or_equivalent": false,
         "protected_default_branch": false,
         "verified_head_signature": false,
@@ -105,11 +108,14 @@
         "rights_and_originality_review": true,
         "freshness_and_velocity_scoring": true,
         "policy_review": true,
-        "post_publish_feedback_loop_evidence": false
+        "post_publish_feedback_loop_evidence": false,
+        "bounded_runtime_governance": true,
+        "adversarial_authority_and_budget_tests": true
       },
       "blocking_gates": [
-        {"id": "source_connectors", "owner": "platform", "reason": "At least one production trend data connector must be verified against current platform permissions/terms and exercised with fresh evidence."},
-        {"id": "repository_governance", "owner": "human_admin", "reason": "The CineForge and reels source default branches are currently unprotected; their current heads are also unsigned."}
+        {"id": "source_connectors", "owner": "platform", "reason": "At least one fresh production trend-data connector must be verified against current platform permissions/terms and exercised with auditable evidence."},
+        {"id": "evaluation", "owner": "evidence", "reason": "Calibration/false-positive evaluation and a post-publication feedback loop still require production-like evidence."},
+        {"id": "repository_governance", "owner": "human_admin", "reason": "Source repository promotion still requires protected default branch and verified signed release/provenance evidence."}
       ]
     },
     {
@@ -120,7 +126,7 @@
       "decision": "BLOCKED",
       "primary_repository": "jadeldiaz01-png/Agente-CineForge",
       "supporting_repositories": ["jadeldiaz01-png/https-jadeldiaz01.github.io-reels-meta-system-"],
-      "source_sha": "e18d0b87c5b395d418df04a57e615ade698ff17c",
+      "source_sha": "8eb2e6dc6c9fc208a79dc71e0a9d1e8cbc6cbdce",
       "gates": {
         "architecture_contract": true,
         "deterministic_policy_boundary": true,
@@ -129,13 +135,13 @@
         "secrets_externalized": true,
         "least_privilege_tools": true,
         "automated_tests": true,
-        "adversarial_agent_evals": false,
-        "observability_traces_metrics_logs": false,
-        "slo_and_alerting": false,
-        "incident_runbook": false,
+        "adversarial_agent_evals": true,
+        "observability_traces_metrics_logs": true,
+        "slo_and_alerting": true,
+        "incident_runbook": true,
         "data_lineage_and_retention": true,
         "cost_and_quota_limits": true,
-        "dependency_and_supply_chain_controls": false,
+        "dependency_and_supply_chain_controls": true,
         "artifact_provenance_or_equivalent": false,
         "protected_default_branch": false,
         "verified_head_signature": false,
@@ -146,12 +152,16 @@
         "originality_review": true,
         "per_platform_credentials_verified": false,
         "per_platform_public_posting_review_verified": false,
-        "live_publish_contract_tests": false
+        "live_publish_contract_tests": false,
+        "bounded_runtime_governance": true,
+        "readiness_manifest_and_validator": true,
+        "exact_sha_media_adapter_deploy_gate": true
       },
       "blocking_gates": [
+        {"id": "render_evidence", "owner": "evidence", "reason": "A certified end-to-end MP4 with provider runtime, audio mastering and continuity/QC evidence is still required for the promoted media path."},
         {"id": "platform_credentials", "owner": "human_admin", "reason": "Live publishing credentials/account permissions must be authorized and stored as managed secrets."},
-        {"id": "platform_reviews", "owner": "platform", "reason": "Public posting/audit requirements must be verified per enabled platform before live publishing."},
-        {"id": "repository_governance", "owner": "human_admin", "reason": "The primary and supporting repositories do not currently protect main and their current heads are unsigned."}
+        {"id": "platform_reviews", "owner": "platform", "reason": "Public posting/audit requirements and live contract tests must be verified per enabled platform before live publishing."},
+        {"id": "repository_governance", "owner": "human_admin", "reason": "Primary/supporting repositories require protected default branches and signed/provenanced promoted artifacts before production promotion."}
       ]
     },
     {
@@ -161,8 +171,8 @@
       "target_status": "PRODUCTION_READY",
       "decision": "BLOCKED",
       "primary_repository": "jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler",
-      "supporting_repositories": ["jadeldiaz01-png/ai-income-revenue-engine"],
-      "source_sha": "b6ea95d809323b045d663d09b89e11c4327d60fa",
+      "supporting_repositories": ["jadeldiaz01-png/ai-income-revenue-engine", "jadeldiaz01-png/jadeltechrd.com"],
+      "source_sha": "3cb0455194f2861ae69e219fcd0f5affe5095dd9",
       "gates": {
         "architecture_contract": true,
         "deterministic_policy_boundary": true,
@@ -171,15 +181,15 @@
         "secrets_externalized": true,
         "least_privilege_tools": true,
         "automated_tests": true,
-        "adversarial_agent_evals": false,
+        "adversarial_agent_evals": true,
         "observability_traces_metrics_logs": true,
-        "slo_and_alerting": false,
+        "slo_and_alerting": true,
         "incident_runbook": true,
         "data_lineage_and_retention": true,
         "cost_and_quota_limits": true,
         "dependency_and_supply_chain_controls": true,
-        "artifact_provenance_or_equivalent": false,
-        "protected_default_branch": false,
+        "artifact_provenance_or_equivalent": true,
+        "protected_default_branch": true,
         "verified_head_signature": true,
         "live_or_sandbox_contract_evidence": false
       },
@@ -187,11 +197,14 @@
         "external_settlement_verified": false,
         "complete_cost_attribution": false,
         "multiple_positive_independent_windows": false,
-        "financial_and_provider_write_authority_fail_closed": true
+        "financial_and_provider_write_authority_fail_closed": true,
+        "p0_r1_activation_orchestrator": true,
+        "protected_self_hosted_activation_workflow": true,
+        "owner_only_certification_dispatch": true
       },
       "blocking_gates": [
-        {"id": "economic_evidence", "owner": "evidence", "reason": "Production GO requires authenticated external settlement, complete cost attribution and multiple independent positive settlement windows; internal balances are not sufficient."},
-        {"id": "repository_governance", "owner": "human_admin", "reason": "AUREUS main is currently unprotected even though its current head is signed."}
+        {"id": "economic_evidence", "owner": "evidence", "reason": "Production GO requires authenticated external settlement, complete cost attribution and multiple independent positive settlement windows; internal balances or simulated results are insufficient."},
+        {"id": "external_action_evidence", "owner": "commercial", "reason": "A complete authorized opportunity lifecycle—submission, delivery/QA, payment pending and reconciled settlement—must be evidenced before production claims."}
       ]
     },
     {
@@ -200,43 +213,44 @@
       "catalog_status": "pilot",
       "target_status": "PRODUCTION_READY",
       "decision": "BLOCKED",
-      "primary_repository": "jadeldiaz01-png/ai-income-revenue-engine",
-      "supporting_repositories": [
-        "jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler",
-        "jadeldiaz01-png/Agente-CineForge"
-      ],
-      "source_sha": "c960a0e807b6d9add96bbb36c873a840ca4728c9",
+      "primary_repository": "jadeldiaz01-png/jadeltechrd.com",
+      "supporting_repositories": ["jadeldiaz01-png/Agentic-Al-Brief", "jadeldiaz01-png/ai-income-revenue-engine", "jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler", "jadeldiaz01-png/Agente-CineForge"],
+      "source_sha": "07326a8bed515fe148503e10ea93840fe0f91fe3",
       "gates": {
         "architecture_contract": true,
         "deterministic_policy_boundary": true,
         "human_approval_boundary": true,
-        "idempotency_and_reconciliation": false,
+        "idempotency_and_reconciliation": true,
         "secrets_externalized": true,
         "least_privilege_tools": true,
-        "automated_tests": false,
-        "adversarial_agent_evals": false,
-        "observability_traces_metrics_logs": false,
-        "slo_and_alerting": false,
-        "incident_runbook": false,
-        "data_lineage_and_retention": false,
-        "cost_and_quota_limits": false,
-        "dependency_and_supply_chain_controls": false,
-        "artifact_provenance_or_equivalent": false,
-        "protected_default_branch": false,
-        "verified_head_signature": false,
+        "automated_tests": true,
+        "adversarial_agent_evals": true,
+        "observability_traces_metrics_logs": true,
+        "slo_and_alerting": true,
+        "incident_runbook": true,
+        "data_lineage_and_retention": true,
+        "cost_and_quota_limits": true,
+        "dependency_and_supply_chain_controls": true,
+        "artifact_provenance_or_equivalent": true,
+        "protected_default_branch": true,
+        "verified_head_signature": true,
         "live_or_sandbox_contract_evidence": false
       },
       "service_specific_gates": {
-        "agent_registry": false,
-        "tool_capability_registry": false,
-        "handoff_contracts": false,
-        "recursion_and_budget_limits": false,
-        "cross_agent_prompt_injection_tests": false,
-        "deterministic_critical_action_gate": true
+        "agent_registry": true,
+        "tool_capability_registry": true,
+        "handoff_contracts": true,
+        "recursion_and_budget_limits": true,
+        "cross_agent_prompt_injection_tests": true,
+        "deterministic_critical_action_gate": true,
+        "24x7_fleet_health_control_plane": true,
+        "sha_gated_self_hosted_deployment": true,
+        "target_server_runtime_evidence": false
       },
       "blocking_gates": [
-        {"id": "control_plane", "owner": "engineering", "reason": "A service-neutral multi-agent runtime with registry, routing, durable state, tool scopes, cross-agent evals and observability has not yet been independently certified on an exact SHA."},
-        {"id": "repository_governance", "owner": "human_admin", "reason": "The primary control-plane repository needs protected main and verified signed promotion evidence before it can back a production service."}
+        {"id": "runtime_evidence", "owner": "evidence", "reason": "The control plane now has a governed 24x7 fleet, bounded agent runtime and deployment contracts, but exact target-server deployment/SLO-window evidence is still required."},
+        {"id": "connector_certification", "owner": "platform", "reason": "Each external connector used by a production agent must independently satisfy authorization, policy/TOS, identity, idempotency, reconciliation and observability gates."},
+        {"id": "recovery_evidence", "owner": "engineering", "reason": "Backup/restore and operational recovery evidence for the promoted multi-agent runtime must be demonstrated before production promotion."}
       ]
     }
   ]
