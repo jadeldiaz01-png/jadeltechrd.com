@@ -1,0 +1,165 @@
+name: Deploy Jadel Agent Fleet 24x7
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact protected main SHA approved for deployment
+        required: true
+        type: string
+      confirmation:
+        description: Type DEPLOY_JADEL_AGENT_FLEET
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jadel-agent-fleet-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: inputs.confirmation == 'DEPLOY_JADEL_AGENT_FLEET'
+    runs-on: [self-hosted, linux, x64, jadel-agent-runtime]
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Validate dispatch input before checkout
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'EXPECTED_SHA_FORMAT=FAIL'
+            exit 40
+          fi
+          echo 'EXPECTED_SHA_FORMAT=PASS'
+
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify deployment SHA equals protected main tip
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'EXPECTED_SHA_FORMAT=FAIL'
+            exit 41
+          fi
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          actual="$(git rev-parse HEAD)"
+          main_sha="$(git rev-parse refs/remotes/origin/main)"
+          test "$actual" = "$EXPECTED_SHA"
+          test "$main_sha" = "$EXPECTED_SHA" || {
+            echo "PROTECTED_MAIN_SHA_MATCH=FAIL expected=$EXPECTED_SHA main=$main_sha"
+            exit 42
+          }
+          test "$(git status --porcelain)" = ''
+          echo "DEPLOYMENT_SHA_VERIFIED=${actual}"
+          echo 'PROTECTED_MAIN_SHA_MATCH=PASS'
+
+      - name: Production host preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v git
+          command -v curl
+          command -v docker
+          command -v rsync
+          command -v systemctl
+          docker version >/dev/null
+          docker compose version >/dev/null
+          sudo -n true
+          test -w /opt/jadel-agent-fleet || test -w /opt || {
+            echo 'RUNTIME_PATH_WRITABLE=FAIL path=/opt/jadel-agent-fleet'
+            exit 60
+          }
+          free -m
+          df -h /
+          echo 'JADEL_RUNTIME_HOST_PREFLIGHT=PASS'
+
+      - name: Install root-readable runtime configuration
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+        run: |
+          set -euo pipefail
+          umask 077
+          runtime_env="$(mktemp)"
+          printf '%s\n' 'JADEL_FLEET_HOME=/opt/jadel-agent-fleet' > "$runtime_env"
+          printf '%s\n' 'JADEL_SOURCES_DIR=/opt/jadel-agent-fleet/sources' >> "$runtime_env"
+          if [ -n "${OPENAI_API_KEY:-}" ]; then
+            printf '%s\n' 'ENABLE_CHATBOT=true' >> "$runtime_env"
+            printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY" >> "$runtime_env"
+          else
+            printf '%s\n' 'ENABLE_CHATBOT=false' >> "$runtime_env"
+          fi
+          printf 'OPENAI_MODEL=%s\n' "${OPENAI_MODEL:-gpt-5.6-luna}" >> "$runtime_env"
+          sudo install -d -m 0750 /etc/jadel-agent-fleet
+          sudo install -m 0600 "$runtime_env" /etc/jadel-agent-fleet/runtime.env
+          rm -f "$runtime_env"
+          echo 'JADEL_RUNTIME_ENV_INSTALLED=PASS'
+
+      - name: Bootstrap pinned governed fleet
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          JADEL_FLEET_HOME: /opt/jadel-agent-fleet
+          JADEL_SOURCES_DIR: /opt/jadel-agent-fleet/sources
+        run: |
+          set -euo pipefail
+          if [ -n "${OPENAI_API_KEY:-}" ]; then
+            export ENABLE_CHATBOT=true
+          else
+            export ENABLE_CHATBOT=false
+          fi
+          export OPENAI_MODEL="${OPENAI_MODEL:-gpt-5.6-luna}"
+          bash ops/agent-fleet/bootstrap.sh
+
+      - name: Install persistent systemd lifecycle and watchdog
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install -d -m 0755 /opt/jadeltechrd.com
+          sudo rsync -a --delete --exclude '.git/' "$GITHUB_WORKSPACE/" /opt/jadeltechrd.com/
+          sudo install -m 0644 ops/agent-fleet/jadel-agent-fleet.service /etc/systemd/system/jadel-agent-fleet.service
+          sudo install -m 0644 ops/agent-fleet/jadel-agent-fleet-watchdog.service /etc/systemd/system/jadel-agent-fleet-watchdog.service
+          sudo install -m 0644 ops/agent-fleet/jadel-agent-fleet-watchdog.timer /etc/systemd/system/jadel-agent-fleet-watchdog.timer
+          sudo systemctl daemon-reload
+          sudo systemctl enable jadel-agent-fleet.service
+          sudo systemctl restart jadel-agent-fleet.service
+          sudo systemctl enable --now jadel-agent-fleet-watchdog.timer
+          sudo systemctl is-active --quiet jadel-agent-fleet.service
+          sudo systemctl is-active --quiet jadel-agent-fleet-watchdog.timer
+          echo 'JADEL_AGENT_FLEET_SYSTEMD=PASS'
+          echo 'JADEL_AGENT_FLEET_WATCHDOG_TIMER=PASS'
+
+      - name: Verify post-deploy health
+        shell: bash
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          curl -fsS http://127.0.0.1:9090/health/live
+          curl -fsS http://127.0.0.1:8501/_stcore/health
+          curl -fsS http://127.0.0.1:8000/health/live
+          if [ -n "${OPENAI_API_KEY:-}" ]; then
+            curl -fsS http://127.0.0.1:8502/_stcore/health
+          fi
+          curl -fsS http://127.0.0.1:9090/v1/agents/status | python3 -m json.tool
+          sudo systemctl start jadel-agent-fleet-watchdog.service
+          sudo systemctl is-failed --quiet jadel-agent-fleet-watchdog.service && exit 71 || true
+          echo 'JADEL_AGENT_FLEET_DEPLOYMENT=PASS'
+          echo 'LIVE_CAPITAL_ENABLED=false'
+          echo 'AUTONOMOUS_PUBLICATION_ENABLED=false'

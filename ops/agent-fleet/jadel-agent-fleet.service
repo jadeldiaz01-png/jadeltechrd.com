@@ -1,0 +1,19 @@
+[Unit]
+Description=Jadel Tech RD Agent Fleet
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/jadeltechrd.com/ops/agent-fleet
+Environment=JADEL_FLEET_HOME=/opt/jadel-agent-fleet
+Environment=JADEL_SOURCES_DIR=/opt/jadel-agent-fleet/sources
+ExecStart=/bin/bash /opt/jadeltechrd.com/ops/agent-fleet/start.sh
+ExecStop=/usr/bin/docker compose --profile chatbot -f /opt/jadeltechrd.com/ops/agent-fleet/docker-compose.prod.yml stop
+TimeoutStartSec=300
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
