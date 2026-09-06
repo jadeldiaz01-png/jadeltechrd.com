@@ -1,0 +1,156 @@
+name: Bootstrap ConoHa GitHub Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type REGISTER_JADEL_AGENT_RUNTIME
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bootstrap-jadel-agent-runtime
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    if: inputs.confirmation == 'REGISTER_JADEL_AGENT_RUNTIME'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production-bootstrap
+    env:
+      RUNNER_NAME: jadel-agent-runtime
+      RUNNER_LABELS: jadel-agent-runtime
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT }}
+      VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+      RUNNER_ADMIN_TOKEN: ${{ secrets.RUNNER_ADMIN_TOKEN }}
+
+    steps:
+      - name: Checkout immutable bootstrap source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Fail closed when bootstrap secrets are missing
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in VPS_HOST VPS_USER VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS RUNNER_ADMIN_TOKEN; do
+            if [ -z "${!name:-}" ]; then
+              echo "MISSING_SECRET=$name"
+              missing=1
+            fi
+          done
+          test "$missing" -eq 0
+          echo 'BOOTSTRAP_SECRETS=PASS'
+
+      - name: Prepare strict SSH trust
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          chmod 0600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/known_hosts"
+          ssh-keygen -l -f "$HOME/.ssh/id_ed25519" >/dev/null
+          test -s "$HOME/.ssh/known_hosts"
+          echo 'SSH_TRUST_MATERIAL=PASS'
+
+      - name: Obtain ephemeral GitHub runner registration token and pinned runner artifact
+        id: github_runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          api='https://api.github.com'
+          auth=(-H 'Accept: application/vnd.github+json' -H "Authorization: Bearer $RUNNER_ADMIN_TOKEN" -H 'X-GitHub-Api-Version: 2026-03-10')
+
+          token_json="$(curl -fsS -X POST "${auth[@]}" "$api/repos/$GITHUB_REPOSITORY/actions/runners/registration-token")"
+          reg_token="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$token_json")"
+          test -n "$reg_token"
+          echo "::add-mask::$reg_token"
+
+          downloads="$(curl -fsS "${auth[@]}" "$api/repos/$GITHUB_REPOSITORY/actions/runners/downloads")"
+          selection="$(python3 -c 'import json,sys; a=[x for x in json.load(sys.stdin) if x.get("os")=="linux" and x.get("architecture")=="x64"]; assert a, "no linux-x64 runner artifact"; x=a[0]; print(x["download_url"]); print(x["sha256_checksum"])' <<<"$downloads")"
+          runner_url="$(sed -n '1p' <<<"$selection")"
+          runner_sha="$(sed -n '2p' <<<"$selection")"
+          [[ "$runner_sha" =~ ^[0-9a-fA-F]{64}$ ]]
+          [[ "$runner_url" == https://github.com/* || "$runner_url" == https://objects.githubusercontent.com/* ]]
+
+          {
+            echo "reg_token=$reg_token"
+            echo "runner_url=$runner_url"
+            echo "runner_sha=$runner_sha"
+          } >> "$GITHUB_OUTPUT"
+          echo 'GITHUB_RUNNER_EPHEMERAL_TOKEN=PASS'
+          echo 'GITHUB_RUNNER_ARTIFACT_METADATA=PASS'
+
+      - name: Register and start jadel-agent-runtime on ConoHa
+        shell: bash
+        env:
+          REG_TOKEN: ${{ steps.github_runner.outputs.reg_token }}
+          RUNNER_URL: ${{ steps.github_runner.outputs.runner_url }}
+          RUNNER_SHA: ${{ steps.github_runner.outputs.runner_sha }}
+        run: |
+          set -euo pipefail
+          port="${VPS_SSH_PORT:-22}"
+          [[ "$port" =~ ^[0-9]{1,5}$ ]] && (( port >= 1 && port <= 65535 ))
+          [[ "$VPS_USER" =~ ^[a-z_][a-z0-9_-]*[$]?$ ]]
+          [[ "$VPS_HOST" != -* ]]
+
+          ssh \
+            -p "$port" \
+            -i "$HOME/.ssh/id_ed25519" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ConnectTimeout=15 \
+            -- "$VPS_USER@$VPS_HOST" \
+            "sudo -n env RUNNER_REG_TOKEN='$REG_TOKEN' RUNNER_DOWNLOAD_URL='$RUNNER_URL' RUNNER_SHA256='$RUNNER_SHA' RUNNER_NAME='$RUNNER_NAME' RUNNER_LABELS='$RUNNER_LABELS' REPO_URL='https://github.com/$GITHUB_REPOSITORY' bash -s" \
+            < ops/runner/bootstrap-self-hosted-runner.sh
+
+      - name: Verify runner is Online and Idle in GitHub
+        shell: bash
+        run: |
+          set -euo pipefail
+          api='https://api.github.com'
+          auth=(-H 'Accept: application/vnd.github+json' -H "Authorization: Bearer $RUNNER_ADMIN_TOKEN" -H 'X-GitHub-Api-Version: 2026-03-10')
+          for attempt in $(seq 1 12); do
+            runners="$(curl -fsS "${auth[@]}" "$api/repos/$GITHUB_REPOSITORY/actions/runners?per_page=100")"
+            state="$(python3 - "$RUNNER_NAME" <<'PY' <<<"$runners"
+import json, sys
+name = sys.argv[1]
+data = json.load(sys.stdin)
+for runner in data.get('runners', []):
+    if runner.get('name') == name:
+        labels = {x.get('name', '').lower() for x in runner.get('labels', [])}
+        required = {'self-hosted', 'linux', 'x64', 'jadel-agent-runtime'}
+        ok = runner.get('status') == 'online' and runner.get('busy') is False and required.issubset(labels)
+        print('READY' if ok else f"NOT_READY:{runner.get('status')}:{runner.get('busy')}")
+        break
+else:
+    print('MISSING')
+PY
+)"
+            echo "RUNNER_STATE_ATTEMPT_${attempt}=$state"
+            if [ "$state" = READY ]; then
+              echo 'RUNNER_ONLINE=PASS'
+              echo 'RUNNER_IDLE=PASS'
+              echo 'RUNNER_LABELS=PASS'
+              echo 'RUNNER_READY=PASS'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'RUNNER_READY=FAIL'
+          exit 30
