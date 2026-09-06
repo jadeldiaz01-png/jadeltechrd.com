@@ -1,0 +1,145 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-09-06T21:12:00Z",
+  "policy": {
+    "default_deny": true,
+    "repository_code_is_not_production_authority": true,
+    "critical_external_actions_require_human_approval": true,
+    "financial_live_authority": false,
+    "public_claim_rule": "A public service claim may describe implemented and verified engineering capabilities, but must not claim production authorization, profitability, live publishing or autonomous financial authority without matching external evidence and required human approval."
+  },
+  "services": [
+    {
+      "id": "architecture",
+      "public_name": "Arquitectura Agentic & Automatización",
+      "public_status": "Servicio de ingeniería",
+      "claim_level": "IMPLEMENTABLE_ENGINEERING_SERVICE",
+      "capabilities": ["agent architecture", "deterministic policy boundaries", "MCP and tool design", "durable workflows", "runtime registries", "OpenBao workload identity design", "OpenTelemetry/SLO architecture", "supply-chain gates"],
+      "evidence_repositories": [
+        {"repository": "jadeldiaz01-png/jadeltechrd.com", "sha": "07326a8bed515fe148503e10ea93840fe0f91fe3"},
+        {"repository": "jadeldiaz01-png/Agentic-Al-Brief", "sha": "8aa5e7877acab865b804f9cbfffcee1275d1e7fb"}
+      ],
+      "remaining_gates": ["customer-specific discovery", "customer-specific credentials and integrations", "target-runtime acceptance tests"]
+    },
+    {
+      "id": "support",
+      "public_name": "Agente de Soporte & Tickets",
+      "public_status": "Implementable · runtime containerizado",
+      "claim_level": "CONTAINER_QUALIFIED_IMPLEMENTABLE",
+      "capabilities": ["support ticket workflow", "containerized 24x7 runtime", "minimal container context", "CI container validation", "pinned image/dependency supply chain", "human escalation boundary"],
+      "evidence_repositories": [
+        {"repository": "jadeldiaz01-png/support-tickets", "sha": "894082e7f0717fc7e7407c07a927bcb813a5286e"},
+        {"repository": "jadeldiaz01-png/jadeltechrd.com", "sha": "07326a8bed515fe148503e10ea93840fe0f91fe3"}
+      ],
+      "remaining_gates": ["customer authz", "retention policy", "customer SLO/alerts", "escalation E2E", "target deployment evidence"]
+    },
+    {
+      "id": "sales",
+      "public_name": "Sales & Lead Intelligence",
+      "public_status": "Piloto supervisado · certifier disponible",
+      "claim_level": "SUPERVISED_PILOT",
+      "capabilities": ["opportunity research", "qualification/scoring", "governed proposal workflow", "owner-only workflow dispatch bridge", "protected runtime certification workflow", "human approval before external outreach"],
+      "evidence_repositories": [
+        {"repository": "jadeldiaz01-png/ai-income-revenue-engine", "sha": "914324c794d18624c52f8adb0f8b2f1a39cb972f"},
+        {"repository": "jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler", "sha": "3cb0455194f2861ae69e219fcd0f5affe5095dd9"}
+      ],
+      "remaining_gates": ["authorized CRM or delivery connector", "consent/contact policy evidence", "identity/TOS evidence", "real supervised external campaign evidence"]
+    },
+    {
+      "id": "social",
+      "public_name": "Social Trend Intelligence",
+      "public_status": "Piloto gobernado",
+      "claim_level": "SUPERVISED_GOVERNED_PILOT",
+      "capabilities": ["trend scoring", "freshness and velocity scoring", "creative briefs", "rights/policy review", "bounded runtime governance", "telemetry", "adversarial authority/budget tests", "SLO and incident runbook"],
+      "evidence_repositories": [
+        {"repository": "jadeldiaz01-png/Agente-CineForge", "sha": "8eb2e6dc6c9fc208a79dc71e0a9d1e8cbc6cbdce"}
+      ],
+      "remaining_gates": ["official or terms-allowed fresh data connector evidence", "calibration dataset", "false-positive evaluation", "post-publish feedback evidence"]
+    },
+    {
+      "id": "cineforge",
+      "public_name": "CineForge · Video Premium",
+      "public_status": "Piloto gobernado · publicación live bloqueada",
+      "claim_level": "GOVERNED_MEDIA_PILOT",
+      "capabilities": ["creative direction", "video QC", "originality review", "bounded runtime governance", "telemetry contract", "adversarial authority and budget tests", "readiness manifest", "SLO/incident runbook", "pinned CI workflows", "exact-SHA governed media adapter deployment"],
+      "evidence_repositories": [
+        {"repository": "jadeldiaz01-png/Agente-CineForge", "sha": "8eb2e6dc6c9fc208a79dc71e0a9d1e8cbc6cbdce"},
+        {"repository": "jadeldiaz01-png/https-jadeldiaz01.github.io-reels-meta-system-", "sha": "93f913f7a3b45d7275c2ea85a7888240a938ffc8"}
+      ],
+      "remaining_gates": ["verified provider runtime", "end-to-end MP4/audio/continuity evidence", "platform credentials", "platform review/permission evidence", "remote reconciliation/live publish contract"]
+    },
+    {
+      "id": "meta",
+      "public_name": "Meta/Facebook Integration & App Review",
+      "public_status": "Servicio implementable por cliente",
+      "claim_level": "IMPLEMENTABLE_PER_CUSTOMER",
+      "capabilities": ["Meta DevTools MCP configuration", "Codex setup automation", "App Review runbook", "agent safety controls", "contract tests", "CI validation", "public privacy/terms/data-deletion routes"],
+      "evidence_repositories": [
+        {"repository": "jadeldiaz01-png/jadelapp-meta", "sha": "3cb301c3eeab4095dbce83448e2fac7966c01a99"}
+      ],
+      "remaining_gates": ["customer app credentials", "approved scopes for deployment", "customer live contract test"]
+    },
+    {
+      "id": "analytics",
+      "public_name": "Dashboards & Decision Intelligence",
+      "public_status": "Implementable",
+      "claim_level": "IMPLEMENTABLE_ENGINEERING_SERVICE",
+      "capabilities": ["KPI dashboards", "operational analytics", "filters", "exports", "decision-support integration"],
+      "evidence_repositories": [
+        {"repository": "jadeldiaz01-png/gdp-dashboard", "sha": "2afba47766529cc9f6395c7f36bd552dfe475743"}
+      ],
+      "remaining_gates": ["customer data contract", "authz", "data quality/lineage", "customer deployment and SLO evidence"]
+    },
+    {
+      "id": "revenue",
+      "public_name": "Revenue Opportunity Intelligence",
+      "public_status": "Piloto supervisado · infraestructura P0-R1",
+      "claim_level": "GOVERNED_REVENUE_PILOT",
+      "capabilities": ["opportunity scoring", "evidence ledger workflow", "owner-only certification dispatch", "P0 certification workflow", "fail-closed P0-R1 activation orchestrator", "protected self-hosted activation", "runtime safety contract"],
+      "evidence_repositories": [
+        {"repository": "jadeldiaz01-png/ai-income-revenue-engine", "sha": "914324c794d18624c52f8adb0f8b2f1a39cb972f"},
+        {"repository": "jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler", "sha": "3cb0455194f2861ae69e219fcd0f5affe5095dd9"}
+      ],
+      "remaining_gates": ["real authorized marketplace/delivery evidence", "authenticated settlement", "complete cost attribution", "multiple independent positive windows"],
+      "prohibited_claims": ["guaranteed income", "autonomous financial authority", "profitability without settlement evidence"]
+    },
+    {
+      "id": "quant",
+      "public_name": "Quant Research & Trading Risk Systems",
+      "public_status": "Research/Testnet · sin capital live",
+      "claim_level": "RESEARCH_TESTNET_ONLY",
+      "capabilities": ["quant research architecture", "TESTNET production-readiness control plane", "network qualification", "self-hosted evidence workflow", "backup/restore verification", "SLO/security/governance/FinOps policies", "supply-chain controls", "CodeQL/dependency review", "human live-pilot gate"],
+      "evidence_repositories": [
+        {"repository": "jadeldiaz01-png/AegisQuant-Nexus", "sha": "813a359d78744df4f521d3236b161e874ab30a1a"},
+        {"repository": "jadeldiaz01-png/Institutional-Trading-Bot-Status", "sha": "3bf4d54c18bddfd7a7ec2e8c07fa30f5797c19d8"}
+      ],
+      "remaining_gates": ["required forward TESTNET evidence", "zero unresolved reconciliation failures", "human live-pilot review", "capital authorization"],
+      "prohibited_claims": ["profitability", "production trading", "live capital authorization"]
+    },
+    {
+      "id": "governance",
+      "public_name": "AI Governance & Production Readiness",
+      "public_status": "Servicio de ingeniería",
+      "claim_level": "IMPLEMENTABLE_ENGINEERING_SERVICE",
+      "capabilities": ["fail-closed policy architecture", "OpenBao workload identity", "OpenTelemetry tracing/SLO contracts", "adversarial evaluations", "FinOps controls", "CycloneDX SBOM", "SLSA/in-toto provenance", "Cosign signing/verification", "exact-SHA runtime certification", "GitHub protected deployment gates"],
+      "evidence_repositories": [
+        {"repository": "jadeldiaz01-png/Agentic-Al-Brief", "sha": "8aa5e7877acab865b804f9cbfffcee1275d1e7fb"},
+        {"repository": "jadeldiaz01-png/jadeltechrd.com", "sha": "07326a8bed515fe148503e10ea93840fe0f91fe3"}
+      ],
+      "remaining_gates": ["customer-specific threat model", "customer runtime evidence", "customer credential/identity integration", "customer operational acceptance"]
+    },
+    {
+      "id": "multiagent",
+      "public_name": "Multi-Agent Orchestration",
+      "public_status": "Piloto gobernado · control plane 24x7 disponible",
+      "claim_level": "GOVERNED_RUNTIME_PILOT",
+      "capabilities": ["agent registry", "24x7 fleet health control plane", "containerized orchestration plane", "fail-closed startup", "systemd lifecycle", "SHA-gated deployment", "bounded watchdog", "bounded Agents SDK runtime", "deterministic policy", "Temporal durable workflow contract", "tool/handoff governance", "telemetry and evidence contracts"],
+      "evidence_repositories": [
+        {"repository": "jadeldiaz01-png/jadeltechrd.com", "sha": "07326a8bed515fe148503e10ea93840fe0f91fe3"},
+        {"repository": "jadeldiaz01-png/Agentic-Al-Brief", "sha": "8aa5e7877acab865b804f9cbfffcee1275d1e7fb"},
+        {"repository": "jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler", "sha": "3cb0455194f2861ae69e219fcd0f5affe5095dd9"}
+      ],
+      "remaining_gates": ["target-server fleet deployment evidence", "runtime SLO window", "per-tool external connector certification", "backup/restore evidence", "production promotion approval"]
+    }
+  ]
+}
