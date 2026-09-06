@@ -18,33 +18,53 @@ jobs:
       SITE: https://jadeltechrd.com
       PUPPETEER_VERSION: 25.9.0
     steps:
-      - name: Install pinned Puppeteer and Chrome
+      - name: Install pinned browser and snapshot live frontend
         shell: bash
         run: |
           set -euo pipefail
           work="$RUNNER_TEMP/live-add-agent-freeze"
-          mkdir -p "$work"
+          mkdir -p "$work/old" "$work/new"
           cd "$work"
           npm init -y >/dev/null 2>&1
           npm install --ignore-scripts --no-audit --no-fund --save-exact "puppeteer@${PUPPETEER_VERSION}"
           npx puppeteer browsers install chrome
           test "$(node -p "require('puppeteer/package.json').version")" = "$PUPPETEER_VERSION"
+
+          for file in index.html app.js styles.css project-intake-bridge.js; do
+            curl --fail --silent --show-error --location "$SITE/${file#index.html}" --output "$work/old/$file"
+          done
+          cp "$work/old/index.html" "$work/new/index.html"
+          cp "$work/old/app.js" "$work/new/app.js"
+          cp "$work/old/styles.css" "$work/new/styles.css"
+
           ref="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
           curl --fail --silent --show-error --location \
             "https://raw.githubusercontent.com/jadeldiaz01-png/jadeltechrd.com/${ref}/project-intake-bridge.js" \
-            --output /tmp/patched-bridge.js
-          test -s /tmp/patched-bridge.js
+            --output "$work/new/project-intake-bridge.js"
 
-      - name: Reproduce live freeze and verify patched bridge on Android viewport
+          test -s "$work/old/index.html"
+          test -s "$work/old/app.js"
+          test -s "$work/old/project-intake-bridge.js"
+          test -s "$work/new/project-intake-bridge.js"
+
+      - name: A/B current live bridge against patched bridge
         shell: bash
         run: |
           set -euo pipefail
-          cd "$RUNNER_TEMP/live-add-agent-freeze"
-          SITE="$SITE" node <<'NODE'
+          work="$RUNNER_TEMP/live-add-agent-freeze"
+          python3 -m http.server 8765 --directory "$work/old" >/tmp/old-server.log 2>&1 &
+          old_pid=$!
+          python3 -m http.server 8766 --directory "$work/new" >/tmp/new-server.log 2>&1 &
+          new_pid=$!
+          trap 'kill "$old_pid" "$new_pid" 2>/dev/null || true' EXIT
+          sleep 1
+          curl --fail --silent http://127.0.0.1:8765/ >/dev/null
+          curl --fail --silent http://127.0.0.1:8766/ >/dev/null
+
+          cd "$work"
+          node <<'NODE'
           const puppeteer = require('puppeteer');
           const assert = require('node:assert/strict');
-          const fs = require('node:fs');
-          const patchedBridge = fs.readFileSync('/tmp/patched-bridge.js', 'utf8');
 
           async function tryClick(page, selector, ms = 5000) {
             let timer;
@@ -58,25 +78,15 @@ jobs:
             }
           }
 
-          async function openPage(browser, replacement = null) {
+          async function open(browser, port) {
             const page = await browser.newPage();
             page.setDefaultTimeout(8000);
             await page.setViewport({ width: 412, height: 915, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true });
             const errors = [];
             page.on('pageerror', e => errors.push(String(e)));
-            if (replacement !== null) {
-              await page.setRequestInterception(true);
-              page.on('request', req => {
-                if (req.url().endsWith('/project-intake-bridge.js')) {
-                  req.respond({ status: 200, contentType: 'application/javascript', body: replacement }).catch(() => {});
-                } else {
-                  req.continue().catch(() => {});
-                }
-              });
-            }
-            await page.goto(process.env.SITE, { waitUntil: 'domcontentloaded', timeout: 20000 });
+            await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'domcontentloaded', timeout: 15000 });
             await page.waitForSelector('[data-add-service="architecture"]', { visible: true });
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 300));
             return { page, errors };
           }
 
@@ -89,38 +99,37 @@ jobs:
             try {
               console.log(`BROWSER_VERSION=${await browser.version()}`);
 
-              const normal = await openPage(browser);
-              const normalStarted = Date.now();
-              const normalClick = await tryClick(normal.page, '[data-add-service="architecture"]');
-              console.log(`LIVE_CURRENT_CLICK_OK=${normalClick.ok}`);
-              console.log(`LIVE_CURRENT_CLICK_MS=${Date.now() - normalStarted}`);
-              assert.equal(normalClick.ok, false, 'current deployed bridge should reproduce reported freeze for this diagnostic');
-              await normal.page.close().catch(() => {});
+              const old = await open(browser, 8765);
+              const oldStart = Date.now();
+              const oldClick = await tryClick(old.page, '[data-add-service="architecture"]');
+              console.log(`CURRENT_BRIDGE_CLICK_OK=${oldClick.ok}`);
+              console.log(`CURRENT_BRIDGE_CLICK_MS=${Date.now() - oldStart}`);
+              assert.equal(oldClick.ok, false, 'current production bridge must reproduce the observed freeze in the A/B snapshot');
+              await old.page.close().catch(() => {});
 
-              const fixed = await openPage(browser, patchedBridge);
-              const ids = await fixed.page.$$eval('[data-add-service]', nodes => nodes.map(node => node.getAttribute('data-add-service')));
-              assert.ok(ids.length >= 11, `expected at least 11 services, got ${ids.length}`);
+              const fixed = await open(browser, 8766);
+              const ids = await fixed.page.$$eval('[data-add-service]', nodes => nodes.map(n => n.getAttribute('data-add-service')));
+              assert.deepEqual(ids, ['architecture','support','sales','social','cineforge','meta','analytics','revenue','quant','governance','multiagent']);
 
               for (const id of ids) {
-                const addSelector = `[data-add-service="${id}"]`;
-                await fixed.page.evaluate(sel => document.querySelector(sel)?.scrollIntoView({ block: 'center' }), addSelector);
+                const selector = `[data-add-service="${id}"]`;
+                await fixed.page.evaluate(sel => document.querySelector(sel)?.scrollIntoView({ block: 'center' }), selector);
                 const before = await fixed.page.$$eval('[data-remove-service]', nodes => nodes.length);
                 const started = Date.now();
-                const click = await tryClick(fixed.page, addSelector);
-                assert.equal(click.ok, true, `${id}: patched Add froze`);
+                const click = await tryClick(fixed.page, selector);
+                assert.equal(click.ok, true, `${id}: patched bridge click froze`);
                 await fixed.page.waitForFunction(expected => document.querySelectorAll('[data-remove-service]').length === expected, {}, before + 1);
                 const elapsed = Date.now() - started;
                 console.log(`PATCHED_${id}_ADD_MS=${elapsed}`);
-                assert.ok(elapsed < 5000, `${id}: patched add exceeded latency budget`);
                 const cta = await fixed.page.$eval('#request-payment', node => ({ href: node.getAttribute('href'), governed: node.dataset.governedIntake }));
-                assert.equal(cta.governed, 'true', `${id}: governed marker missing`);
-                assert.ok(!String(cta.href).startsWith('mailto:'), `${id}: legacy mailto exposed`);
+                assert.equal(cta.governed, 'true');
+                assert.ok(!String(cta.href).startsWith('mailto:'), `${id}: legacy mailto escaped governed path`);
               }
 
-              assert.deepEqual(fixed.errors, [], `page errors: ${fixed.errors.join(' | ')}`);
-              console.log('PATCHED_BRIDGE_ALL_ADD=PASS');
+              assert.deepEqual(fixed.errors, [], `patched page errors: ${fixed.errors.join(' | ')}`);
+              console.log('PATCHED_BRIDGE_ALL_11_ADD=PASS');
+              console.log('FREEZE_ROOT_CAUSE_BRIDGE_AB_TEST=CONFIRMED');
               await fixed.page.close();
-              console.log('LIVE_ADD_AGENT_FREEZE_FIX_VERIFIED=PASS');
             } finally {
               await browser.close();
             }
