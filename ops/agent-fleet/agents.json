@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "policy": {
+    "default_deny_external_side_effects": true,
+    "live_capital_enabled": false,
+    "autonomous_publication_enabled": false,
+    "autonomous_marketplace_submission_enabled": false,
+    "human_approval_for_irreversible_actions": true
+  },
+  "agents": [
+    {
+      "id": "control-plane",
+      "website_service": "Arquitectura Agentic & Automatización",
+      "runtime_mode": "ALWAYS_ON_API",
+      "desired_state": "ONLINE",
+      "authority": "INTERNAL_ORCHESTRATION_ONLY",
+      "health_url": "http://control-plane:9090/health/live",
+      "deployable": true
+    },
+    {
+      "id": "support-tickets",
+      "website_service": "Agente de Soporte & Tickets",
+      "runtime_mode": "ALWAYS_ON_UI",
+      "desired_state": "ONLINE",
+      "authority": "HUMAN_ESCALATION_FOR_EXTERNAL_SIDE_EFFECTS",
+      "repository": "jadeldiaz01-png/support-tickets",
+      "source_sha": "402f7ef50342b138e88d9bc99af551843c882905",
+      "health_url": "http://support-tickets:8501/_stcore/health",
+      "deployable": true
+    },
+    {
+      "id": "chatbot",
+      "website_service": "Sales & Lead Intelligence",
+      "runtime_mode": "ALWAYS_ON_UI",
+      "desired_state": "ONLINE_AFTER_CI",
+      "authority": "NO_AUTONOMOUS_OUTREACH",
+      "repository": "jadeldiaz01-png/chatbot",
+      "source_sha": "aa3d3dedc0165d1c383239d05e212125517f3c63",
+      "health_url": "http://chatbot:8501/_stcore/health",
+      "deployable": false
+    },
+    {
+      "id": "social-intelligence",
+      "website_service": "Social Trend Intelligence",
+      "runtime_mode": "SUPERVISED_READY",
+      "desired_state": "STANDBY",
+      "authority": "RESEARCH_ONLY_NO_AUTO_PUBLISH",
+      "repository": "jadeldiaz01-png/Agente-CineForge",
+      "source_sha": "8eb2e6dc6c9fc208a79dc71e0a9d1e8cbc6cbdce",
+      "deployable": false
+    },
+    {
+      "id": "cineforge",
+      "website_service": "CineForge · Video Premium",
+      "runtime_mode": "SUPERVISED_READY",
+      "desired_state": "STANDBY",
+      "authority": "NO_AUTO_PUBLISH",
+      "repository": "jadeldiaz01-png/Agente-CineForge",
+      "source_sha": "8eb2e6dc6c9fc208a79dc71e0a9d1e8cbc6cbdce",
+      "deployable": false
+    },
+    {
+      "id": "meta-integration",
+      "website_service": "Meta/Facebook Integration & App Review",
+      "runtime_mode": "CONNECTOR",
+      "desired_state": "ON_DEMAND",
+      "authority": "HUMAN_APPROVAL_FOR_PUBLISH_OR_ACCOUNT_CHANGES",
+      "deployable": false
+    },
+    {
+      "id": "decision-intelligence",
+      "website_service": "Dashboards & Decision Intelligence",
+      "runtime_mode": "ON_DEMAND_UI",
+      "desired_state": "STANDBY",
+      "authority": "READ_ONLY_ANALYTICS",
+      "deployable": false
+    },
+    {
+      "id": "aureus",
+      "website_service": "Revenue Opportunity Intelligence",
+      "runtime_mode": "ALWAYS_ON_SAFE_STANDBY",
+      "desired_state": "LIVE_BLOCKED_UNTIL_READY",
+      "authority": "NO_PAYMENT_NO_SUBMISSION_NO_CAPITAL",
+      "repository": "jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler",
+      "source_sha": "3cb0455194f2861ae69e219fcd0f5affe5095dd9",
+      "health_url": "http://aureus:8000/health/live",
+      "readiness_url": "http://aureus:8000/health/ready",
+      "deployable": true
+    },
+    {
+      "id": "aegis-quant",
+      "website_service": "Quant Research & Trading Risk Systems",
+      "runtime_mode": "RESEARCH_ONLY",
+      "desired_state": "STANDBY",
+      "authority": "NO_LIVE_CAPITAL",
+      "repository": "jadeldiaz01-png/AegisQuant-Nexus",
+      "deployable": false
+    },
+    {
+      "id": "governance",
+      "website_service": "AI Governance & Production Readiness",
+      "runtime_mode": "ALWAYS_ON_POLICY",
+      "desired_state": "ONLINE",
+      "authority": "DENY_AND_ESCALATE",
+      "health_url": "http://control-plane:9090/health/live",
+      "deployable": true
+    },
+    {
+      "id": "multi-agent-orchestration",
+      "website_service": "Multi-Agent Orchestration",
+      "runtime_mode": "SUPERVISED_READY",
+      "desired_state": "STANDBY",
+      "authority": "POLICY_GATED_HANDOFFS_ONLY",
+      "deployable": false
+    }
+  ]
+}
