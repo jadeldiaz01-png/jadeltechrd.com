@@ -29,7 +29,7 @@ jobs:
           npx puppeteer browsers install chrome
           test "$(node -p "require('puppeteer/package.json').version")" = "$PUPPETEER_VERSION"
 
-      - name: Exercise every live Add button on desktop and Android-sized viewport
+      - name: Isolate live freeze to compatibility bridge
         shell: bash
         run: |
           set -euo pipefail
@@ -38,23 +38,36 @@ jobs:
           const puppeteer = require('puppeteer');
           const assert = require('node:assert/strict');
 
-          const profiles = [
-            { name: 'desktop', viewport: { width: 1440, height: 1100, deviceScaleFactor: 1, isMobile: false, hasTouch: false } },
-            { name: 'android', viewport: { width: 412, height: 915, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true } },
-          ];
-
-          async function withTimeout(promise, ms, label) {
+          async function tryClick(page, selector, ms = 5000) {
             let timer;
             try {
-              return await Promise.race([
-                promise,
-                new Promise((_, reject) => {
-                  timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-                }),
+              const result = await Promise.race([
+                page.click(selector).then(() => ({ ok: true })),
+                new Promise(resolve => { timer = setTimeout(() => resolve({ ok: false, timeout: true }), ms); }),
               ]);
+              return result;
             } finally {
               clearTimeout(timer);
             }
+          }
+
+          async function openPage(browser, blockBridge) {
+            const page = await browser.newPage();
+            page.setDefaultTimeout(8000);
+            await page.setViewport({ width: 412, height: 915, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true });
+            const errors = [];
+            page.on('pageerror', e => errors.push(String(e)));
+            if (blockBridge) {
+              await page.setRequestInterception(true);
+              page.on('request', req => {
+                if (req.url().endsWith('/project-intake-bridge.js')) {
+                  req.respond({ status: 200, contentType: 'application/javascript', body: '/* diagnostic: bridge disabled */' });
+                } else req.continue();
+              });
+            }
+            await page.goto(process.env.SITE, { waitUntil: 'networkidle2', timeout: 20000 });
+            await page.waitForSelector('[data-add-service="architecture"]', { visible: true });
+            return { page, errors };
           }
 
           (async () => {
@@ -63,89 +76,34 @@ jobs:
               protocolTimeout: 30000,
               args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
             });
-
             try {
               console.log(`BROWSER_VERSION=${await browser.version()}`);
-              for (const profile of profiles) {
-                const page = await browser.newPage();
-                page.setDefaultTimeout(8000);
-                await page.setViewport(profile.viewport);
 
-                const pageErrors = [];
-                const consoleErrors = [];
-                page.on('pageerror', (error) => pageErrors.push(String(error)));
-                page.on('console', (msg) => {
-                  if (msg.type() === 'error') consoleErrors.push(msg.text());
-                });
+              const normal = await openPage(browser, false);
+              const normalStarted = Date.now();
+              const normalClick = await tryClick(normal.page, '[data-add-service="architecture"]');
+              console.log(`NORMAL_BRIDGE_CLICK_OK=${normalClick.ok}`);
+              console.log(`NORMAL_BRIDGE_CLICK_MS=${Date.now() - normalStarted}`);
+              await normal.page.close().catch(() => {});
 
-                await withTimeout(
-                  page.goto(process.env.SITE, { waitUntil: 'networkidle2', timeout: 20000 }),
-                  25000,
-                  `${profile.name}: navigation`,
-                );
+              const isolated = await openPage(browser, true);
+              const before = await isolated.page.$$eval('[data-remove-service]', nodes => nodes.length);
+              const isolatedStarted = Date.now();
+              const isolatedClick = await tryClick(isolated.page, '[data-add-service="architecture"]');
+              console.log(`BRIDGE_DISABLED_CLICK_OK=${isolatedClick.ok}`);
+              console.log(`BRIDGE_DISABLED_CLICK_MS=${Date.now() - isolatedStarted}`);
+              assert.equal(isolatedClick.ok, true, 'architecture Add must remain responsive with compatibility bridge disabled');
+              await isolated.page.waitForFunction(expected => document.querySelectorAll('[data-remove-service]').length === expected, {}, before + 1);
+              assert.deepEqual(isolated.errors, []);
+              console.log('BRIDGE_DISABLED_ADD_RENDER=PASS');
+              await isolated.page.close();
 
-                await page.waitForSelector('[data-add-service]', { visible: true });
-                const ids = await page.$$eval('[data-add-service]', nodes => nodes.map(n => n.getAttribute('data-add-service')));
-                assert.ok(ids.length >= 11, `${profile.name}: expected at least 11 service add buttons, got ${ids.length}`);
-                console.log(`${profile.name}:SERVICE_IDS=${ids.join(',')}`);
-
-                for (const id of ids) {
-                  const selector = `[data-add-service="${id}"]`;
-                  await page.evaluate(sel => document.querySelector(sel)?.scrollIntoView({ block: 'center' }), selector);
-                  await new Promise(r => setTimeout(r, 75));
-
-                  const before = await page.$$eval('[data-remove-service]', nodes => nodes.length);
-                  const started = Date.now();
-                  await withTimeout(page.click(selector), 5000, `${profile.name}:${id}: click`);
-                  await withTimeout(
-                    page.waitForFunction((expected) => document.querySelectorAll('[data-remove-service]').length === expected, {}, before + 1),
-                    5000,
-                    `${profile.name}:${id}: selection render`,
-                  );
-                  const elapsed = Date.now() - started;
-                  console.log(`${profile.name}:${id}:ADD_MS=${elapsed}`);
-                  assert.ok(elapsed < 5000, `${profile.name}:${id}: add interaction exceeded 5s`);
-
-                  const buttonState = await page.$eval(selector, node => ({
-                    text: node.textContent.trim(),
-                    pressed: node.getAttribute('aria-pressed'),
-                  }));
-                  assert.equal(buttonState.pressed, 'true', `${profile.name}:${id}: aria-pressed not true after add`);
-
-                  const cta = await page.$eval('#request-payment', node => ({
-                    text: node.textContent.trim(),
-                    href: node.getAttribute('href'),
-                    governed: node.getAttribute('data-governed-intake'),
-                  }));
-                  assert.equal(cta.governed, 'true', `${profile.name}:${id}: governed intake marker missing`);
-                  assert.ok(!String(cta.href).startsWith('mailto:'), `${profile.name}:${id}: legacy mailto escaped bridge`);
-                }
-
-                const selected = await page.$$eval('[data-remove-service]', nodes => nodes.length);
-                assert.equal(selected, ids.length, `${profile.name}: not all services remained selected`);
-
-                for (const id of [...ids].reverse()) {
-                  const selector = `[data-remove-service="${id}"]`;
-                  await page.evaluate(sel => document.querySelector(sel)?.scrollIntoView({ block: 'center' }), selector);
-                  const before = await page.$$eval('[data-remove-service]', nodes => nodes.length);
-                  await withTimeout(page.click(selector), 5000, `${profile.name}:${id}: remove click`);
-                  await withTimeout(
-                    page.waitForFunction((expected) => document.querySelectorAll('[data-remove-service]').length === expected, {}, before - 1),
-                    5000,
-                    `${profile.name}:${id}: remove render`,
-                  );
-                }
-
-                assert.deepEqual(pageErrors, [], `${profile.name}: page errors: ${pageErrors.join(' | ')}`);
-                if (consoleErrors.length) console.log(`${profile.name}:CONSOLE_ERRORS=${consoleErrors.join(' | ')}`);
-                console.log(`${profile.name}:ADD_REMOVE_ALL=PASS`);
-                await page.close();
-              }
-              console.log('LIVE_ADD_AGENT_FREEZE_DIAGNOSTIC=PASS');
+              assert.equal(normalClick.ok, false, 'expected current live compatibility bridge to reproduce the freeze');
+              console.log('FREEZE_ROOT_CAUSE_COMPATIBILITY_BRIDGE=CONFIRMED');
             } finally {
               await browser.close();
             }
-          })().catch((error) => {
+          })().catch(error => {
             console.error(error?.stack || error);
             process.exit(1);
           });
