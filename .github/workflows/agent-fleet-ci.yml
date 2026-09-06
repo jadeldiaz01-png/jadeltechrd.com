@@ -26,7 +26,7 @@ jobs:
       - name: Checkout immutable revision
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - name: Validate registry and governance
+      - name: Validate registry and deployment governance
         run: python ops/agent-fleet/test_contract.py
 
       - name: Validate Python and shell syntax
@@ -48,21 +48,6 @@ jobs:
           mkdir -p "$JADEL_SOURCES_DIR"/{support-tickets,chatbot,aureus}
           docker compose -f ops/agent-fleet/docker-compose.prod.yml config >/dev/null
           echo 'AGENT_FLEET_COMPOSE_NO_CHATBOT_SECRET=PASS'
-
-      - name: Validate production deployment binding
-        shell: bash
-        run: |
-          set -euo pipefail
-          workflow='.github/workflows/agent-fleet-deploy.yml'
-          grep -Fq 'EXPECTED_SHA: ${{ inputs.expected_sha }}' "$workflow"
-          grep -Fq '^[0-9a-f]{40}$' "$workflow"
-          grep -Fq '+refs/heads/main:refs/remotes/origin/main' "$workflow"
-          grep -Fq 'test "$main_sha" = "$EXPECTED_SHA"' "$workflow"
-          if grep -Fq "test \"\$actual\" = '\${{ inputs.expected_sha }}'" "$workflow"; then
-            echo 'UNSAFE_DISPATCH_SHELL_INTERPOLATION=FAIL'
-            exit 52
-          fi
-          echo 'PROTECTED_MAIN_DEPLOYMENT_BINDING=PASS'
 
       - name: Build and smoke control plane
         shell: bash
