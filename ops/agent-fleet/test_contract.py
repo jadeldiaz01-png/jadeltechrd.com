@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+REPO_ROOT = ROOT.parent.parent
 REGISTRY = json.loads((ROOT / "agents.json").read_text(encoding="utf-8"))
 
 assert REGISTRY["version"] == 1
@@ -69,5 +70,19 @@ for service in ("control-plane:", "support-tickets:", "chatbot:", "aureus:"):
     assert service in compose
 assert "restart: unless-stopped" in compose
 assert "no-new-privileges:true" in compose
+assert "OPENAI_API_KEY: ${OPENAI_API_KEY:-}" in compose
+assert "OPENAI_API_KEY: ${OPENAI_API_KEY:?" not in compose
+
+start_script = (ROOT / "start.sh").read_text(encoding="utf-8")
+assert 'ENABLE_CHATBOT:-false' in start_script
+assert 'OPENAI_API_KEY:?OPENAI_API_KEY is required when ENABLE_CHATBOT=true' in start_script
+
+deploy = (REPO_ROOT / ".github" / "workflows" / "agent-fleet-deploy.yml").read_text(encoding="utf-8")
+assert "EXPECTED_SHA: ${{ inputs.expected_sha }}" in deploy
+assert "[[ ! \"$EXPECTED_SHA\" =~ ^[0-9a-f]{40}$ ]]" in deploy
+assert "+refs/heads/main:refs/remotes/origin/main" in deploy
+assert 'test "$main_sha" = "$EXPECTED_SHA"' in deploy
+assert "test \"$actual\" = '${{ inputs.expected_sha }}'" not in deploy
+assert "persist-credentials: false" in deploy
 
 print("JADEL_AGENT_FLEET_CONTRACT=PASS")
