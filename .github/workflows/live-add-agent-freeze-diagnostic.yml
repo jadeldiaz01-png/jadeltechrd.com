@@ -111,7 +111,8 @@ jobs:
               const ids = await fixed.page.$$eval('[data-add-service]', nodes => nodes.map(n => n.getAttribute('data-add-service')));
               assert.deepEqual(ids, ['architecture','support','sales','social','cineforge','meta','analytics','revenue','quant','governance','multiagent']);
 
-              for (const id of ids) {
+              for (let index = 0; index < ids.length; index += 1) {
+                const id = ids[index];
                 const selector = `[data-add-service="${id}"]`;
                 await fixed.page.evaluate(sel => document.querySelector(sel)?.scrollIntoView({ block: 'center' }), selector);
                 const before = await fixed.page.$$eval('[data-remove-service]', nodes => nodes.length);
@@ -119,19 +120,31 @@ jobs:
                 const click = await tryClick(fixed.page, selector);
                 assert.equal(click.ok, true, `${id}: patched bridge click froze`);
                 await fixed.page.waitForFunction(expected => document.querySelectorAll('[data-remove-service]').length === expected, {}, before + 1);
-                await fixed.page.waitForFunction(() => {
+
+                const expectedServices = ids.slice(0, Math.min(index + 1, 8));
+                await fixed.page.waitForFunction((expected) => {
                   const node = document.querySelector('#request-payment');
-                  return node?.dataset.governedIntake === 'true' && !String(node.getAttribute('href')).startsWith('mailto:');
-                }, { timeout: 2000 });
+                  if (node?.dataset.governedIntake !== 'true') return false;
+                  const url = new URL(node.getAttribute('href'), window.location.origin);
+                  return url.pathname === '/solicitar-proyecto.html' &&
+                    url.searchParams.get('services') === expected.join(',');
+                }, { timeout: 2000 }, expectedServices);
+
                 const elapsed = Date.now() - started;
                 console.log(`PATCHED_${id}_ADD_MS=${elapsed}`);
-                const cta = await fixed.page.$eval('#request-payment', node => ({ href: node.getAttribute('href'), governed: node.dataset.governedIntake }));
+                const cta = await fixed.page.$eval('#request-payment', node => ({
+                  href: node.getAttribute('href'),
+                  governed: node.dataset.governedIntake,
+                }));
                 assert.equal(cta.governed, 'true');
-                assert.ok(!String(cta.href).startsWith('mailto:'), `${id}: legacy mailto escaped governed path`);
+                const ctaUrl = new URL(cta.href, 'http://127.0.0.1:8766');
+                assert.equal(ctaUrl.pathname, '/solicitar-proyecto.html', `${id}: CTA escaped governed intake pathname`);
+                assert.equal(ctaUrl.searchParams.get('services'), expectedServices.join(','), `${id}: CTA service query mismatch`);
               }
 
               assert.deepEqual(fixed.errors, [], `patched page errors: ${fixed.errors.join(' | ')}`);
               console.log('PATCHED_BRIDGE_ALL_11_ADD=PASS');
+              console.log('GOVERNED_INTAKE_PATH_ALL_11=PASS');
               console.log('FREEZE_ROOT_CAUSE_BRIDGE_AB_TEST=CONFIRMED');
               await fixed.page.close();
             } finally {
