@@ -119,6 +119,10 @@ jobs:
                 const click = await tryClick(fixed.page, selector);
                 assert.equal(click.ok, true, `${id}: patched bridge click froze`);
                 await fixed.page.waitForFunction(expected => document.querySelectorAll('[data-remove-service]').length === expected, {}, before + 1);
+                await fixed.page.waitForFunction(() => {
+                  const node = document.querySelector('#request-payment');
+                  return node?.dataset.governedIntake === 'true' && !String(node.getAttribute('href')).startsWith('mailto:');
+                }, { timeout: 2000 });
                 const elapsed = Date.now() - started;
                 console.log(`PATCHED_${id}_ADD_MS=${elapsed}`);
                 const cta = await fixed.page.$eval('#request-payment', node => ({ href: node.getAttribute('href'), governed: node.dataset.governedIntake }));
