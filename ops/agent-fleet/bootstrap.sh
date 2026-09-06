@@ -9,7 +9,7 @@ COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
 SUPPORT_REPO='https://github.com/jadeldiaz01-png/support-tickets.git'
 SUPPORT_SHA='402f7ef50342b138e88d9bc99af551843c882905'
 CHATBOT_REPO='https://github.com/jadeldiaz01-png/chatbot.git'
-CHATBOT_SHA='aa3d3dedc0165d1c383239d05e212125517f3c63'
+CHATBOT_SHA='27d6c202905d73dd417c38c75c083ade5ae26278'
 AUREUS_REPO='https://github.com/jadeldiaz01-png/AUREUS-2026-Autonomous-Universal-Revenue-Efficient-Utility-Scheduler.git'
 AUREUS_SHA='3cb0455194f2861ae69e219fcd0f5affe5095dd9'
 
@@ -54,7 +54,7 @@ if [ "${ENABLE_CHATBOT:-false}" = "true" ]; then
   docker compose -f "$COMPOSE_FILE" --profile chatbot build --pull chatbot
   docker compose -f "$COMPOSE_FILE" --profile chatbot up -d chatbot
 else
-  echo 'CHATBOT_RUNTIME=STAGED_NOT_ENABLED'
+  echo 'CHATBOT_RUNTIME=CONTAINER_QUALIFIED_CONFIG_NOT_ENABLED'
 fi
 
 wait_http() {
