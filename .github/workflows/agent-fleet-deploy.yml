@@ -48,8 +48,11 @@ jobs:
           command -v git
           command -v curl
           command -v docker
+          command -v rsync
+          command -v systemctl
           docker version >/dev/null
           docker compose version >/dev/null
+          sudo -n true
           test -w /opt/jadel-agent-fleet || test -w /opt || {
             echo 'RUNTIME_PATH_WRITABLE=FAIL path=/opt/jadel-agent-fleet'
             exit 60
@@ -73,18 +76,23 @@ jobs:
           fi
           bash ops/agent-fleet/bootstrap.sh
 
-      - name: Install persistent systemd lifecycle
+      - name: Install persistent systemd lifecycle and watchdog
         shell: bash
         run: |
           set -euo pipefail
           sudo install -d -m 0755 /opt/jadeltechrd.com
           sudo rsync -a --delete --exclude '.git/' "$GITHUB_WORKSPACE/" /opt/jadeltechrd.com/
           sudo install -m 0644 ops/agent-fleet/jadel-agent-fleet.service /etc/systemd/system/jadel-agent-fleet.service
+          sudo install -m 0644 ops/agent-fleet/jadel-agent-fleet-watchdog.service /etc/systemd/system/jadel-agent-fleet-watchdog.service
+          sudo install -m 0644 ops/agent-fleet/jadel-agent-fleet-watchdog.timer /etc/systemd/system/jadel-agent-fleet-watchdog.timer
           sudo systemctl daemon-reload
           sudo systemctl enable jadel-agent-fleet.service
           sudo systemctl restart jadel-agent-fleet.service
+          sudo systemctl enable --now jadel-agent-fleet-watchdog.timer
           sudo systemctl is-active --quiet jadel-agent-fleet.service
+          sudo systemctl is-active --quiet jadel-agent-fleet-watchdog.timer
           echo 'JADEL_AGENT_FLEET_SYSTEMD=PASS'
+          echo 'JADEL_AGENT_FLEET_WATCHDOG_TIMER=PASS'
 
       - name: Verify post-deploy health
         shell: bash
@@ -99,6 +107,8 @@ jobs:
             curl -fsS http://127.0.0.1:8502/_stcore/health
           fi
           curl -fsS http://127.0.0.1:9090/v1/agents/status | python3 -m json.tool
+          sudo systemctl start jadel-agent-fleet-watchdog.service
+          sudo systemctl is-failed --quiet jadel-agent-fleet-watchdog.service && exit 71 || true
           echo 'JADEL_AGENT_FLEET_DEPLOYMENT=PASS'
           echo 'LIVE_CAPITAL_ENABLED=false'
           echo 'AUTONOMOUS_PUBLICATION_ENABLED=false'
