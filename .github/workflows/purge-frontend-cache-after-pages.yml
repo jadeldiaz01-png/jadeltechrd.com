@@ -21,8 +21,9 @@ jobs:
     env:
       DOMAIN: jadeltechrd.com
       CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+      CLOUDFLARE_ZONE_ID_RAW: ${{ secrets.CLOUDFLARE_ZONE_ID || secrets.CF_ZONE_ID }}
     steps:
-      - name: Normalize Cloudflare token and resolve zone
+      - name: Normalize Cloudflare authority and resolve zone
         id: zone
         shell: bash
         run: |
@@ -33,13 +34,30 @@ jobs:
           test -n "$token" || { echo 'CLOUDFLARE_TOKEN_PRESENT=NO'; exit 2; }
           echo "::add-mask::$token"
           printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
-          tmp=$(mktemp)
-          code=$(curl -sS -o "$tmp" -w '%{http_code}' \
-            -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' \
-            "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50" || true)
-          test "$code" = 200
-          zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .id' "$tmp" | head -n1)
-          test -n "$zone_id" && test "$zone_id" != null
+
+          zone_id=$(printf '%s' "${CLOUDFLARE_ZONE_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          if [ -n "$zone_id" ]; then
+            echo 'CLOUDFLARE_ZONE_ID_SOURCE=SECRET'
+          else
+            echo 'CLOUDFLARE_ZONE_ID_SOURCE=DISCOVERY'
+            tmp=$(mktemp)
+            code=$(curl -sS -o "$tmp" -w '%{http_code}' \
+              -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' \
+              "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50" || true)
+            echo "CLOUDFLARE_ZONE_DISCOVERY_HTTP=${code}"
+            if [ "$code" != 200 ]; then
+              jq -c '{success,errors}' "$tmp" 2>/dev/null || true
+              echo 'CLOUDFLARE_ZONE_DISCOVERY=FAIL'
+              exit 6
+            fi
+            zone_id=$(jq -r --arg d "$DOMAIN" '.result[]? | select(.name==$d) | .id' "$tmp" | head -n1)
+          fi
+
+          if ! [[ "$zone_id" =~ ^[A-Fa-f0-9]{32}$ ]]; then
+            echo 'CLOUDFLARE_ZONE_ID_VALID=NO'
+            exit 7
+          fi
+          echo "::add-mask::$zone_id"
           echo "zone_id=$zone_id" >> "$GITHUB_OUTPUT"
           echo 'CLOUDFLARE_ZONE_ACCESS=PASS'
 
