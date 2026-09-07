@@ -27,10 +27,37 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
 
+      - name: Stage immutable frontend asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          mkdir -p _site
+          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name _site -exec cp -a {} _site/ \;
+
+          immutable_app="app.${GITHUB_SHA}.js"
+          cp app.js "_site/${immutable_app}"
+          IMMUTABLE_APP="$immutable_app" python - <<'PY'
+          import os
+          from pathlib import Path
+
+          path = Path("_site/index.html")
+          html = path.read_text(encoding="utf-8")
+          old = '<script src="/app.js" defer></script>'
+          new = f'<script src="/{os.environ["IMMUTABLE_APP"]}" defer></script>'
+          if html.count(old) != 1:
+              raise SystemExit("expected exactly one mutable app.js script reference")
+          path.write_text(html.replace(old, new), encoding="utf-8")
+          PY
+
+          grep -Fq "<script src=\"/${immutable_app}\" defer></script>" _site/index.html
+          test -s "_site/${immutable_app}"
+          echo "IMMUTABLE_APP_ASSET=${immutable_app}"
+
       - name: Upload static site
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
         with:
-          path: .
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment
