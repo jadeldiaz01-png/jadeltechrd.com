@@ -44,34 +44,35 @@ jobs:
             fi
           }
 
-          # Exact production cache key first: this is what browsers request.
           check_url EDGE_EXACT "https://jadeltechrd.com/project-intake-bridge.js"
-          # Cache-busted comparison distinguishes an edge object from current origin content.
           check_url EDGE_BUST "https://jadeltechrd.com/project-intake-bridge.js?diag=${GITHUB_RUN_ID}"
-
           check_url GITHUB_IO_PROJECT_EXACT "https://jadeldiaz01-png.github.io/jadeltechrd.com/project-intake-bridge.js"
           check_url GITHUB_IO_PROJECT_BUST "https://jadeldiaz01-png.github.io/jadeltechrd.com/project-intake-bridge.js?diag=${GITHUB_RUN_ID}"
 
-          # Probe each documented GitHub Pages IPv4 endpoint directly while retaining
-          # production Host/SNI. This avoids Cloudflare and localizes stale origin state.
+          origin_success_count=0
+          fixed_origin_count=0
           for ip in 185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153; do
             label="ORIGIN_${ip//./_}"
             check_url "$label" "https://jadeltechrd.com/project-intake-bridge.js" --resolve "jadeltechrd.com:443:${ip}"
-          done
-
-          origin_files=(/tmp/ORIGIN_*.js)
-          fixed_origin_count=0
-          for file in "${origin_files[@]}"; do
-            [ -f "$file" ] || continue
-            if [ "$(fingerprint "$file")" = FIXED ]; then
-              fixed_origin_count=$((fixed_origin_count + 1))
+            file="/tmp/${label}.js"
+            if [ -f "$file" ] && [ -s "$file" ]; then
+              origin_success_count=$((origin_success_count + 1))
+              if [ "$(fingerprint "$file")" = FIXED ]; then
+                fixed_origin_count=$((fixed_origin_count + 1))
+              fi
             fi
           done
+
+          echo "ORIGIN_SUCCESS_COUNT=${origin_success_count}"
           echo "FIXED_ORIGIN_COUNT=${fixed_origin_count}"
-          if [ "$fixed_origin_count" -eq 4 ]; then
-            echo 'GITHUB_PAGES_ORIGIN_FRESH=YES'
+          if [ "$origin_success_count" -eq 4 ]; then
+            if [ "$fixed_origin_count" -eq 4 ]; then
+              echo 'GITHUB_PAGES_ORIGIN_FRESH=YES'
+            else
+              echo 'GITHUB_PAGES_ORIGIN_FRESH=NO'
+            fi
           else
-            echo 'GITHUB_PAGES_ORIGIN_FRESH=NO'
+            echo 'GITHUB_PAGES_ORIGIN_FRESH=INCONCLUSIVE_TLS'
           fi
 
           echo 'DIAG_COMPLETE=YES'
