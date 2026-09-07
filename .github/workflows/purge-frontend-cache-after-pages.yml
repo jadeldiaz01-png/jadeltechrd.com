@@ -68,23 +68,25 @@ jobs:
           fi
           echo 'CLOUDFLARE_CACHE_PURGE=PASS'
 
-      - name: Verify deployed bridge fingerprint
+      - name: Verify deployed single-owner fingerprint
         shell: bash
         run: |
           set -euo pipefail
           for attempt in 1 2 3 4 5 6; do
             curl --fail --silent --show-error --location \
               -H 'Cache-Control: no-cache' \
-              "https://${DOMAIN}/project-intake-bridge.js?verify=${GITHUB_RUN_ID}-${attempt}" \
-              --output /tmp/bridge.js
-            if grep -Fq 'const grid = document.getElementById("services-grid")' /tmp/bridge.js \
-              && ! grep -Fq 'pointermove' /tmp/bridge.js \
-              && ! grep -Fq 'event.stopPropagation()' /tmp/bridge.js; then
-              echo "DEPLOYED_BRIDGE_FINGERPRINT=PASS attempt=${attempt}"
+              "https://${DOMAIN}/app.js?verify=${GITHUB_RUN_ID}-${attempt}" \
+              --output /tmp/app.js
+            home=$(curl --fail --silent --show-error --location -H 'Cache-Control: no-cache' "https://${DOMAIN}/")
+            if grep -Fq 'const INTAKE_PATH = "/solicitar-proyecto.html"' /tmp/app.js \
+              && grep -Fq 'const governedIntakeUrl = (ids)' /tmp/app.js \
+              && ! grep -Fq 'const directCheckout =' /tmp/app.js \
+              && ! grep -Fq '/project-intake-bridge.js' <<<"$home"; then
+              echo "DEPLOYED_SINGLE_OWNER_FINGERPRINT=PASS attempt=${attempt}"
               exit 0
             fi
-            echo "DEPLOYED_BRIDGE_FINGERPRINT=STALE attempt=${attempt}"
+            echo "DEPLOYED_SINGLE_OWNER_FINGERPRINT=STALE attempt=${attempt}"
             sleep 5
           done
-          echo 'DEPLOYED_BRIDGE_FINGERPRINT=FAIL'
+          echo 'DEPLOYED_SINGLE_OWNER_FINGERPRINT=FAIL'
           exit 4
