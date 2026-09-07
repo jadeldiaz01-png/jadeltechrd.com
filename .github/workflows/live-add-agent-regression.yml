@@ -20,21 +20,25 @@ jobs:
       SITE: https://jadeltechrd.com
       PUPPETEER_VERSION: 25.9.0
     steps:
-      - name: Wait for deployed single-owner fingerprint
+      - name: Wait for deployed immutable single-owner fingerprint
         shell: bash
         run: |
           set -euo pipefail
           for attempt in $(seq 1 12); do
-            curl --fail --silent --show-error --location \
-              -H 'Cache-Control: no-cache' \
-              "$SITE/app.js" --output /tmp/live-app.js
             home=$(curl --fail --silent --show-error --location -H 'Cache-Control: no-cache' "$SITE/")
-            if grep -Fq 'const INTAKE_PATH = "/solicitar-proyecto.html"' /tmp/live-app.js \
-              && grep -Fq 'const governedIntakeUrl = (ids)' /tmp/live-app.js \
-              && ! grep -Fq 'const directCheckout =' /tmp/live-app.js \
-              && ! grep -Fq '/project-intake-bridge.js' <<<"$home"; then
-              echo "LIVE_SINGLE_OWNER_FINGERPRINT=PASS attempt=${attempt}"
-              break
+            app_path=$(grep -oE '/app\.[0-9a-f]{40}\.js' <<<"$home" | head -n1 || true)
+            if [ -n "$app_path" ]; then
+              curl --fail --silent --show-error --location \
+                -H 'Cache-Control: no-cache' \
+                "$SITE$app_path" --output /tmp/live-app.js
+              if grep -Fq 'const INTAKE_PATH = "/solicitar-proyecto.html"' /tmp/live-app.js \
+                && grep -Fq 'const governedIntakeUrl = (ids)' /tmp/live-app.js \
+                && ! grep -Fq 'const directCheckout =' /tmp/live-app.js \
+                && ! grep -Fq '/project-intake-bridge.js' <<<"$home"; then
+                echo "LIVE_IMMUTABLE_APP=${app_path}"
+                echo "LIVE_SINGLE_OWNER_FINGERPRINT=PASS attempt=${attempt}"
+                break
+              fi
             fi
             echo "LIVE_SINGLE_OWNER_FINGERPRINT=STALE attempt=${attempt}"
             if [ "$attempt" -eq 12 ]; then
@@ -95,8 +99,14 @@ jobs:
               await page.waitForSelector('[data-add-service="architecture"]', { visible: true });
               await new Promise(resolve => setTimeout(resolve, 500));
 
-              const bridgeLoaded = await page.evaluate(() => [...document.scripts].some((script) => String(script.src).includes('project-intake-bridge.js')));
-              assert.equal(bridgeLoaded, false, 'compatibility bridge must not be loaded');
+              const scriptState = await page.evaluate(() => ({
+                bridgeLoaded: [...document.scripts].some((script) => String(script.src).includes('project-intake-bridge.js')),
+                immutableApps: [...document.scripts]
+                  .map((script) => new URL(script.src || '', window.location.origin).pathname)
+                  .filter((pathname) => /^\/app\.[0-9a-f]{40}\.js$/.test(pathname)),
+              }));
+              assert.equal(scriptState.bridgeLoaded, false, 'compatibility bridge must not be loaded');
+              assert.equal(scriptState.immutableApps.length, 1, 'exactly one immutable app asset must own the configurator');
 
               const ids = await page.$$eval('[data-add-service]', nodes => nodes.map(node => node.getAttribute('data-add-service')));
               assert.deepEqual(ids, ['architecture','support','sales','social','cineforge','meta','analytics','revenue','quant','governance','multiagent']);
@@ -132,6 +142,7 @@ jobs:
               console.log('LIVE_ALL_11_ADD_CONTROLS=PASS');
               console.log('LIVE_GOVERNED_INTAKE_ROUTING=PASS');
               console.log('LIVE_SINGLE_OWNER=PASS');
+              console.log('LIVE_IMMUTABLE_APP=PASS');
             } finally {
               await browser.close();
             }
