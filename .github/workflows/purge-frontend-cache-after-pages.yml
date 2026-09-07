@@ -1,9 +1,6 @@
-name: Purge frontend cache after Pages
+name: Purge mutable frontend cache (manual maintenance)
 
 on:
-  workflow_run:
-    workflows: ["Deploy public site to GitHub Pages"]
-    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -11,9 +8,6 @@ permissions:
 
 jobs:
   purge:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment:
@@ -61,7 +55,7 @@ jobs:
           echo "zone_id=$zone_id" >> "$GITHUB_OUTPUT"
           echo 'CLOUDFLARE_ZONE_ACCESS=PASS'
 
-      - name: Purge mutable frontend assets
+      - name: Purge mutable compatibility assets
         shell: bash
         env:
           ZONE_ID: ${{ steps.zone.outputs.zone_id }}
@@ -70,7 +64,6 @@ jobs:
           payload=$(jq -nc --arg domain "$DOMAIN" '{files:[
             ("https://" + $domain + "/"),
             ("https://" + $domain + "/app.js"),
-            ("https://" + $domain + "/project-intake-bridge.js"),
             ("https://" + $domain + "/styles.css")
           ]}')
           tmp=$(mktemp)
@@ -86,25 +79,18 @@ jobs:
           fi
           echo 'CLOUDFLARE_CACHE_PURGE=PASS'
 
-      - name: Verify deployed single-owner fingerprint
+      - name: Verify deployed immutable single-owner fingerprint
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in 1 2 3 4 5 6; do
-            curl --fail --silent --show-error --location \
-              -H 'Cache-Control: no-cache' \
-              "https://${DOMAIN}/app.js?verify=${GITHUB_RUN_ID}-${attempt}" \
-              --output /tmp/app.js
-            home=$(curl --fail --silent --show-error --location -H 'Cache-Control: no-cache' "https://${DOMAIN}/")
-            if grep -Fq 'const INTAKE_PATH = "/solicitar-proyecto.html"' /tmp/app.js \
-              && grep -Fq 'const governedIntakeUrl = (ids)' /tmp/app.js \
-              && ! grep -Fq 'const directCheckout =' /tmp/app.js \
-              && ! grep -Fq '/project-intake-bridge.js' <<<"$home"; then
-              echo "DEPLOYED_SINGLE_OWNER_FINGERPRINT=PASS attempt=${attempt}"
-              exit 0
-            fi
-            echo "DEPLOYED_SINGLE_OWNER_FINGERPRINT=STALE attempt=${attempt}"
-            sleep 5
-          done
-          echo 'DEPLOYED_SINGLE_OWNER_FINGERPRINT=FAIL'
-          exit 4
+          home=$(curl --fail --silent --show-error --location -H 'Cache-Control: no-cache' "https://${DOMAIN}/")
+          app_path=$(grep -oE '/app\.[0-9a-f]{40}\.js' <<<"$home" | head -n1 || true)
+          test -n "$app_path"
+          curl --fail --silent --show-error --location -H 'Cache-Control: no-cache' \
+            "https://${DOMAIN}${app_path}" --output /tmp/app.js
+          grep -Fq 'const INTAKE_PATH = "/solicitar-proyecto.html"' /tmp/app.js
+          grep -Fq 'const governedIntakeUrl = (ids)' /tmp/app.js
+          ! grep -Fq 'const directCheckout =' /tmp/app.js
+          ! grep -Fq '/project-intake-bridge.js' <<<"$home"
+          echo "DEPLOYED_IMMUTABLE_APP=${app_path}"
+          echo 'DEPLOYED_SINGLE_OWNER_FINGERPRINT=PASS'
