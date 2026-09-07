@@ -20,23 +20,25 @@ jobs:
       SITE: https://jadeltechrd.com
       PUPPETEER_VERSION: 25.9.0
     steps:
-      - name: Wait for deployed bridge fingerprint
+      - name: Wait for deployed single-owner fingerprint
         shell: bash
         run: |
           set -euo pipefail
           for attempt in $(seq 1 12); do
             curl --fail --silent --show-error --location \
               -H 'Cache-Control: no-cache' \
-              "$SITE/project-intake-bridge.js" --output /tmp/live-bridge.js
-            if grep -Fq 'const grid = document.getElementById("services-grid")' /tmp/live-bridge.js \
-              && ! grep -Fq 'pointermove' /tmp/live-bridge.js \
-              && ! grep -Fq 'event.stopPropagation()' /tmp/live-bridge.js; then
-              echo "LIVE_BRIDGE_FINGERPRINT=PASS attempt=${attempt}"
+              "$SITE/app.js" --output /tmp/live-app.js
+            home=$(curl --fail --silent --show-error --location -H 'Cache-Control: no-cache' "$SITE/")
+            if grep -Fq 'const INTAKE_PATH = "/solicitar-proyecto.html"' /tmp/live-app.js \
+              && grep -Fq 'const governedIntakeUrl = (ids)' /tmp/live-app.js \
+              && ! grep -Fq 'const directCheckout =' /tmp/live-app.js \
+              && ! grep -Fq '/project-intake-bridge.js' <<<"$home"; then
+              echo "LIVE_SINGLE_OWNER_FINGERPRINT=PASS attempt=${attempt}"
               break
             fi
-            echo "LIVE_BRIDGE_FINGERPRINT=STALE attempt=${attempt}"
+            echo "LIVE_SINGLE_OWNER_FINGERPRINT=STALE attempt=${attempt}"
             if [ "$attempt" -eq 12 ]; then
-              echo 'LIVE_BRIDGE_FINGERPRINT=FAIL'
+              echo 'LIVE_SINGLE_OWNER_FINGERPRINT=FAIL'
               exit 5
             fi
             sleep 5
@@ -93,6 +95,9 @@ jobs:
               await page.waitForSelector('[data-add-service="architecture"]', { visible: true });
               await new Promise(resolve => setTimeout(resolve, 500));
 
+              const bridgeLoaded = await page.evaluate(() => [...document.scripts].some((script) => String(script.src).includes('project-intake-bridge.js')));
+              assert.equal(bridgeLoaded, false, 'compatibility bridge must not be loaded');
+
               const ids = await page.$$eval('[data-add-service]', nodes => nodes.map(node => node.getAttribute('data-add-service')));
               assert.deepEqual(ids, ['architecture','support','sales','social','cineforge','meta','analytics','revenue','quant','governance','multiagent']);
 
@@ -109,10 +114,13 @@ jobs:
                 await page.waitForFunction((expected) => {
                   const node = document.querySelector('#request-payment');
                   if (node?.dataset.governedIntake !== 'true') return false;
-                  const url = new URL(node.getAttribute('href'), window.location.origin);
+                  const raw = node.getAttribute('href') || '';
+                  if (raw.startsWith('mailto:') || raw.startsWith('https://www.paypal.com')) return false;
+                  const url = new URL(raw, window.location.origin);
                   return url.origin === window.location.origin &&
                     url.pathname === '/solicitar-proyecto.html' &&
-                    url.searchParams.get('services') === expected.join(',');
+                    url.searchParams.get('services') === expected.join(',') &&
+                    !node.hasAttribute('target');
                 }, { timeout: 2000 }, expectedServices);
 
                 const elapsed = Date.now() - started;
@@ -123,6 +131,7 @@ jobs:
               assert.deepEqual(pageErrors, [], `page errors: ${pageErrors.join(' | ')}`);
               console.log('LIVE_ALL_11_ADD_CONTROLS=PASS');
               console.log('LIVE_GOVERNED_INTAKE_ROUTING=PASS');
+              console.log('LIVE_SINGLE_OWNER=PASS');
             } finally {
               await browser.close();
             }

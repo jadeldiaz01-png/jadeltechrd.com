@@ -29,7 +29,7 @@ jobs:
           set -euo pipefail
           for url in \
             "$SITE/" \
-            "$SITE/project-intake-bridge.js" \
+            "$SITE/app.js" \
             "$SITE/project-request.js" \
             "$SITE/project-request.css" \
             "$SITE/solicitar-proyecto.html"; do
@@ -39,14 +39,17 @@ jobs:
             test "$code" = 200
             test -s /tmp/body
           done
-          curl --fail --silent --show-error --output /tmp/bridge.js "$SITE/project-intake-bridge.js"
+          curl --fail --silent --show-error --output /tmp/app.js "$SITE/app.js"
           curl --fail --silent --show-error --output /tmp/intake.html "$SITE/solicitar-proyecto.html"
           curl --fail --silent --show-error --output /tmp/home.html "$SITE/"
-          grep -Fq '/project-intake-bridge.js' /tmp/home.html
-          grep -Fq '/solicitar-proyecto.html' /tmp/bridge.js
+          ! grep -Fq '/project-intake-bridge.js' /tmp/home.html
+          grep -Fq 'const INTAKE_PATH = "/solicitar-proyecto.html"' /tmp/app.js
+          grep -Fq 'const governedIntakeUrl = (ids)' /tmp/app.js
+          ! grep -Fq 'const directCheckout =' /tmp/app.js
           grep -Fq 'id="project-request-form"' /tmp/intake.html
           grep -Fq 'challenges.cloudflare.com/turnstile' /tmp/intake.html
           echo 'PUBLIC_INTAKE_ASSETS=PASS'
+          echo 'PUBLIC_SINGLE_OWNER_SOURCE=PASS'
 
       - name: Verify API health, CORS and public Turnstile config
         shell: bash
@@ -92,12 +95,8 @@ jobs:
           actual=$(node -p "require('puppeteer/package.json').version")
           test "$actual" = "$PUPPETEER_VERSION"
           echo "PUPPETEER_VERSION=PASS version=$actual"
-          node - <<'NODE'
-          const puppeteer = require('puppeteer');
-          console.log(`PUPPETEER_EXECUTABLE=${puppeteer.executablePath()}`);
-          NODE
 
-      - name: Exercise governed CTA bridge in controlled browser
+      - name: Exercise single-owner governed CTA in real browser
         shell: bash
         run: |
           set -euo pipefail
@@ -105,7 +104,6 @@ jobs:
           SITE="$SITE" node <<'NODE'
           const puppeteer = require('puppeteer');
           const assert = require('node:assert/strict');
-          const fs = require('node:fs');
 
           (async () => {
             const browser = await puppeteer.launch({
@@ -114,83 +112,44 @@ jobs:
               args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
             });
             try {
-              console.log(`BROWSER_VERSION=${await browser.version()}`);
-              console.log(`BROWSER_EXECUTABLE=${await puppeteer.executablePath()}`);
-
-              const probe = await browser.newPage();
-              await probe.setContent('<button id="probe" onclick="window.__clicked=true">probe</button>');
-              await probe.click('#probe');
-              assert.equal(await probe.evaluate(() => window.__clicked), true);
-              console.log('BROWSER_INPUT_PROBE=PASS');
-              await probe.close();
-
               const page = await browser.newPage();
               page.setDefaultTimeout(15000);
+              await page.setCacheEnabled(false);
               const pageErrors = [];
               page.on('pageerror', (error) => pageErrors.push(String(error)));
-              const started = Date.now();
-              await page.setContent(`
-                <!doctype html>
-                <html>
-                  <head><base href="${process.env.SITE}/"></head>
-                  <body>
-                    <header class="site-header"><nav class="nav"></nav></header>
-                    <main class="commercial-home">
-                      <section id="servicios">
-                        <button data-add-service="architecture">Architecture</button>
-                        <button data-add-service="support">Support</button>
-                        <div id="selected-services">
-                          <button data-remove-service="architecture">Architecture</button>
-                          <button data-remove-service="support">Support</button>
-                        </div>
-                        <strong id="estimate-setup">$1,150</strong>
-                        <strong id="estimate-monthly">$149</strong>
-                        <a id="request-payment" href="mailto:test@example.invalid">Solicitar alcance y pago</a>
-                      </section>
-                    </main>
-                  </body>
-                </html>`,
-                { waitUntil: 'domcontentloaded', timeout: 20000 }
-              );
-              await page.addScriptTag({ content: fs.readFileSync('/tmp/bridge.js', 'utf8') });
-              await page.waitForFunction(() => document.getElementById('request-payment')?.dataset?.governedIntake === 'true');
+              await page.goto(process.env.SITE, { waitUntil: 'domcontentloaded', timeout: 20000 });
+              await page.waitForSelector('[data-add-service="architecture"]', { visible: true });
 
-              const state = await page.evaluate(() => ({
-                selected: document.querySelectorAll('[data-remove-service]').length,
-                setup: document.getElementById('estimate-setup')?.textContent?.trim(),
-                monthly: document.getElementById('estimate-monthly')?.textContent?.trim(),
-                text: document.getElementById('request-payment')?.textContent?.trim(),
-                href: document.getElementById('request-payment')?.getAttribute('href'),
-                governed: document.getElementById('request-payment')?.dataset?.governedIntake,
-                nav: document.querySelector('[data-intake-nav="true"]')?.getAttribute('href'),
-              }));
+              assert.equal(await page.evaluate(() => [...document.scripts].some((script) => String(script.src).includes('project-intake-bridge.js'))), false);
+              await page.click('[data-add-service="architecture"]');
+              await page.click('[data-add-service="support"]');
+              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 2);
 
-              assert.equal(state.selected, 2);
-              assert.equal(state.setup, '$1,150');
-              assert.equal(state.monthly, '$149');
+              const state = await page.evaluate(() => {
+                const node = document.getElementById('request-payment');
+                return {
+                  text: node?.textContent?.trim(),
+                  href: node?.getAttribute('href'),
+                  governed: node?.dataset?.governedIntake,
+                  target: node?.getAttribute('target'),
+                };
+              });
               assert.equal(state.text, 'Solicitar proyecto');
               assert.equal(state.governed, 'true');
-              assert.match(state.href || '', /^\/solicitar-proyecto\.html\?services=/);
-              assert.equal(state.nav, '/solicitar-proyecto.html');
+              assert.equal(state.target, null);
               assert.ok(!String(state.href).startsWith('mailto:'));
+              assert.ok(!String(state.href).startsWith('https://www.paypal.com'));
+              const target = new URL(state.href, process.env.SITE);
+              assert.equal(target.origin, process.env.SITE);
+              assert.equal(target.pathname, '/solicitar-proyecto.html');
+              assert.equal(target.searchParams.get('services'), 'architecture,support');
               assert.deepEqual(pageErrors, []);
-
-              await Promise.all([
-                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }),
-                page.click('#request-payment'),
-              ]);
-              const destination = new URL(page.url());
-              assert.equal(destination.origin, process.env.SITE);
-              assert.equal(destination.pathname, '/solicitar-proyecto.html');
-              const ids = new Set((destination.searchParams.get('services') || '').split(','));
-              assert.deepEqual(ids, new Set(['architecture', 'support']));
-              console.log(`GOVERNED_CTA_BRIDGE_MS=${Date.now() - started}`);
-              console.log('GOVERNED_CTA_BROWSER_E2E=PASS');
+              console.log('GOVERNED_CTA_SINGLE_OWNER_BROWSER_E2E=PASS');
             } finally {
               await browser.close();
             }
           })().catch((error) => {
-            console.error(error);
+            console.error(error?.stack || error);
             process.exit(1);
           });
           NODE
