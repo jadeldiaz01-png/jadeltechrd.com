@@ -1,0 +1,56 @@
+name: Single-owner governed intake contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app.js
+      - index.html
+      - project-intake-bridge.js
+      - .github/workflows/single-owner-intake-contract.yml
+      - .github/workflows/live-add-agent-regression.yml
+      - .github/workflows/governed-intake-live-contract.yml
+      - .github/workflows/purge-frontend-cache-after-pages.yml
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-single-owner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate single-owner configurator contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check app.js
+          test ! -e project-intake-bridge.js
+          ! grep -Fq '/project-intake-bridge.js' index.html
+          grep -Fq 'const INTAKE_PATH = "/solicitar-proyecto.html"' app.js
+          grep -Fq 'const governedIntakeUrl = (ids)' app.js
+          grep -Fq 'requestPayment.setAttribute("data-governed-intake", "true")' app.js
+          grep -Fq 'requestPayment.href = disabled ? "#servicios" : governedIntakeUrl(ids);' app.js
+          ! grep -Fq 'const directCheckout =' app.js
+          ! grep -Fq 'requestPayment.href = disabled ? "#pagos"' app.js
+          grep -Fq 'renderEstimate();' app.js
+          echo 'SINGLE_OWNER_SOURCE_CONTRACT=PASS'
+      - name: Validate all eleven service IDs remain present
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('app.js').read_text(encoding='utf-8')
+          expected = ['architecture','support','sales','social','cineforge','meta','analytics','revenue','quant','governance','multiagent']
+          missing = [service_id for service_id in expected if f'id: "{service_id}"' not in text]
+          if missing:
+              raise SystemExit(f'MISSING_SERVICE_IDS={missing}')
+          print('ALL_11_SERVICE_IDS=PASS')
+          PY
