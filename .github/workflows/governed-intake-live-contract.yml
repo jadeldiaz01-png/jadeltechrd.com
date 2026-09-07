@@ -29,7 +29,6 @@ jobs:
           set -euo pipefail
           for url in \
             "$SITE/" \
-            "$SITE/app.js" \
             "$SITE/project-request.js" \
             "$SITE/project-request.css" \
             "$SITE/solicitar-proyecto.html"; do
@@ -39,15 +38,20 @@ jobs:
             test "$code" = 200
             test -s /tmp/body
           done
-          curl --fail --silent --show-error --output /tmp/app.js "$SITE/app.js"
+
           curl --fail --silent --show-error --output /tmp/intake.html "$SITE/solicitar-proyecto.html"
           curl --fail --silent --show-error --output /tmp/home.html "$SITE/"
+          app_path=$(grep -oE '/app\.[0-9a-f]{40}\.js' /tmp/home.html | head -n1 || true)
+          test -n "$app_path"
+          curl --fail --silent --show-error --output /tmp/app.js "$SITE$app_path"
+
           ! grep -Fq '/project-intake-bridge.js' /tmp/home.html
           grep -Fq 'const INTAKE_PATH = "/solicitar-proyecto.html"' /tmp/app.js
           grep -Fq 'const governedIntakeUrl = (ids)' /tmp/app.js
           ! grep -Fq 'const directCheckout =' /tmp/app.js
           grep -Fq 'id="project-request-form"' /tmp/intake.html
           grep -Fq 'challenges.cloudflare.com/turnstile' /tmp/intake.html
+          echo "PUBLIC_IMMUTABLE_APP=$app_path"
           echo 'PUBLIC_INTAKE_ASSETS=PASS'
           echo 'PUBLIC_SINGLE_OWNER_SOURCE=PASS'
 
@@ -120,7 +124,18 @@ jobs:
               await page.goto(process.env.SITE, { waitUntil: 'domcontentloaded', timeout: 20000 });
               await page.waitForSelector('[data-add-service="architecture"]', { visible: true });
 
-              assert.equal(await page.evaluate(() => [...document.scripts].some((script) => String(script.src).includes('project-intake-bridge.js'))), false);
+              const scriptState = await page.evaluate(() => ({
+                bridgeLoaded: [...document.scripts].some((script) => String(script.src).includes('project-intake-bridge.js')),
+                immutableApps: [...document.scripts]
+                  .map((script) => {
+                    try { return new URL(script.src || '', window.location.origin).pathname; }
+                    catch { return ''; }
+                  })
+                  .filter((pathname) => /^\/app\.[0-9a-f]{40}\.js$/.test(pathname)),
+              }));
+              assert.equal(scriptState.bridgeLoaded, false);
+              assert.equal(scriptState.immutableApps.length, 1);
+
               await page.click('[data-add-service="architecture"]');
               await page.click('[data-add-service="support"]');
               await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 2);
@@ -145,6 +160,7 @@ jobs:
               assert.equal(target.searchParams.get('services'), 'architecture,support');
               assert.deepEqual(pageErrors, []);
               console.log('GOVERNED_CTA_SINGLE_OWNER_BROWSER_E2E=PASS');
+              console.log('GOVERNED_CTA_IMMUTABLE_APP=PASS');
             } finally {
               await browser.close();
             }
