@@ -14,33 +14,64 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Compare deployed paths
+      - name: Compare exact edge cache key and Pages origins
         shell: bash
         run: |
           set -euo pipefail
           expected='const grid = document.getElementById("services-grid")'
 
+          fingerprint() {
+            file="$1"
+            if grep -Fq "$expected" "$file" && ! grep -Fq 'pointermove' "$file" && ! grep -Fq 'event.stopPropagation()' "$file"; then
+              printf 'FIXED'
+            else
+              printf 'STALE_OR_OTHER'
+            fi
+          }
+
           check_url() {
             label="$1"
             url="$2"
+            shift 2
             file="/tmp/${label}.js"
             headers="/tmp/${label}.headers"
-            code=$(curl -sSL -D "$headers" -o "$file" -w '%{http_code}' "$url" || true)
+            code=$(curl -sSL "$@" -D "$headers" -o "$file" -w '%{http_code}' "$url" || true)
             echo "${label}_HTTP=${code}"
             if [ "$code" = 200 ]; then
               echo "${label}_SHA256=$(sha256sum "$file" | awk '{print $1}')"
-              if grep -Fq "$expected" "$file" && ! grep -Fq 'pointermove' "$file" && ! grep -Fq 'event.stopPropagation()' "$file"; then
-                echo "${label}_FINGERPRINT=FIXED"
-              else
-                echo "${label}_FINGERPRINT=STALE_OR_OTHER"
-              fi
+              echo "${label}_FINGERPRINT=$(fingerprint "$file")"
               grep -Ei '^(HTTP/|age:|cache-control:|cf-cache-status:|etag:|last-modified:|server:|location:|x-github-request-id:)' "$headers" || true
             fi
           }
 
-          check_url EDGE_ROOT "https://jadeltechrd.com/project-intake-bridge.js?diag=${GITHUB_RUN_ID}"
-          check_url EDGE_PROJECT_PATH "https://jadeltechrd.com/jadeltechrd.com/project-intake-bridge.js?diag=${GITHUB_RUN_ID}"
-          check_url GITHUB_IO_PROJECT "https://jadeldiaz01-png.github.io/jadeltechrd.com/project-intake-bridge.js?diag=${GITHUB_RUN_ID}"
-          check_url GITHUB_IO_ROOT "https://jadeldiaz01-png.github.io/project-intake-bridge.js?diag=${GITHUB_RUN_ID}"
+          # Exact production cache key first: this is what browsers request.
+          check_url EDGE_EXACT "https://jadeltechrd.com/project-intake-bridge.js"
+          # Cache-busted comparison distinguishes an edge object from current origin content.
+          check_url EDGE_BUST "https://jadeltechrd.com/project-intake-bridge.js?diag=${GITHUB_RUN_ID}"
+
+          check_url GITHUB_IO_PROJECT_EXACT "https://jadeldiaz01-png.github.io/jadeltechrd.com/project-intake-bridge.js"
+          check_url GITHUB_IO_PROJECT_BUST "https://jadeldiaz01-png.github.io/jadeltechrd.com/project-intake-bridge.js?diag=${GITHUB_RUN_ID}"
+
+          # Probe each documented GitHub Pages IPv4 endpoint directly while retaining
+          # production Host/SNI. This avoids Cloudflare and localizes stale origin state.
+          for ip in 185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153; do
+            label="ORIGIN_${ip//./_}"
+            check_url "$label" "https://jadeltechrd.com/project-intake-bridge.js" --resolve "jadeltechrd.com:443:${ip}"
+          done
+
+          origin_files=(/tmp/ORIGIN_*.js)
+          fixed_origin_count=0
+          for file in "${origin_files[@]}"; do
+            [ -f "$file" ] || continue
+            if [ "$(fingerprint "$file")" = FIXED ]; then
+              fixed_origin_count=$((fixed_origin_count + 1))
+            fi
+          done
+          echo "FIXED_ORIGIN_COUNT=${fixed_origin_count}"
+          if [ "$fixed_origin_count" -eq 4 ]; then
+            echo 'GITHUB_PAGES_ORIGIN_FRESH=YES'
+          else
+            echo 'GITHUB_PAGES_ORIGIN_FRESH=NO'
+          fi
 
           echo 'DIAG_COMPLETE=YES'
