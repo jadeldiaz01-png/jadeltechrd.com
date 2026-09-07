@@ -1,0 +1,645 @@
+name: Apply single-owner intake refactor
+
+on:
+  push:
+    branches: [feat/single-owner-governed-intake]
+    paths: ['.github/workflows/apply-single-owner-refactor.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: feat/single-owner-governed-intake
+          fetch-depth: 0
+      - name: Apply deterministic refactor
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, got {count}')
+              return text.replace(old, new, 1)
+
+          app_path = Path('app.js')
+          app = app_path.read_text(encoding='utf-8')
+
+          app = replace_once(
+              app,
+              '  const DATA_DELETION_URL = "/?view=data-deletion";\n',
+              '  const DATA_DELETION_URL = "/?view=data-deletion";\n'
+              '  const INTAKE_PATH = "/solicitar-proyecto.html";\n'
+              '  const SERVICE_ID_PATTERN = /^[a-z0-9-]{1,64}$/;\n'
+              '  const MAX_INTAKE_SERVICES = 8;\n',
+              'single-owner constants',
+          )
+
+          app = replace_once(
+              app,
+              '  const formatMoney = (value) => new Intl.NumberFormat("en-US", {\n'
+              '    style: "currency",\n'
+              '    currency: "USD",\n'
+              '    maximumFractionDigits: 0,\n'
+              '  }).format(value);\n',
+              '  const formatMoney = (value) => new Intl.NumberFormat("en-US", {\n'
+              '    style: "currency",\n'
+              '    currency: "USD",\n'
+              '    maximumFractionDigits: 0,\n'
+              '  }).format(value);\n\n'
+              '  const governedIntakeUrl = (ids) => {\n'
+              '    const safeIds = [...new Set(ids)]\n'
+              '      .filter((id) => SERVICE_ID_PATTERN.test(id || ""))\n'
+              '      .slice(0, MAX_INTAKE_SERVICES);\n'
+              '    if (!safeIds.length) return INTAKE_PATH;\n'
+              '    const params = new URLSearchParams({ services: safeIds.join(",") });\n'
+              '    return `${INTAKE_PATH}?${params.toString()}`;\n'
+              '  };\n',
+              'governed intake URL builder',
+          )
+
+          old_cta = '''      if (requestPayment) {
+        const disabled = chosen.length === 0;
+        const directCheckout = chosen.length === 1 ? chosen[0].paymentLinks?.setup : "";
+        requestPayment.classList.toggle("is-disabled", disabled);
+        requestPayment.setAttribute("aria-disabled", String(disabled));
+        requestPayment.textContent = directCheckout ? "Pagar servicio con PayPal" : "Solicitar alcance y pago";
+        requestPayment.href = disabled ? "#pagos" : directCheckout || `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Solicitud Nexus Jadel Tech RD")}&body=${encodeURIComponent(buildBrief(chosen, setup, monthly))}`;
+        if (directCheckout) {
+          requestPayment.setAttribute("target", "_blank");
+          requestPayment.setAttribute("rel", "noopener noreferrer");
+        } else {
+          requestPayment.removeAttribute("target");
+          requestPayment.removeAttribute("rel");
+        }
+      }
+'''
+          new_cta = '''      if (requestPayment) {
+        const disabled = chosen.length === 0;
+        const ids = chosen.map((service) => service.id);
+        requestPayment.classList.toggle("is-disabled", disabled);
+        requestPayment.setAttribute("aria-disabled", String(disabled));
+        requestPayment.setAttribute("data-governed-intake", "true");
+        requestPayment.textContent = disabled ? "Selecciona servicios para solicitar proyecto" : "Solicitar proyecto";
+        requestPayment.href = disabled ? "#servicios" : governedIntakeUrl(ids);
+        requestPayment.removeAttribute("target");
+        requestPayment.removeAttribute("rel");
+      }
+'''
+          app = replace_once(app, old_cta, new_cta, 'legacy configurator checkout/mailto block')
+
+          app = replace_once(
+              app,
+              '    selectedContainer?.addEventListener("click", (event) => {\n'
+              '      const button = event.target.closest("[data-remove-service]");\n'
+              '      if (!button) return;\n'
+              '      selected.delete(button.dataset.removeService);\n'
+              '      renderEstimate();\n'
+              '    });\n\n'
+              '    document.querySelectorAll("[data-filter]").forEach((button) => {\n',
+              '    selectedContainer?.addEventListener("click", (event) => {\n'
+              '      const button = event.target.closest("[data-remove-service]");\n'
+              '      if (!button) return;\n'
+              '      selected.delete(button.dataset.removeService);\n'
+              '      renderEstimate();\n'
+              '    });\n\n'
+              '    requestPayment?.addEventListener("click", (event) => {\n'
+              '      if (selected.size > 0) return;\n'
+              '      event.preventDefault();\n'
+              '      document.getElementById("servicios")?.scrollIntoView({ behavior: "smooth", block: "start" });\n'
+              '    });\n\n'
+              '    renderEstimate();\n\n'
+              '    document.querySelectorAll("[data-filter]").forEach((button) => {\n',
+              'initialize single-owner CTA',
+          )
+
+          app = replace_once(
+              app,
+              '      <a href="/#gobernanza" data-home-nav>Seguridad</a>\n'
+              '      <a href="/?view=privacy" data-nav="privacy">Privacidad</a>\n',
+              '      <a href="/#gobernanza" data-home-nav>Seguridad</a>\n'
+              '      <a href="/solicitar-proyecto.html" data-intake-nav="true">Solicitar proyecto</a>\n'
+              '      <a href="/?view=privacy" data-nav="privacy">Privacidad</a>\n',
+              'single-owner intake nav',
+          )
+
+          if 'const directCheckout =' in app:
+              raise SystemExit('legacy directCheckout remains')
+          if 'requestPayment.href = disabled ? "#pagos"' in app:
+              raise SystemExit('legacy request-payment mailto/checkout route remains')
+          app_path.write_text(app, encoding='utf-8')
+
+          index_path = Path('index.html')
+          index = index_path.read_text(encoding='utf-8')
+          index = replace_once(
+              index,
+              '  <script src="/project-intake-bridge.js" defer></script>\n',
+              '',
+              'bridge script tag',
+          )
+          index_path.write_text(index, encoding='utf-8')
+
+          bridge = Path('project-intake-bridge.js')
+          if not bridge.exists():
+              raise SystemExit('project-intake-bridge.js unexpectedly absent before refactor')
+          bridge.unlink()
+
+          Path('.github/workflows/live-add-agent-regression.yml').write_text('''name: Live add-agent regression
+
+on:
+  workflow_run:
+    workflows: ["Deploy public site to GitHub Pages"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live-add-controls:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SITE: https://jadeltechrd.com
+      PUPPETEER_VERSION: 25.9.0
+    steps:
+      - name: Wait for deployed single-owner fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 12); do
+            curl --fail --silent --show-error --location \
+              -H 'Cache-Control: no-cache' \
+              "$SITE/app.js" --output /tmp/live-app.js
+            home=$(curl --fail --silent --show-error --location -H 'Cache-Control: no-cache' "$SITE/")
+            if grep -Fq 'const INTAKE_PATH = "/solicitar-proyecto.html"' /tmp/live-app.js \
+              && grep -Fq 'const governedIntakeUrl = (ids)' /tmp/live-app.js \
+              && ! grep -Fq 'const directCheckout =' /tmp/live-app.js \
+              && ! grep -Fq '/project-intake-bridge.js' <<<"$home"; then
+              echo "LIVE_SINGLE_OWNER_FINGERPRINT=PASS attempt=${attempt}"
+              break
+            fi
+            echo "LIVE_SINGLE_OWNER_FINGERPRINT=STALE attempt=${attempt}"
+            if [ "$attempt" -eq 12 ]; then
+              echo 'LIVE_SINGLE_OWNER_FINGERPRINT=FAIL'
+              exit 5
+            fi
+            sleep 5
+          done
+
+      - name: Install pinned Puppeteer and Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/live-add-agent-regression"
+          mkdir -p "$work"
+          cd "$work"
+          npm init -y >/dev/null 2>&1
+          npm install --ignore-scripts --no-audit --no-fund --save-exact "puppeteer@${PUPPETEER_VERSION}"
+          npx puppeteer browsers install chrome
+          test "$(node -p "require('puppeteer/package.json').version")" = "$PUPPETEER_VERSION"
+
+      - name: Click every deployed Add control on Android-sized viewport
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/live-add-agent-regression"
+          SITE="$SITE" node <<'NODE'
+          const puppeteer = require('puppeteer');
+          const assert = require('node:assert/strict');
+
+          async function clickWithin(page, selector, ms = 3000) {
+            let timer;
+            try {
+              return await Promise.race([
+                page.click(selector).then(() => true),
+                new Promise(resolve => { timer = setTimeout(() => resolve(false), ms); }),
+              ]);
+            } finally {
+              clearTimeout(timer);
+            }
+          }
+
+          (async () => {
+            const browser = await puppeteer.launch({
+              headless: true,
+              protocolTimeout: 30000,
+              args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+            });
+            try {
+              const page = await browser.newPage();
+              page.setDefaultTimeout(8000);
+              await page.setViewport({ width: 412, height: 915, deviceScaleFactor: 2.625, isMobile: true, hasTouch: true });
+              const pageErrors = [];
+              page.on('pageerror', error => pageErrors.push(String(error)));
+
+              await page.setCacheEnabled(false);
+              await page.goto(process.env.SITE, { waitUntil: 'domcontentloaded', timeout: 20000 });
+              await page.waitForSelector('[data-add-service="architecture"]', { visible: true });
+              await new Promise(resolve => setTimeout(resolve, 500));
+
+              const bridgeLoaded = await page.evaluate(() => [...document.scripts].some((script) => String(script.src).includes('project-intake-bridge.js')));
+              assert.equal(bridgeLoaded, false, 'compatibility bridge must not be loaded');
+
+              const ids = await page.$$eval('[data-add-service]', nodes => nodes.map(node => node.getAttribute('data-add-service')));
+              assert.deepEqual(ids, ['architecture','support','sales','social','cineforge','meta','analytics','revenue','quant','governance','multiagent']);
+
+              for (let index = 0; index < ids.length; index += 1) {
+                const id = ids[index];
+                const selector = `[data-add-service="${id}"]`;
+                await page.evaluate(sel => document.querySelector(sel)?.scrollIntoView({ block: 'center' }), selector);
+                const before = await page.$$eval('[data-remove-service]', nodes => nodes.length);
+                const started = Date.now();
+                assert.equal(await clickWithin(page, selector), true, `${id}: deployed Add control froze`);
+                await page.waitForFunction(expected => document.querySelectorAll('[data-remove-service]').length === expected, {}, before + 1);
+
+                const expectedServices = ids.slice(0, Math.min(index + 1, 8));
+                await page.waitForFunction((expected) => {
+                  const node = document.querySelector('#request-payment');
+                  if (node?.dataset.governedIntake !== 'true') return false;
+                  const raw = node.getAttribute('href') || '';
+                  if (raw.startsWith('mailto:') || raw.startsWith('https://www.paypal.com')) return false;
+                  const url = new URL(raw, window.location.origin);
+                  return url.origin === window.location.origin &&
+                    url.pathname === '/solicitar-proyecto.html' &&
+                    url.searchParams.get('services') === expected.join(',') &&
+                    !node.hasAttribute('target');
+                }, { timeout: 2000 }, expectedServices);
+
+                const elapsed = Date.now() - started;
+                assert.ok(elapsed < 3000, `${id}: interaction latency exceeded 3 seconds`);
+                console.log(`LIVE_${id}_ADD_MS=${elapsed}`);
+              }
+
+              assert.deepEqual(pageErrors, [], `page errors: ${pageErrors.join(' | ')}`);
+              console.log('LIVE_ALL_11_ADD_CONTROLS=PASS');
+              console.log('LIVE_GOVERNED_INTAKE_ROUTING=PASS');
+              console.log('LIVE_SINGLE_OWNER=PASS');
+            } finally {
+              await browser.close();
+            }
+          })().catch(error => {
+            console.error(error?.stack || error);
+            process.exit(1);
+          });
+          NODE
+''', encoding='utf-8')
+
+          Path('.github/workflows/governed-intake-live-contract.yml').write_text('''name: Governed intake live contract
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 */6 * * *'
+  workflow_run:
+    workflows: ['Deploy public site to GitHub Pages']
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live-contract:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      SITE: https://jadeltechrd.com
+      API: https://intake.jadeltechrd.com
+      PUPPETEER_VERSION: 25.9.0
+    steps:
+      - name: Verify governed intake public assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in \
+            "$SITE/" \
+            "$SITE/app.js" \
+            "$SITE/project-request.js" \
+            "$SITE/project-request.css" \
+            "$SITE/solicitar-proyecto.html"; do
+            code=$(curl --silent --show-error --location --output /tmp/body --write-out '%{http_code}' \
+              --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 "$url")
+            echo "$url -> HTTP=$code"
+            test "$code" = 200
+            test -s /tmp/body
+          done
+          curl --fail --silent --show-error --output /tmp/app.js "$SITE/app.js"
+          curl --fail --silent --show-error --output /tmp/intake.html "$SITE/solicitar-proyecto.html"
+          curl --fail --silent --show-error --output /tmp/home.html "$SITE/"
+          ! grep -Fq '/project-intake-bridge.js' /tmp/home.html
+          grep -Fq 'const INTAKE_PATH = "/solicitar-proyecto.html"' /tmp/app.js
+          grep -Fq 'const governedIntakeUrl = (ids)' /tmp/app.js
+          ! grep -Fq 'const directCheckout =' /tmp/app.js
+          grep -Fq 'id="project-request-form"' /tmp/intake.html
+          grep -Fq 'challenges.cloudflare.com/turnstile' /tmp/intake.html
+          echo 'PUBLIC_INTAKE_ASSETS=PASS'
+          echo 'PUBLIC_SINGLE_OWNER_SOURCE=PASS'
+
+      - name: Verify API health, CORS and public Turnstile config
+        shell: bash
+        run: |
+          set -euo pipefail
+          health=$(curl --fail --silent --show-error --max-time 20 "$API/health")
+          test "$(jq -r '.status' <<<"$health")" = ok
+          test "$(jq -r '.write_mode' <<<"$health")" = fail-closed
+
+          headers=$(mktemp)
+          config=$(curl --fail --silent --show-error -D "$headers" \
+            -H 'Origin: https://jadeltechrd.com' "$API/api/v1/public-config")
+          test "$(jq -r '.turnstile_action' <<<"$config")" = project_request
+          sitekey=$(jq -r '.turnstile_sitekey' <<<"$config")
+          test -n "$sitekey" && test "$sitekey" != null
+          test "$(jq -c 'keys | sort' <<<"$config")" = '["turnstile_action","turnstile_sitekey"]'
+          grep -qi '^access-control-allow-origin: https://jadeltechrd.com' "$headers"
+
+          bad=$(curl -sS -o /tmp/bad-origin.json -w '%{http_code}' \
+            -H 'Origin: https://evil.example' "$API/api/v1/public-config")
+          test "$bad" = 403
+
+          preflight_headers=$(mktemp)
+          preflight=$(curl -sS -o /dev/null -D "$preflight_headers" -w '%{http_code}' -X OPTIONS \
+            -H 'Origin: https://jadeltechrd.com' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type,idempotency-key' \
+            "$API/api/v1/project-requests")
+          test "$preflight" = 204
+          grep -qi '^access-control-allow-origin: https://jadeltechrd.com' "$preflight_headers"
+          echo 'API_CORS_TURNSTILE_CONTRACT=PASS'
+
+      - name: Install pinned Puppeteer and managed Chrome for Testing
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/jadel-browser-e2e"
+          mkdir -p "$work"
+          cd "$work"
+          npm init -y >/dev/null 2>&1
+          npm install --ignore-scripts --no-audit --no-fund --save-exact "puppeteer@${PUPPETEER_VERSION}"
+          npx puppeteer browsers install chrome
+          actual=$(node -p "require('puppeteer/package.json').version")
+          test "$actual" = "$PUPPETEER_VERSION"
+          echo "PUPPETEER_VERSION=PASS version=$actual"
+
+      - name: Exercise single-owner governed CTA in real browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/jadel-browser-e2e"
+          SITE="$SITE" node <<'NODE'
+          const puppeteer = require('puppeteer');
+          const assert = require('node:assert/strict');
+
+          (async () => {
+            const browser = await puppeteer.launch({
+              headless: true,
+              protocolTimeout: 60000,
+              args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+            });
+            try {
+              const page = await browser.newPage();
+              page.setDefaultTimeout(15000);
+              await page.setCacheEnabled(false);
+              const pageErrors = [];
+              page.on('pageerror', (error) => pageErrors.push(String(error)));
+              await page.goto(process.env.SITE, { waitUntil: 'domcontentloaded', timeout: 20000 });
+              await page.waitForSelector('[data-add-service="architecture"]', { visible: true });
+
+              assert.equal(await page.evaluate(() => [...document.scripts].some((script) => String(script.src).includes('project-intake-bridge.js'))), false);
+              await page.click('[data-add-service="architecture"]');
+              await page.click('[data-add-service="support"]');
+              await page.waitForFunction(() => document.querySelectorAll('[data-remove-service]').length === 2);
+
+              const state = await page.evaluate(() => {
+                const node = document.getElementById('request-payment');
+                return {
+                  text: node?.textContent?.trim(),
+                  href: node?.getAttribute('href'),
+                  governed: node?.dataset?.governedIntake,
+                  target: node?.getAttribute('target'),
+                };
+              });
+              assert.equal(state.text, 'Solicitar proyecto');
+              assert.equal(state.governed, 'true');
+              assert.equal(state.target, null);
+              assert.ok(!String(state.href).startsWith('mailto:'));
+              assert.ok(!String(state.href).startsWith('https://www.paypal.com'));
+              const target = new URL(state.href, process.env.SITE);
+              assert.equal(target.origin, process.env.SITE);
+              assert.equal(target.pathname, '/solicitar-proyecto.html');
+              assert.equal(target.searchParams.get('services'), 'architecture,support');
+              assert.deepEqual(pageErrors, []);
+              console.log('GOVERNED_CTA_SINGLE_OWNER_BROWSER_E2E=PASS');
+            } finally {
+              await browser.close();
+            }
+          })().catch((error) => {
+            console.error(error?.stack || error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Verify intake page security policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          page=$(curl --fail --silent --show-error "$SITE/solicitar-proyecto.html")
+          grep -Fq "connect-src https://intake.jadeltechrd.com https://challenges.cloudflare.com" <<<"$page"
+          grep -Fq "frame-src https://challenges.cloudflare.com" <<<"$page"
+          grep -Fq "form-action 'none'" <<<"$page"
+          grep -Fq 'Enviar solicitud segura' <<<"$page"
+          grep -Fq 'no autoriza pagos' <<<"$page"
+          echo 'INTAKE_SECURITY_POLICY=PASS'
+''', encoding='utf-8')
+
+          Path('.github/workflows/purge-frontend-cache-after-pages.yml').write_text('''name: Purge frontend cache after Pages
+
+on:
+  workflow_run:
+    workflows: ["Deploy public site to GitHub Pages"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  purge:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment:
+      name: jadeltechrd
+    env:
+      DOMAIN: jadeltechrd.com
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+    steps:
+      - name: Normalize Cloudflare token and resolve zone
+        id: zone
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then token="${token:1:${#token}-2}"; fi
+          test -n "$token" || { echo 'CLOUDFLARE_TOKEN_PRESENT=NO'; exit 2; }
+          echo "::add-mask::$token"
+          printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          tmp=$(mktemp)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}' \
+            -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' \
+            "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50" || true)
+          test "$code" = 200
+          zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .id' "$tmp" | head -n1)
+          test -n "$zone_id" && test "$zone_id" != null
+          echo "zone_id=$zone_id" >> "$GITHUB_OUTPUT"
+          echo 'CLOUDFLARE_ZONE_ACCESS=PASS'
+
+      - name: Purge mutable frontend assets
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.zone.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+          payload=$(jq -nc --arg domain "$DOMAIN" '{files:[
+            ("https://" + $domain + "/"),
+            ("https://" + $domain + "/app.js"),
+            ("https://" + $domain + "/project-intake-bridge.js"),
+            ("https://" + $domain + "/styles.css")
+          ]}')
+          tmp=$(mktemp)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data "$payload" \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/purge_cache" || true)
+          if [ "$code" != 200 ] || [ "$(jq -r '.success // false' "$tmp")" != true ]; then
+            echo "CLOUDFLARE_CACHE_PURGE=FAIL_HTTP_${code}"
+            jq -c '{success,errors}' "$tmp" || true
+            exit 3
+          fi
+          echo 'CLOUDFLARE_CACHE_PURGE=PASS'
+
+      - name: Verify deployed single-owner fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            curl --fail --silent --show-error --location \
+              -H 'Cache-Control: no-cache' \
+              "https://${DOMAIN}/app.js?verify=${GITHUB_RUN_ID}-${attempt}" \
+              --output /tmp/app.js
+            home=$(curl --fail --silent --show-error --location -H 'Cache-Control: no-cache' "https://${DOMAIN}/")
+            if grep -Fq 'const INTAKE_PATH = "/solicitar-proyecto.html"' /tmp/app.js \
+              && grep -Fq 'const governedIntakeUrl = (ids)' /tmp/app.js \
+              && ! grep -Fq 'const directCheckout =' /tmp/app.js \
+              && ! grep -Fq '/project-intake-bridge.js' <<<"$home"; then
+              echo "DEPLOYED_SINGLE_OWNER_FINGERPRINT=PASS attempt=${attempt}"
+              exit 0
+            fi
+            echo "DEPLOYED_SINGLE_OWNER_FINGERPRINT=STALE attempt=${attempt}"
+            sleep 5
+          done
+          echo 'DEPLOYED_SINGLE_OWNER_FINGERPRINT=FAIL'
+          exit 4
+''', encoding='utf-8')
+
+          Path('.github/workflows/single-owner-intake-contract.yml').write_text('''name: Single-owner governed intake contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app.js
+      - index.html
+      - project-intake-bridge.js
+      - .github/workflows/single-owner-intake-contract.yml
+      - .github/workflows/live-add-agent-regression.yml
+      - .github/workflows/governed-intake-live-contract.yml
+      - .github/workflows/purge-frontend-cache-after-pages.yml
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-single-owner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate single-owner configurator contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check app.js
+          test ! -e project-intake-bridge.js
+          ! grep -Fq '/project-intake-bridge.js' index.html
+          grep -Fq 'const INTAKE_PATH = "/solicitar-proyecto.html"' app.js
+          grep -Fq 'const governedIntakeUrl = (ids)' app.js
+          grep -Fq 'requestPayment.setAttribute("data-governed-intake", "true")' app.js
+          grep -Fq 'requestPayment.href = disabled ? "#servicios" : governedIntakeUrl(ids);' app.js
+          ! grep -Fq 'const directCheckout =' app.js
+          ! grep -Fq 'requestPayment.href = disabled ? "#pagos"' app.js
+          grep -Fq 'renderEstimate();' app.js
+          echo 'SINGLE_OWNER_SOURCE_CONTRACT=PASS'
+      - name: Validate all eleven service IDs remain present
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('app.js').read_text(encoding='utf-8')
+          expected = ['architecture','support','sales','social','cineforge','meta','analytics','revenue','quant','governance','multiagent']
+          missing = [service_id for service_id in expected if f'id: "{service_id}"' not in text]
+          if missing:
+              raise SystemExit(f'MISSING_SERVICE_IDS={missing}')
+          if len(expected) != 11:
+              raise SystemExit('EXPECTED_SERVICE_COUNT_INVALID')
+          print('ALL_11_SERVICE_IDS=PASS')
+          PY
+''', encoding='utf-8')
+
+          helper = Path('.github/workflows/apply-single-owner-refactor.yml')
+          if helper.exists():
+              helper.unlink()
+          PY
+
+          git diff --check
+          git status --short
+          node --check app.js
+          test ! -e project-intake-bridge.js
+          ! grep -Fq '/project-intake-bridge.js' index.html
+          ! grep -Fq 'const directCheckout =' app.js
+          grep -Fq 'governedIntakeUrl(ids)' app.js
+
+      - name: Commit refactor to feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor: make governed intake configurator single-owner'
+          git push origin HEAD:feat/single-owner-governed-intake
