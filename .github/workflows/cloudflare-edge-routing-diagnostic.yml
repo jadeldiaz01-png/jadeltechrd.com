@@ -1,0 +1,167 @@
+name: Diagnose Cloudflare edge routing
+
+on:
+  push:
+    branches:
+      - diag/cloudflare-edge-routing
+    paths:
+      - '.github/workflows/cloudflare-edge-routing-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DOMAIN: jadeltechrd.com
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+    steps:
+      - name: Resolve Cloudflare zone safely
+        id: zone
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          test -n "$token" || { echo 'CLOUDFLARE_TOKEN_PRESENT=NO'; exit 2; }
+          echo "::add-mask::$token"
+          printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          tmp=$(mktemp)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}' \
+            -H "Authorization: Bearer ${token}" -H 'Content-Type: application/json' \
+            "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50" || true)
+          echo "CF_ZONE_LOOKUP_HTTP=${code}"
+          test "$code" = 200
+          zone_id=$(jq -r --arg d "$DOMAIN" '.result[]? | select(.name==$d) | .id' "$tmp" | head -n1)
+          account_id=$(jq -r --arg d "$DOMAIN" '.result[]? | select(.name==$d) | .account.id' "$tmp" | head -n1)
+          test -n "$zone_id" && test "$zone_id" != null
+          echo "::add-mask::$zone_id"
+          if [ -n "$account_id" ] && [ "$account_id" != null ]; then echo "::add-mask::$account_id"; fi
+          echo "zone_id=$zone_id" >> "$GITHUB_OUTPUT"
+          echo "account_id=$account_id" >> "$GITHUB_OUTPUT"
+          echo 'CF_ZONE_ACCESS=PASS'
+
+      - name: Inspect cache settings and Page Rules
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.zone.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          probe() {
+            local label="$1" url="$2" tmp code
+            tmp=$(mktemp)
+            code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" "$url" || true)
+            echo "${label}_HTTP=${code}"
+            if [ "$code" = 200 ]; then
+              case "$label" in
+                CF_CACHE_RULES)
+                  jq -c '{rule_count:(.result.rules // [] | length),rules:[.result.rules[]? | {enabled:(.enabled // true),action,expression,description,action_parameters}]}' "$tmp" ;;
+                CF_PAGE_RULES)
+                  jq -c '{rule_count:(.result // [] | length),rules:[.result[]? | {status,priority,targets,actions}]}' "$tmp" ;;
+                CF_ORIGIN_RULES|CF_REDIRECT_RULES)
+                  jq -c '{rule_count:(.result.rules // [] | length),rules:[.result.rules[]? | {enabled:(.enabled // true),action,expression,description,action_parameters}]}' "$tmp" ;;
+              esac
+            else
+              jq -c '{success,errors}' "$tmp" 2>/dev/null || true
+            fi
+          }
+          probe CF_CACHE_RULES "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/phases/http_request_cache_settings/entrypoint"
+          probe CF_PAGE_RULES "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/pagerules?status=active&per_page=100"
+          probe CF_ORIGIN_RULES "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/phases/http_request_origin/entrypoint"
+          probe CF_REDIRECT_RULES "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/rulesets/phases/http_request_dynamic_redirect/entrypoint"
+
+          for setting in cache_level browser_cache_ttl development_mode; do
+            tmp=$(mktemp)
+            code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/settings/${setting}" || true)
+            value=$(jq -r '.result.value // "unknown"' "$tmp" 2>/dev/null || echo unknown)
+            echo "CF_SETTING_${setting}_HTTP=${code} VALUE=${value}"
+          done
+
+      - name: Inspect Worker routes
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.zone.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}' \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/workers/routes" || true)
+          echo "CF_WORKER_ROUTES_HTTP=${code}"
+          if [ "$code" = 200 ]; then
+            jq -c '{route_count:(.result // [] | length),routes:[.result[]? | {pattern,script}]}' "$tmp"
+          else
+            jq -c '{success,errors}' "$tmp" 2>/dev/null || true
+          fi
+
+      - name: Inspect DNS target for apex and www
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.zone.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          for host in "$DOMAIN" "www.$DOMAIN"; do
+            tmp=$(mktemp)
+            code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?name=${host}&per_page=100" || true)
+            echo "DNS_${host}_HTTP=${code}"
+            if [ "$code" = 200 ]; then
+              jq -c '{records:[.result[]? | {name,type,content,proxied,ttl}]}' "$tmp"
+            fi
+          done
+
+      - name: Inspect Pages projects permission without exposing identifiers
+        shell: bash
+        env:
+          ACCOUNT_ID: ${{ steps.zone.outputs.account_id }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ACCOUNT_ID:-}" ] || [ "$ACCOUNT_ID" = null ]; then
+            echo 'CF_PAGES_PROJECTS=SKIP_NO_ACCOUNT_ID'
+            exit 0
+          fi
+          tmp=$(mktemp)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}' \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json' \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/pages/projects" || true)
+          echo "CF_PAGES_PROJECTS_HTTP=${code}"
+          if [ "$code" = 200 ]; then
+            jq -c '{project_count:(.result // [] | length),custom_domains:[.result[]?.domains[]?]}' "$tmp"
+          else
+            jq -c '{success,errors}' "$tmp" 2>/dev/null || true
+          fi
+
+      - name: Compare public edge with GitHub Pages origin candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          inspect_url() {
+            local label="$1" url="$2"
+            local h b code
+            h=$(mktemp); b=$(mktemp)
+            code=$(curl -sS -L -D "$h" -o "$b" -w '%{http_code}' -H 'Cache-Control: no-cache' "$url" || true)
+            tr -d '\r' <"$h" >"${h}.clean"
+            echo "${label}_HTTP=${code}"
+            for header in server cf-cache-status age cache-control etag last-modified cf-ray; do
+              value=$(awk -v h="$header" 'BEGIN{IGNORECASE=1} $0 ~ "^"h":" {sub(/^[^:]+:[[:space:]]*/,""); print; exit}' "${h}.clean")
+              if [ -n "$value" ]; then echo "${label}_${header}=${value}"; fi
+            done
+            echo "${label}_BODY_SHA256=$(sha256sum "$b" | awk '{print $1}')"
+            script=$(grep -oE '<script[^>]+src="[^"]+"' "$b" | sed -E 's/.*src="([^"]+)"/\1/' | tail -n1 || true)
+            echo "${label}_SCRIPT_SRC=${script:-NONE}"
+          }
+          inspect_url PUBLIC_EDGE "https://${DOMAIN}/"
+          inspect_url GITHUB_PAGES_CANDIDATE "https://jadeldiaz01-png.github.io/jadeltechrd.com/"
+
+      - name: Classify likely edge cause
+        shell: bash
+        run: |
+          echo 'CF_EDGE_ROUTING_DIAGNOSTIC=COMPLETE'
+          echo 'Interpretation requires previous step evidence; this workflow intentionally performs no Cloudflare writes.'
