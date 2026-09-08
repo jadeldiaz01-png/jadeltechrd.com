@@ -160,9 +160,27 @@ jobs:
           inspect_url PUBLIC_EDGE "https://${DOMAIN}/"
           inspect_url GITHUB_PAGES_CANDIDATE "https://jadeldiaz01-png.github.io/jadeltechrd.com/"
 
+      - name: Probe GitHub Pages apex origins directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          for ip in 185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153; do
+            h=$(mktemp); b=$(mktemp)
+            code=$(curl -sS --resolve "${DOMAIN}:443:${ip}" -D "$h" -o "$b" -w '%{http_code}' "https://${DOMAIN}/" || true)
+            tr -d '\r' <"$h" >"${h}.clean"
+            script=$(grep -oE '<script[^>]+src="[^"]+"' "$b" | sed -E 's/.*src="([^"]+)"/\1/' | tail -n1 || true)
+            server=$(awk 'BEGIN{IGNORECASE=1} /^server:/ {sub(/^[^:]+:[[:space:]]*/,""); print; exit}' "${h}.clean")
+            lm=$(awk 'BEGIN{IGNORECASE=1} /^last-modified:/ {sub(/^[^:]+:[[:space:]]*/,""); print; exit}' "${h}.clean")
+            echo "ORIGIN_${ip}_HTTP=${code}"
+            echo "ORIGIN_${ip}_server=${server:-NONE}"
+            echo "ORIGIN_${ip}_last-modified=${lm:-NONE}"
+            echo "ORIGIN_${ip}_BODY_SHA256=$(sha256sum "$b" | awk '{print $1}')"
+            echo "ORIGIN_${ip}_SCRIPT_SRC=${script:-NONE}"
+          done
+
       - name: Classify likely edge cause
         shell: bash
         run: |
           echo 'CF_EDGE_ROUTING_DIAGNOSTIC=COMPLETE'
           echo 'Interpretation requires previous step evidence; this workflow intentionally performs no Cloudflare writes.'
-          echo 'PERMISSION_RECHECK_TRIGGER=2026-09-08T01:55Z'
+          echo 'DIRECT_GITHUB_PAGES_ORIGIN_PROBE=ENABLED'
