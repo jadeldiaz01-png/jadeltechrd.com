@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jadeltechrd.com/config/site-production-readiness-2026.schema.json",
+  "title": "Jadel Tech RD Site Production Readiness 2026",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "baseline_sha",
+    "decision",
+    "governance",
+    "standards_baseline",
+    "architecture",
+    "evidence_contract",
+    "production_gates",
+    "security_controls",
+    "supply_chain_controls",
+    "reliability",
+    "data_governance",
+    "ai_and_agentic_controls",
+    "quality_and_testing",
+    "finops",
+    "release_strategy"
+  ],
+  "properties": {
+    "schema_version": {"const": "2026.1"},
+    "manifest_id": {"type": "string", "minLength": 1},
+    "baseline_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "decision": {
+      "type": "object",
+      "required": ["production_authorized", "execution_enabled_by_default", "fail_closed"],
+      "properties": {
+        "production_authorized": {"type": "boolean"},
+        "execution_enabled_by_default": {"const": false},
+        "fail_closed": {"const": true}
+      }
+    },
+    "production_gates": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["id", "category", "status"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "category": {"type": "string", "minLength": 1},
+          "status": {"enum": ["PASS", "FAIL", "BLOCKED", "NOT_APPLICABLE", "NOT_YET_CERTIFIED"]},
+          "depends_on": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

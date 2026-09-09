@@ -1,0 +1,74 @@
+name: site-production-readiness
+
+on:
+  pull_request:
+    paths:
+      - "config/site-production-readiness-2026.json"
+      - "config/site-production-readiness-2026.schema.json"
+      - "scripts/validate-site-production-readiness.mjs"
+      - ".github/workflows/site-production-readiness.yml"
+  push:
+    branches: [main]
+    paths:
+      - "config/site-production-readiness-2026.json"
+      - "config/site-production-readiness-2026.schema.json"
+      - "scripts/validate-site-production-readiness.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-production-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Validate production readiness contract
+        run: node scripts/validate-site-production-readiness.mjs
+
+      - name: Enforce fail-closed production decision
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('fs');
+          const m = JSON.parse(fs.readFileSync('config/site-production-readiness-2026.json', 'utf8'));
+          const final = m.production_gates.find(g => g.id === 'PRODUCTION_DOMAIN_GATE');
+          if (m.decision.production_authorized && final?.status !== 'PASS') {
+            throw new Error('production_authorized cannot be true before PRODUCTION_DOMAIN_GATE=PASS');
+          }
+          console.log(`PRODUCTION_AUTHORIZED=${m.decision.production_authorized}`);
+          console.log(`PRODUCTION_DOMAIN_GATE=${final?.status}`);
+          NODE
+
+      - name: Verify no secret-like material in manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Ein '(sk-[A-Za-z0-9_-]{20,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|client_secret[" ]*:[" ]*[A-Za-z0-9_-]{16,}|api[_-]?token[" ]*:[" ]*[A-Za-z0-9_-]{16,})' config/site-production-readiness-2026.json; then
+            echo 'Secret-like material detected in public manifest' >&2
+            exit 1
+          fi
+
+      - name: Verify baseline SHA exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha=$(node -p "require('./config/site-production-readiness-2026.json').baseline_sha")
+          git cat-file -e "${sha}^{commit}"
+          echo "BASELINE_SHA_VERIFIED=${sha}"

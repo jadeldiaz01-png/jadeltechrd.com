@@ -1,0 +1,405 @@
+{
+  "schema_version": "2026.1",
+  "manifest_id": "jadeltechrd-site-production-readiness",
+  "generated_at": "2026-09-09T10:04:00Z",
+  "owner": "Jadel Tech RD",
+  "repository": "jadeldiaz01-png/jadeltechrd.com",
+  "baseline_sha": "1033a65c0c2d1c3cdf7c32a52c3b81d55792b70c",
+  "decision": {
+    "production_authorized": false,
+    "execution_enabled_by_default": false,
+    "fail_closed": true,
+    "reason": "Administrative GitHub Pages custom-domain binding and TLS evidence are not yet certified; downstream live acceptance gates remain blocked.",
+    "required_final_state": "PRODUCTION_DOMAIN_GATE=PASS"
+  },
+  "governance": {
+    "required_gates": [
+      "AUTHORIZED",
+      "POLICY_ALLOWED",
+      "TOS_ALLOWED",
+      "GEO_ALLOWED",
+      "RISK_ALLOWED",
+      "IDENTITY_ALLOWED",
+      "AUDITABLE",
+      "IDEMPOTENT",
+      "RECONCILABLE"
+    ],
+    "human_approval_required_for": [
+      "production_deployment",
+      "credential_or_permission_change",
+      "external_publication",
+      "financial_side_effect",
+      "destructive_action",
+      "paid_third_party_commitment"
+    ],
+    "forbidden_claims_without_evidence": [
+      "production_ready",
+      "guaranteed_revenue",
+      "guaranteed_profitability",
+      "autonomous_critical_action",
+      "verified_uptime"
+    ]
+  },
+  "standards_baseline": {
+    "application_security": [
+      "OWASP ASVS 5.0.0",
+      "OWASP Top 10:2025"
+    ],
+    "secure_development": [
+      "NIST SP 800-218 SSDF 1.1"
+    ],
+    "software_supply_chain": [
+      "SLSA 1.2 target",
+      "GitHub artifact attestations",
+      "Sigstore-backed provenance",
+      "SBOM: SPDX 2.3 or CycloneDX"
+    ],
+    "observability": [
+      "OpenTelemetry traces",
+      "OpenTelemetry metrics",
+      "OpenTelemetry logs"
+    ],
+    "policy": [
+      "OPA/Rego fail-closed"
+    ]
+  },
+  "architecture": {
+    "frontend_origin_authority": "GitHub Pages",
+    "edge_authority": "Cloudflare DNS/proxy/security",
+    "intake_backend": "Cloudflare Worker",
+    "intake_database": "Cloudflare D1",
+    "human_verification": "Cloudflare Turnstile with mandatory server-side Siteverify",
+    "frontend_asset_strategy": "immutable app.<git-sha>.js",
+    "single_owner_routing": true,
+    "separation_of_duties": [
+      "source and CI in GitHub",
+      "edge and DNS in Cloudflare",
+      "runtime secrets outside repository",
+      "critical external actions gated by policy and human approval"
+    ]
+  },
+  "evidence_contract": {
+    "evidence_must_be": [
+      "real",
+      "timestamped",
+      "bound_to_exact_sha_or_runtime_revision",
+      "reproducible_or_replayable_when_possible",
+      "non-secret",
+      "machine-verifiable"
+    ],
+    "minimum_evidence_fields": [
+      "control_id",
+      "status",
+      "source",
+      "observed_at",
+      "subject_sha_or_revision",
+      "evidence_locator"
+    ],
+    "accepted_statuses": [
+      "PASS",
+      "FAIL",
+      "BLOCKED",
+      "NOT_APPLICABLE",
+      "NOT_YET_CERTIFIED"
+    ],
+    "staleness_policy": {
+      "live_edge_hours": 24,
+      "security_scan_hours": 24,
+      "backup_restore_days": 30,
+      "threat_model_days": 90,
+      "dependency_inventory_hours": 24
+    }
+  },
+  "production_gates": [
+    {
+      "id": "DOMAIN_OWNERSHIP_VERIFIED",
+      "category": "identity_and_domain",
+      "status": "NOT_YET_CERTIFIED",
+      "required_evidence": ["GitHub verified-domain state or equivalent authenticated administrative evidence"]
+    },
+    {
+      "id": "GITHUB_PAGES_CNAME",
+      "category": "deployment",
+      "status": "FAIL",
+      "required_value": "jadeltechrd.com",
+      "observed_value": null,
+      "evidence": {
+        "source": "GitHub Pages REST diagnostic via GitHub Actions",
+        "workflow_run_id": 34179731843,
+        "job_id": 102329684482,
+        "observed_at": "2026-09-09T03:45:54Z",
+        "result": "HTTP 200; cname=null; build_type=workflow; https_certificate=null; https_enforced=false"
+      }
+    },
+    {
+      "id": "TLS_CERTIFICATE",
+      "category": "transport_security",
+      "status": "BLOCKED",
+      "depends_on": ["GITHUB_PAGES_CNAME"],
+      "acceptance": ["valid certificate for jadeltechrd.com", "HTTPS reachable", "https_enforced=true after certificate issuance"]
+    },
+    {
+      "id": "DIRECT_ORIGIN_4_OF_4",
+      "category": "origin_integrity",
+      "status": "BLOCKED",
+      "depends_on": ["GITHUB_PAGES_CNAME"],
+      "acceptance": [
+        "185.199.108.153 serves current fingerprint for Host jadeltechrd.com",
+        "185.199.109.153 serves current fingerprint for Host jadeltechrd.com",
+        "185.199.110.153 serves current fingerprint for Host jadeltechrd.com",
+        "185.199.111.153 serves current fingerprint for Host jadeltechrd.com"
+      ]
+    },
+    {
+      "id": "PUBLIC_CURRENT_FINGERPRINT",
+      "category": "edge_integrity",
+      "status": "BLOCKED",
+      "depends_on": ["DIRECT_ORIGIN_4_OF_4"],
+      "acceptance": [
+        "HTTP 200",
+        "immutable app.<40hex>.js referenced",
+        "project-intake-bridge.js absent",
+        "directCheckout absent from governed CTA",
+        "current single-owner intake routing present"
+      ]
+    },
+    {
+      "id": "GOVERNED_INTAKE_LIVE_CONTRACT",
+      "category": "application_contract",
+      "status": "BLOCKED",
+      "depends_on": ["PUBLIC_CURRENT_FINGERPRINT"],
+      "acceptance": [
+        "intake health HTTP 200",
+        "exact CORS policy",
+        "Turnstile public configuration valid",
+        "server-side Turnstile Siteverify enforced",
+        "hostname/action validation enforced",
+        "body-size limit enforced",
+        "idempotency enforced",
+        "D1 project/evidence/outbox persistence verified",
+        "no secrets exposed"
+      ]
+    },
+    {
+      "id": "ANDROID_11_OF_11",
+      "category": "mobile_e2e",
+      "status": "BLOCKED",
+      "depends_on": ["GOVERNED_INTAKE_LIVE_CONTRACT"],
+      "acceptance": [
+        "viewport=412x915",
+        "deviceScaleFactor=2.625",
+        "exact service ids=11",
+        "all 11 Add controls clicked",
+        "all route to same-origin /solicitar-proyecto.html?services=...",
+        "no mailto routing",
+        "no PayPal direct checkout",
+        "no page errors",
+        "LIVE_ALL_11_ADD_CONTROLS=PASS",
+        "LIVE_GOVERNED_INTAKE_ROUTING=PASS",
+        "LIVE_SINGLE_OWNER=PASS",
+        "LIVE_IMMUTABLE_APP=PASS"
+      ]
+    },
+    {
+      "id": "PRODUCTION_DOMAIN_GATE",
+      "category": "release_decision",
+      "status": "FAIL",
+      "depends_on": [
+        "DOMAIN_OWNERSHIP_VERIFIED",
+        "GITHUB_PAGES_CNAME",
+        "TLS_CERTIFICATE",
+        "DIRECT_ORIGIN_4_OF_4",
+        "PUBLIC_CURRENT_FINGERPRINT",
+        "GOVERNED_INTAKE_LIVE_CONTRACT",
+        "ANDROID_11_OF_11"
+      ],
+      "policy": "PASS only when every dependency is PASS on current accepted deployment evidence"
+    }
+  ],
+  "security_controls": {
+    "repository": [
+      "protected main branch/ruleset",
+      "pull request required",
+      "required status checks",
+      "linear history",
+      "pinned GitHub Actions by commit SHA",
+      "dependency review",
+      "CodeQL or equivalent SAST",
+      "secret scanning",
+      "push protection",
+      "SECURITY.md",
+      "least-privilege workflow permissions"
+    ],
+    "web": [
+      "Content-Security-Policy",
+      "HSTS after valid TLS",
+      "X-Content-Type-Options nosniff",
+      "Referrer-Policy",
+      "Permissions-Policy",
+      "frame-ancestors none or equivalent anti-clickjacking",
+      "no mixed content",
+      "no third-party script without explicit allowlist"
+    ],
+    "backend": [
+      "strict input schema validation",
+      "request size limits",
+      "rate limiting",
+      "idempotency keys",
+      "timeout and retry budgets",
+      "structured error handling",
+      "no secret material in logs",
+      "audit trail for state-changing requests"
+    ],
+    "turnstile": [
+      "server-side Siteverify mandatory",
+      "single-use token enforcement",
+      "300-second token validity respected",
+      "hostname validation",
+      "action validation",
+      "idempotency_key on verification retry where applicable"
+    ]
+  },
+  "supply_chain_controls": {
+    "required": [
+      "dependency inventory",
+      "dependency review on pull requests",
+      "secret scanning and push protection",
+      "SBOM generation",
+      "build provenance",
+      "artifact attestation",
+      "attestation verification",
+      "pinned actions",
+      "protected release path"
+    ],
+    "attestation_policy": "Attestation generation is not sufficient; verification is mandatory before production promotion.",
+    "target_slsa": "Build L3 where supported by the build path"
+  },
+  "reliability": {
+    "sli": [
+      "homepage availability",
+      "intake health availability",
+      "intake success rate",
+      "p95 intake latency",
+      "5xx rate",
+      "Turnstile validation failure rate",
+      "D1 write failure rate",
+      "outbox reconciliation lag"
+    ],
+    "initial_slo_targets": {
+      "homepage_availability_monthly": 0.999,
+      "intake_availability_monthly": 0.995,
+      "intake_success_rate_excluding_invalid_requests": 0.995,
+      "p95_intake_latency_ms": 1500,
+      "unreconciled_outbox_max_age_seconds": 300
+    },
+    "operations": [
+      "health checks",
+      "synthetic monitoring",
+      "error-budget review",
+      "incident severity model",
+      "runbooks",
+      "rollback procedure",
+      "backup and restore test for stateful data"
+    ]
+  },
+  "data_governance": {
+    "principles": [
+      "data minimization",
+      "purpose limitation",
+      "lineage",
+      "retention by data class",
+      "PII classification",
+      "encryption in transit",
+      "least-privilege access",
+      "delete/export process where applicable"
+    ],
+    "d1": {
+      "point_in_time_recovery_required": true,
+      "restore_test_required": true,
+      "reconciliation_required": true
+    },
+    "evidence_ledger": {
+      "append_only_semantics_target": true,
+      "exact_revision_binding": true,
+      "tamper_evidence_target": true
+    }
+  },
+  "ai_and_agentic_controls": {
+    "probabilistic_output_may_not_authorize_critical_action_alone": true,
+    "tool_authority": "least privilege and explicit allowlist",
+    "prompt_injection_controls": [
+      "treat retrieved/external content as untrusted",
+      "separate data from instructions",
+      "policy check before side effect",
+      "deny hidden credential exfiltration",
+      "human approval for critical external actions"
+    ],
+    "evaluation_dimensions": [
+      "task correctness",
+      "groundedness",
+      "tool selection accuracy",
+      "policy compliance",
+      "prompt injection resistance",
+      "permission boundary adherence",
+      "latency",
+      "token/cost efficiency"
+    ]
+  },
+  "quality_and_testing": {
+    "required_layers": [
+      "unit",
+      "integration",
+      "contract",
+      "end-to-end",
+      "property",
+      "fuzzing for parser/input boundaries",
+      "adversarial security tests",
+      "mobile regression",
+      "chaos/failure injection for stateful or queued runtime"
+    ],
+    "release_policy": "No skipped critical gate may be interpreted as PASS. Flaky critical tests block promotion until root cause is resolved."
+  },
+  "finops": {
+    "required": [
+      "monthly budget",
+      "per-service cost attribution",
+      "token/model budget for AI workloads",
+      "Cloudflare usage monitoring",
+      "GitHub Actions usage monitoring",
+      "storage growth monitoring",
+      "egress monitoring",
+      "cost anomaly alerting"
+    ],
+    "optimization_rule": "Optimize cost per correct, policy-compliant result; never reduce controls merely to reduce spend."
+  },
+  "release_strategy": {
+    "stages": [
+      "RESEARCH",
+      "LOCAL_TEST",
+      "CI_VALIDATED",
+      "STAGING_OR_CANARY",
+      "PRODUCTION_CANDIDATE",
+      "PRODUCTION"
+    ],
+    "promotion_requires": [
+      "exact SHA",
+      "all mandatory gates PASS",
+      "no unresolved critical/high security findings",
+      "rollback path tested",
+      "observability active",
+      "human production approval"
+    ]
+  },
+  "external_references": [
+    "https://owasp.org/www-project-application-security-verification-standard/",
+    "https://owasp.org/Top10/",
+    "https://csrc.nist.gov/pubs/sp/800/218/final",
+    "https://slsa.dev/spec/v1.2/",
+    "https://docs.github.com/en/actions/concepts/security/artifact-attestations",
+    "https://docs.github.com/en/code-security/concepts/secret-security/push-protection",
+    "https://docs.github.com/en/code-security/concepts/supply-chain-security/dependency-review",
+    "https://opentelemetry.io/docs/concepts/signals/",
+    "https://developers.cloudflare.com/turnstile/get-started/server-side-validation/",
+    "https://developers.cloudflare.com/d1/platform/limits/"
+  ]
+}
