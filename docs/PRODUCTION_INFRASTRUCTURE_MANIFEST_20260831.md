@@ -17,6 +17,8 @@ Jadel Tech RD should evolve from a static commercial site into a gated productio
 - AI governance: NIST AI RMF lifecycle for Govern, Map, Measure and Manage.
 - Observability: OpenTelemetry traces/metrics/logs plus Sentry/Grafana dashboards and alerts.
 - Secrets: GitHub Secrets, Supabase Secrets, Cloudflare Secrets or Vault. No raw secrets in prompts, docs, logs or client JavaScript.
+- Public domain ownership: `jadeldiaz01-png/jadeldiaz01-png.github.io` owns `jadeltechrd.com`; the canonical source repository must not publish a competing `CNAME` or mutate the GitHub Pages custom-domain setting.
+- Public edge: Cloudflare is the declared DNS/TLS front door; CI gates verify Cloudflare edge DNS and HTTPS content health while GitHub Pages remains the static origin.
 
 ## Production blockers
 
@@ -61,3 +63,5 @@ Required GitHub/Cloudflare secrets before production deployment:
 - `PAYPAL_CLIENT_SECRET`
 - `PAYPAL_WEBHOOK_ID`
 - `ADMIN_API_TOKEN`
+
+Cloudflare DNS reconciliation requires `Zone:DNS:Read` and `Zone:DNS:Edit` for the `jadeltechrd.com` zone.

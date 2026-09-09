@@ -49,8 +49,8 @@ jobs:
 
           cname=$(jq -r '.cname // empty' <<<"$response")
           if [ "$cname" = 'jadeltechrd.com' ]; then
-            echo 'PAGES_CUSTOM_DOMAIN=PASS'
-          else
-            echo "PAGES_CUSTOM_DOMAIN=FAIL current=${cname:-<none>} expected=jadeltechrd.com" >&2
+            echo 'PAGES_CUSTOM_DOMAIN=FAIL canonical repo must not claim jadeltechrd.com.' >&2
+            echo 'The apex custom domain belongs on jadeldiaz01-png/jadeldiaz01-png.github.io.' >&2
             exit 2
           fi
+          echo 'PAGES_CUSTOM_DOMAIN_CANONICAL_GUARD=PASS'

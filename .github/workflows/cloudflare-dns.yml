@@ -104,8 +104,16 @@ jobs:
           set -euo pipefail
           auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
           desired=(185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153)
-          records=$(curl --fail-with-body -sS "${auth[@]}" \
-            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?name=${DOMAIN}&per_page=100")
+          records_tmp=$(mktemp)
+          records_code=$(curl -sS -o "$records_tmp" -w '%{http_code}' "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?name=${DOMAIN}&per_page=100" || true)
+          if [ "$records_code" != 200 ]; then
+            echo "Cloudflare DNS record read failed with HTTP ${records_code}." >&2
+            jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' "$records_tmp" >&2 || true
+            echo 'Required token scope: Zone:DNS:Read and Zone:DNS:Edit for jadeltechrd.com.' >&2
+            exit 9
+          fi
+          records=$(cat "$records_tmp")
           test "$(jq -r '.success' <<<"$records")" = true
 
           conflict=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d and (.type=="CNAME" or .type=="NS" or .type=="ALIAS")) | [.type,.content] | @tsv' <<<"$records")

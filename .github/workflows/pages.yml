@@ -33,7 +33,7 @@ jobs:
           set -euo pipefail
           rm -rf _site
           mkdir -p _site
-          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name _site -exec cp -a {} _site/ \;
+          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name _site ! -name CNAME -exec cp -a {} _site/ \;
 
           immutable_app="app.${GITHUB_SHA}.js"
           cp app.js "_site/${immutable_app}"
