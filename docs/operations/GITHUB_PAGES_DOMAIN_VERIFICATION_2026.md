@@ -52,10 +52,17 @@ When the root Pages repository publishes through GitHub Actions, GitHub document
 
 Because Cloudflare is the declared public edge, production is considered available when public HTTPS/live contracts pass. GitHub `https_enforced` can remain `false` while Cloudflare terminates and enforces HTTPS, but this must be tracked as an accepted edge-ownership decision, not as a hidden unknown.
 
+## Cross-repository audit token
+
+The canonical repository `jadeldiaz01-png/jadeltechrd.com` audits the root Pages repository `jadeldiaz01-png/jadeldiaz01-png.github.io`. Add a fine-grained GitHub token as repository secret `PAGES_AUDIT_TOKEN` with read-only access sufficient to call the Pages REST API for the root repository.
+
+Without this secret, the readiness workflow can still validate public Cloudflare HTTPS and immutable app assets, but the root Pages API check will fail with `ROOT_PAGES_API=ACTION_REQUIRED`.
+
 ## Fail-closed controls
 
 - Do not move `jadeltechrd.com` custom-domain ownership to the canonical repository.
 - Do not merge PRs that remove Cloudflare edge checks from public health workflows.
+- Do not give `PAGES_AUDIT_TOKEN` write, administration or workflow permissions.
 - Do not add wildcard DNS records for `*.jadeltechrd.com`.
 - Do not enable autonomous agent external side effects from Pages state alone.
 - Do not infer payment fulfillment from PayPal links without backend ledger/reconciliation evidence.
@@ -66,6 +73,7 @@ Mark GitHub Pages domain hardening complete only when:
 
 - GitHub profile Pages domain verification is `verified`.
 - TXT record `_github-pages-challenge-jadeldiaz01-png.jadeltechrd.com` exists in public DNS.
+- Repository secret `PAGES_AUDIT_TOKEN` exists with read-only Pages API access to the root Pages repository.
 - Root repository Pages `build_type` is `workflow`.
 - Public site health, governed intake live contract and live add-agent regression are green.
 - Cloudflare edge DNS and HTTPS checks are green.

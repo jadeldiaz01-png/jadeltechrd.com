@@ -22,19 +22,28 @@ jobs:
       DOMAIN: jadeltechrd.com
       ROOT_REPOSITORY: jadeldiaz01-png/jadeldiaz01-png.github.io
       GITHUB_PAGES_CHALLENGE: _github-pages-challenge-jadeldiaz01-png.jadeltechrd.com
+      PAGES_AUDIT_TOKEN: ${{ secrets.PAGES_AUDIT_TOKEN }}
     steps:
       - name: Audit public GitHub Pages API state
         shell: bash
         run: |
           set -euo pipefail
           tmp=$(mktemp)
+          auth_header=()
+          if [ -n "${PAGES_AUDIT_TOKEN:-}" ]; then
+            auth_header=(-H "Authorization: Bearer ${PAGES_AUDIT_TOKEN}")
+          fi
           code=$(curl --silent --show-error --location \
             --output "$tmp" --write-out '%{http_code}' \
+            "${auth_header[@]}" \
             -H 'Accept: application/vnd.github+json' \
             -H 'X-GitHub-Api-Version: 2026-03-10' \
             "https://api.github.com/repos/${ROOT_REPOSITORY}/pages" || true)
           echo "PAGES_API_HTTP=${code}"
-          test "$code" = 200
+          if [ "$code" != 200 ]; then
+            echo "ROOT_PAGES_API=ACTION_REQUIRED status=${code} secret=PAGES_AUDIT_TOKEN scope=pages:read" >&2
+            exit 12
+          fi
           jq '{status,cname,html_url,build_type,source,https_enforced,protected_domain_state,https_certificate}' "$tmp"
           test "$(jq -r '.status' "$tmp")" = built
           test "$(jq -r '.build_type' "$tmp")" = workflow
