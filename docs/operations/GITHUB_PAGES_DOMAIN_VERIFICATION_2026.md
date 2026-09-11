@@ -56,7 +56,7 @@ Because Cloudflare is the declared public edge, production is considered availab
 
 The canonical repository `jadeldiaz01-png/jadeltechrd.com` audits the root Pages repository `jadeldiaz01-png/jadeldiaz01-png.github.io`. Add a fine-grained GitHub token as repository secret `PAGES_AUDIT_TOKEN` with read-only access sufficient to call the Pages REST API for the root repository.
 
-Without this secret, the readiness workflow can still validate public Cloudflare HTTPS and immutable app assets, but the root Pages API check will fail with `ROOT_PAGES_API=ACTION_REQUIRED`.
+Without this secret, the readiness workflow still validates public Cloudflare HTTPS, TXT propagation and immutable app assets. The final summary fails with `BLOCKER_ROOT_PAGES_API` until the secret is present and the root Pages API is readable.
 
 ## Fail-closed controls
 
