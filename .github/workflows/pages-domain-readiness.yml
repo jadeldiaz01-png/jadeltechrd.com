@@ -1,0 +1,104 @@
+name: Audit public Pages domain readiness
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '43 */12 * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pages-domain-readiness.yml'
+      - 'docs/operations/GITHUB_PAGES_DOMAIN_VERIFICATION_2026.md'
+      - 'docs/PRODUCTION_INFRASTRUCTURE_MANIFEST_20260831.md'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DOMAIN: jadeltechrd.com
+      ROOT_REPOSITORY: jadeldiaz01-png/jadeldiaz01-png.github.io
+      GITHUB_PAGES_CHALLENGE: _github-pages-challenge-jadeldiaz01-png.jadeltechrd.com
+    steps:
+      - name: Audit public GitHub Pages API state
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp)
+          code=$(curl --silent --show-error --location \
+            --output "$tmp" --write-out '%{http_code}' \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "https://api.github.com/repos/${ROOT_REPOSITORY}/pages" || true)
+          echo "PAGES_API_HTTP=${code}"
+          test "$code" = 200
+          jq '{status,cname,html_url,build_type,source,https_enforced,protected_domain_state,https_certificate}' "$tmp"
+          test "$(jq -r '.status' "$tmp")" = built
+          test "$(jq -r '.build_type' "$tmp")" = workflow
+          echo 'ROOT_PAGES_WORKFLOW_BUILD=PASS'
+
+          cname=$(jq -r '.cname // empty' "$tmp")
+          if [ -z "$cname" ]; then
+            echo 'ROOT_PAGES_REPOSITORY_CNAME=INFO_EMPTY_ACTIONS_WORKFLOW'
+          elif [ "$cname" = "$DOMAIN" ]; then
+            echo 'ROOT_PAGES_REPOSITORY_CNAME=PASS'
+          else
+            echo "ROOT_PAGES_REPOSITORY_CNAME=FAIL value=${cname}" >&2
+            exit 11
+          fi
+
+          protected_state=$(jq -r '.protected_domain_state // empty' "$tmp")
+          if [ "$protected_state" = verified ]; then
+            echo 'GITHUB_PAGES_PROTECTED_DOMAIN=PASS'
+          else
+            echo "GITHUB_PAGES_PROTECTED_DOMAIN=ACTION_REQUIRED state=${protected_state:-none}"
+          fi
+
+          if [ "$(jq -r '.https_enforced // false' "$tmp")" = true ]; then
+            echo 'GITHUB_PAGES_HTTPS_ENFORCED=PASS'
+          else
+            echo 'GITHUB_PAGES_HTTPS_ENFORCED=INFO_FALSE_CLOUDFLARE_EDGE_OWNS_TLS'
+          fi
+
+      - name: Audit GitHub Pages TXT verification record
+        shell: bash
+        run: |
+          set -euo pipefail
+          txt=$(dig +short TXT "$GITHUB_PAGES_CHALLENGE" | tr -d '"' || true)
+          if [ -n "$txt" ]; then
+            echo 'GITHUB_PAGES_DOMAIN_TXT=PASS'
+          else
+            echo "GITHUB_PAGES_DOMAIN_TXT=ACTION_REQUIRED name=${GITHUB_PAGES_CHALLENGE}"
+          fi
+
+      - name: Verify Cloudflare public edge and immutable app
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(dig @1.1.1.1 +short A "$DOMAIN" | sort || true)
+          test -n "$actual"
+          if grep -qE '^185\.199\.(108|109|110|111)\.153$' <<<"$actual"; then
+            echo 'CLOUDFLARE_EDGE_DNS=FAIL public DNS bypasses Cloudflare edge.' >&2
+            exit 20
+          fi
+          echo "CLOUDFLARE_EDGE_DNS=PASS ${actual//$'\n'/, }"
+
+          home=$(mktemp)
+          curl --fail --silent --show-error --location \
+            --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 \
+            --output "$home" "https://${DOMAIN}/"
+          app_path=$(grep -oE '/app\.[0-9a-f]{40}\.js' "$home" | head -n1 || true)
+          test -n "$app_path"
+
+          app=$(mktemp)
+          curl --fail --silent --show-error --location \
+            --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 \
+            --output "$app" "https://${DOMAIN}${app_path}"
+          grep -Fq 'const governedIntakeUrl = (ids)' "$app"
+          ! grep -Fq 'const directCheckout =' "$app"
+          ! grep -Fq '/project-intake-bridge.js' "$home"
+          echo "PUBLIC_IMMUTABLE_APP=${app_path}"
+          echo 'PUBLIC_GOVERNED_INTAKE_BUNDLE=PASS'
