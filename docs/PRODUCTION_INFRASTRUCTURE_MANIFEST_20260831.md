@@ -19,6 +19,9 @@ Jadel Tech RD should evolve from a static commercial site into a gated productio
 - Secrets: GitHub Secrets, Supabase Secrets, Cloudflare Secrets or Vault. No raw secrets in prompts, docs, logs or client JavaScript.
 - Public domain ownership: `jadeldiaz01-png/jadeldiaz01-png.github.io` owns `jadeltechrd.com`; the canonical source repository must not publish a competing `CNAME` or mutate the GitHub Pages custom-domain setting.
 - Public edge: Cloudflare is the declared DNS/TLS front door; CI gates verify Cloudflare edge DNS and HTTPS content health while GitHub Pages remains the static origin.
+- Public Pages deployment: the root Pages repository must publish with GitHub Actions (`build_type=workflow`) and immutable `app.<sha>.js` assets.
+- Domain anti-takeover: verify `jadeltechrd.com` in the `jadeldiaz01-png` GitHub profile Pages settings and keep the TXT record `_github-pages-challenge-jadeldiaz01-png.jadeltechrd.com` in Cloudflare DNS.
+- HTTPS ownership: Cloudflare is the authoritative public HTTPS enforcement layer. GitHub Pages `https_enforced=false` is acceptable only while Cloudflare edge health and live contracts remain green.
 
 ## Production blockers
 
@@ -28,6 +31,7 @@ Jadel Tech RD should evolve from a static commercial site into a gated productio
 - Durable workflow exists in code, but Nexus private service binding remains fail-closed until provisioned.
 - No service-specific fulfillment evidence is attached to completed purchases.
 - No SLO, alerting, backup/restore or incident runbook evidence exists for dynamic production services.
+- GitHub Pages domain verification TXT evidence is not yet present in public DNS.
 
 ## Phased execution
 
@@ -65,3 +69,5 @@ Required GitHub/Cloudflare secrets before production deployment:
 - `ADMIN_API_TOKEN`
 
 Cloudflare DNS reconciliation requires `Zone:DNS:Read` and `Zone:DNS:Edit` for the `jadeltechrd.com` zone.
+
+GitHub Pages domain verification runbook: `docs/operations/GITHUB_PAGES_DOMAIN_VERIFICATION_2026.md`.
