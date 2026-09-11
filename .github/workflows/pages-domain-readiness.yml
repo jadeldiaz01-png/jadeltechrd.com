@@ -42,12 +42,17 @@ jobs:
           echo "PAGES_API_HTTP=${code}"
           if [ "$code" != 200 ]; then
             echo "ROOT_PAGES_API=ACTION_REQUIRED status=${code} secret=PAGES_AUDIT_TOKEN scope=pages:read" >&2
-            exit 12
+            echo 'ROOT_PAGES_API_READY=false' >> "$GITHUB_ENV"
+            exit 0
           fi
           jq '{status,cname,html_url,build_type,source,https_enforced,protected_domain_state,https_certificate}' "$tmp"
-          test "$(jq -r '.status' "$tmp")" = built
-          test "$(jq -r '.build_type' "$tmp")" = workflow
-          echo 'ROOT_PAGES_WORKFLOW_BUILD=PASS'
+          if [ "$(jq -r '.status' "$tmp")" = built ] && [ "$(jq -r '.build_type' "$tmp")" = workflow ]; then
+            echo 'ROOT_PAGES_WORKFLOW_BUILD=PASS'
+            echo 'ROOT_PAGES_API_READY=true' >> "$GITHUB_ENV"
+          else
+            echo 'ROOT_PAGES_WORKFLOW_BUILD=FAIL' >&2
+            echo 'ROOT_PAGES_API_READY=false' >> "$GITHUB_ENV"
+          fi
 
           cname=$(jq -r '.cname // empty' "$tmp")
           if [ -z "$cname" ]; then
@@ -56,14 +61,16 @@ jobs:
             echo 'ROOT_PAGES_REPOSITORY_CNAME=PASS'
           else
             echo "ROOT_PAGES_REPOSITORY_CNAME=FAIL value=${cname}" >&2
-            exit 11
+            echo 'ROOT_PAGES_API_READY=false' >> "$GITHUB_ENV"
           fi
 
           protected_state=$(jq -r '.protected_domain_state // empty' "$tmp")
           if [ "$protected_state" = verified ]; then
             echo 'GITHUB_PAGES_PROTECTED_DOMAIN=PASS'
+            echo 'GITHUB_PAGES_PROTECTED_DOMAIN_READY=true' >> "$GITHUB_ENV"
           else
             echo "GITHUB_PAGES_PROTECTED_DOMAIN=ACTION_REQUIRED state=${protected_state:-none}"
+            echo 'GITHUB_PAGES_PROTECTED_DOMAIN_READY=false' >> "$GITHUB_ENV"
           fi
 
           if [ "$(jq -r '.https_enforced // false' "$tmp")" = true ]; then
@@ -79,8 +86,10 @@ jobs:
           txt=$(dig +short TXT "$GITHUB_PAGES_CHALLENGE" | tr -d '"' || true)
           if [ -n "$txt" ]; then
             echo 'GITHUB_PAGES_DOMAIN_TXT=PASS'
+            echo 'GITHUB_PAGES_DOMAIN_TXT_READY=true' >> "$GITHUB_ENV"
           else
             echo "GITHUB_PAGES_DOMAIN_TXT=ACTION_REQUIRED name=${GITHUB_PAGES_CHALLENGE}"
+            echo 'GITHUB_PAGES_DOMAIN_TXT_READY=false' >> "$GITHUB_ENV"
           fi
 
       - name: Verify Cloudflare public edge and immutable app
@@ -111,3 +120,25 @@ jobs:
           ! grep -Fq '/project-intake-bridge.js' "$home"
           echo "PUBLIC_IMMUTABLE_APP=${app_path}"
           echo 'PUBLIC_GOVERNED_INTAKE_BUNDLE=PASS'
+
+      - name: Summarize readiness blockers
+        shell: bash
+        run: |
+          set -euo pipefail
+          failures=0
+          if [ "${ROOT_PAGES_API_READY:-false}" != true ]; then
+            echo 'BLOCKER_ROOT_PAGES_API=PAGES_AUDIT_TOKEN missing or root Pages API not ready' >&2
+            failures=$((failures + 1))
+          fi
+          if [ "${GITHUB_PAGES_PROTECTED_DOMAIN_READY:-false}" != true ]; then
+            echo 'BLOCKER_GITHUB_DOMAIN_VERIFICATION=verify jadeltechrd.com in GitHub profile Pages settings' >&2
+            failures=$((failures + 1))
+          fi
+          if [ "${GITHUB_PAGES_DOMAIN_TXT_READY:-false}" != true ]; then
+            echo "BLOCKER_GITHUB_DOMAIN_TXT=add or wait for ${GITHUB_PAGES_CHALLENGE}" >&2
+            failures=$((failures + 1))
+          fi
+          if [ "$failures" -gt 0 ]; then
+            exit 30
+          fi
+          echo 'PAGES_DOMAIN_READINESS=PASS'
