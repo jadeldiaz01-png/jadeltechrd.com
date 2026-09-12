@@ -44,7 +44,7 @@ jobs:
             exit 20
           fi
 
-      - name: Audit Cloudflare SSL mode and authoritative DNS records
+      - name: Audit Cloudflare SSL mode, HTTPS policy and authoritative DNS
         shell: bash
         run: |
           set -euo pipefail
@@ -60,14 +60,32 @@ jobs:
           echo "::add-mask::$zone_id"
           echo 'CF_ZONE_ACCESS=PASS'
 
-          ssl=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/settings/ssl")
-          mode=$(jq -r '.result.value // "unknown"' <<<"$ssl")
+          read_setting() {
+            local setting="$1" value
+            value=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/settings/${setting}" | jq -r '.result.value // "unknown"')
+            echo "CF_SETTING_${setting}=${value}"
+            printf '%s' "$value"
+          }
+
+          mode=$(read_setting ssl | tail -n1)
           echo "CF_SSL_MODE=${mode}"
           case "$mode" in
             strict|origin_pull) echo 'CF_ORIGIN_ENCRYPTION=PASS_STRICT' ;;
             full) echo 'CF_ORIGIN_ENCRYPTION=PASS_ENCRYPTED_NOT_STRICT' ;;
             flexible|off) echo "CF_ORIGIN_ENCRYPTION=FAIL_INSECURE_MODE_${mode}" >&2; exit 22 ;;
             *) echo 'CF_ORIGIN_ENCRYPTION=FAIL_UNKNOWN' >&2; exit 23 ;;
+          esac
+
+          always_https=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/settings/always_use_https" | jq -r '.result.value // "unknown"')
+          min_tls=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/settings/min_tls_version" | jq -r '.result.value // "unknown"')
+          tls13=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/settings/tls_1_3" | jq -r '.result.value // "unknown"')
+          echo "CF_ALWAYS_USE_HTTPS=${always_https}"
+          echo "CF_MIN_TLS_VERSION=${min_tls}"
+          echo "CF_TLS_1_3=${tls13}"
+          [ "$always_https" = on ] && echo 'CF_HTTPS_REDIRECT_POLICY=PASS' || echo 'CF_HTTPS_REDIRECT_POLICY=ACTION_REQUIRED'
+          case "$min_tls" in
+            1.2|1.3) echo 'CF_MIN_TLS_POLICY=PASS' ;;
+            *) echo 'CF_MIN_TLS_POLICY=ACTION_REQUIRED' ;;
           esac
 
           for host in "$DOMAIN" "www.$DOMAIN"; do
@@ -110,6 +128,19 @@ jobs:
           else
             echo 'GITHUB_PAGES_NATIVE_TLS=DEGRADED_OR_PENDING'
           fi
+
+      - name: Verify HTTP to HTTPS redirect
+        shell: bash
+        run: |
+          set -euo pipefail
+          headers=$(mktemp)
+          code=$(curl --silent --show-error --output /dev/null --dump-header "$headers" --write-out '%{http_code}' "http://${DOMAIN}/")
+          location=$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]+:[[:space:]]*/,""); gsub(/\r/,""); print; exit}' "$headers")
+          echo "HTTP_REDIRECT_CODE=${code}"
+          echo "HTTP_REDIRECT_LOCATION=${location:-NONE}"
+          case "$code" in 301|302|307|308) ;; *) echo 'HTTP_TO_HTTPS_REDIRECT=FAIL' >&2; exit 24;; esac
+          [[ "$location" == https://* ]] || { echo 'HTTP_TO_HTTPS_REDIRECT=FAIL_LOCATION' >&2; exit 25; }
+          echo 'HTTP_TO_HTTPS_REDIRECT=PASS'
 
       - name: Verify production HTTPS and governed intake health
         shell: bash
