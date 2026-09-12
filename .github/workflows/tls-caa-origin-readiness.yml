@@ -1,0 +1,186 @@
+name: TLS CAA and origin readiness
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/tls-caa-origin-readiness.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tls-caa-origin-readiness.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOMAIN: jadeltechrd.com
+
+jobs:
+  public-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Install DNS utilities
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq dnsutils
+
+      - name: Audit public DNS and CAA
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== Public DNS @1.1.1.1 ==='
+          for type in A AAAA CAA; do
+            echo "DNS_${type}:"
+            dig @1.1.1.1 +short "$DOMAIN" "$type" | sort || true
+          done
+          echo 'DNS_WWW_CNAME:'
+          dig @1.1.1.1 +short "www.$DOMAIN" CNAME | sort || true
+
+          caa=$(dig @1.1.1.1 +short "$DOMAIN" CAA | tr -d '\r' || true)
+          if [ -z "$caa" ]; then
+            echo 'CAA_POLICY=PASS_NO_CAA_RESTRICTION'
+          else
+            issue_count=$(awk 'tolower($2)=="issue" {count++} END {print count+0}' <<<"$caa")
+            if [ "$issue_count" -eq 0 ]; then
+              echo 'CAA_POLICY=PASS_NO_ISSUE_RESTRICTION'
+            else
+              allowed=$(awk '
+                tolower($2)=="issue" {
+                  value=$3;
+                  for (i=4;i<=NF;i++) value=value " " $i;
+                  gsub(/^"|"$/, "", value);
+                  split(value, parts, ";");
+                  issuer=tolower(parts[1]);
+                  gsub(/^[[:space:]]+|[[:space:]]+$/, "", issuer);
+                  if (issuer=="letsencrypt.org") found=1;
+                }
+                END {print found ? "yes" : "no"}
+              ' <<<"$caa")
+              if [ "$allowed" = yes ]; then
+                echo 'CAA_POLICY=PASS_LETSENCRYPT_ALLOWED'
+              else
+                echo 'CAA_POLICY=FAIL_LETSENCRYPT_NOT_ALLOWED' >&2
+                exit 20
+              fi
+            fi
+          fi
+
+      - name: Verify public edge TLS certificate and hostname
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp)
+          echo | openssl s_client \
+            -connect "${DOMAIN}:443" \
+            -servername "$DOMAIN" \
+            -verify_hostname "$DOMAIN" \
+            -verify_return_error \
+            -showcerts >"$tmp" 2>&1
+          grep -q 'Verify return code: 0 (ok)' "$tmp"
+          openssl x509 -in <(sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' "$tmp" | head -n 40) \
+            -noout -subject -issuer -dates -ext subjectAltName
+          echo 'PUBLIC_EDGE_TLS=PASS'
+          echo 'PUBLIC_EDGE_TLS_HOSTNAME=PASS'
+
+      - name: Probe GitHub Pages origin TLS directly with hostname verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          failures=0
+          for ip in 185.199.108.153 185.199.109.153 185.199.110.153 185.199.111.153; do
+            tmp=$(mktemp)
+            set +e
+            echo | openssl s_client \
+              -connect "${ip}:443" \
+              -servername "$DOMAIN" \
+              -verify_hostname "$DOMAIN" \
+              -verify_return_error >"$tmp" 2>&1
+            rc=$?
+            set -e
+            if [ "$rc" -eq 0 ] && grep -q 'Verify return code: 0 (ok)' "$tmp"; then
+              echo "ORIGIN_TLS_${ip}=PASS"
+            else
+              echo "ORIGIN_TLS_${ip}=NOT_VERIFIED"
+              failures=$((failures + 1))
+            fi
+          done
+          echo "ORIGIN_TLS_UNVERIFIED_COUNT=${failures}"
+          test "$failures" -eq 0
+          echo 'GITHUB_PAGES_NATIVE_TLS=PASS'
+
+      - name: Verify HTTP to HTTPS redirect
+        shell: bash
+        run: |
+          set -euo pipefail
+          headers=$(mktemp)
+          code=$(curl --silent --show-error --output /dev/null --dump-header "$headers" --write-out '%{http_code}' "http://${DOMAIN}/")
+          location=$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]+:[[:space:]]*/,""); gsub(/\r/,""); print; exit}' "$headers")
+          echo "HTTP_REDIRECT_CODE=${code}"
+          echo "HTTP_REDIRECT_LOCATION=${location:-NONE}"
+          case "$code" in 301|302|307|308) ;; *) echo 'HTTP_TO_HTTPS_REDIRECT=FAIL' >&2; exit 24;; esac
+          [[ "$location" == https://* ]] || { echo 'HTTP_TO_HTTPS_REDIRECT=FAIL_LOCATION' >&2; exit 25; }
+          echo 'HTTP_TO_HTTPS_REDIRECT=PASS'
+
+      - name: Verify production HTTPS and governed intake health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in \
+            "https://${DOMAIN}/" \
+            "https://${DOMAIN}/solicitar-proyecto.html" \
+            "https://intake.${DOMAIN}/health"; do
+            code=$(curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 --output /tmp/body --write-out '%{http_code}' "$url")
+            echo "$url -> HTTP=$code"
+            test "$code" = 200
+            test -s /tmp/body
+          done
+          echo 'PUBLIC_PRODUCTION_HTTPS=PASS'
+
+  credentialed-audit:
+    if: github.event_name != 'pull_request'
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CF_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Audit Cloudflare SSL mode, HTTPS policy and authoritative DNS
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CF_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          test -n "$token" || { echo 'CF_TOKEN_PRESENT=NO'; exit 21; }
+          echo "::add-mask::$token"
+          auth=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
+
+          zones=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50")
+          zone_id=$(jq -r --arg d "$DOMAIN" '.result[]? | select(.name==$d) | .id' <<<"$zones" | head -n1)
+          test -n "$zone_id" && test "$zone_id" != null
+          echo "::add-mask::$zone_id"
+          echo 'CF_ZONE_ACCESS=PASS'
+
+          mode=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/settings/ssl" | jq -r '.result.value // "unknown"')
+          always_https=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/settings/always_use_https" | jq -r '.result.value // "unknown"')
+          min_tls=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/settings/min_tls_version" | jq -r '.result.value // "unknown"')
+          tls13=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/settings/tls_1_3" | jq -r '.result.value // "unknown"')
+
+          echo "CF_SSL_MODE=${mode}"
+          echo "CF_ALWAYS_USE_HTTPS=${always_https}"
+          echo "CF_MIN_TLS_VERSION=${min_tls}"
+          echo "CF_TLS_1_3=${tls13}"
+          case "$mode" in
+            strict|origin_pull) echo 'CF_ORIGIN_ENCRYPTION=PASS_STRICT' ;;
+            full) echo 'CF_ORIGIN_ENCRYPTION=PASS_ENCRYPTED_NOT_STRICT' ;;
+            flexible|off) echo "CF_ORIGIN_ENCRYPTION=FAIL_INSECURE_MODE_${mode}" >&2; exit 22 ;;
+            *) echo 'CF_ORIGIN_ENCRYPTION=FAIL_UNKNOWN' >&2; exit 23 ;;
+          esac
+          [ "$always_https" = on ] && echo 'CF_HTTPS_REDIRECT_POLICY=PASS' || echo 'CF_HTTPS_REDIRECT_POLICY=ACTION_REQUIRED'
+          case "$min_tls" in 1.2|1.3) echo 'CF_MIN_TLS_POLICY=PASS' ;; *) echo 'CF_MIN_TLS_POLICY=ACTION_REQUIRED' ;; esac
+
+          for host in "$DOMAIN" "www.$DOMAIN"; do
+            records=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=${host}&per_page=100")
+            echo "CF_DNS_${host}:"
+            jq -c '{records:[.result[]? | {name,type,content,proxied,ttl}]}' <<<"$records"
+          done
