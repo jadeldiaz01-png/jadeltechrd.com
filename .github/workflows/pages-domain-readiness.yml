@@ -68,6 +68,9 @@ jobs:
           if [ "$protected_state" = verified ]; then
             echo 'GITHUB_PAGES_PROTECTED_DOMAIN=PASS'
             echo 'GITHUB_PAGES_PROTECTED_DOMAIN_READY=true' >> "$GITHUB_ENV"
+          elif [ -z "$cname" ]; then
+            echo 'GITHUB_PAGES_PROTECTED_DOMAIN=INFO_EMPTY_ACTIONS_WORKFLOW_CNAME_TXT_IS_AUTHORITATIVE'
+            echo 'GITHUB_PAGES_PROTECTED_DOMAIN_READY=deferred' >> "$GITHUB_ENV"
           else
             echo "GITHUB_PAGES_PROTECTED_DOMAIN=ACTION_REQUIRED state=${protected_state:-none}"
             echo 'GITHUB_PAGES_PROTECTED_DOMAIN_READY=false' >> "$GITHUB_ENV"
@@ -130,7 +133,7 @@ jobs:
             echo 'BLOCKER_ROOT_PAGES_API=PAGES_AUDIT_TOKEN missing or root Pages API not ready' >&2
             failures=$((failures + 1))
           fi
-          if [ "${GITHUB_PAGES_PROTECTED_DOMAIN_READY:-false}" != true ]; then
+          if [ "${GITHUB_PAGES_PROTECTED_DOMAIN_READY:-false}" = false ]; then
             echo 'BLOCKER_GITHUB_DOMAIN_VERIFICATION=verify jadeltechrd.com in GitHub profile Pages settings' >&2
             failures=$((failures + 1))
           fi
