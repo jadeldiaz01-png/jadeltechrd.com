@@ -52,6 +52,8 @@ When the root Pages repository publishes through GitHub Actions, GitHub document
 
 Because Cloudflare is the declared public edge, production is considered available when public HTTPS/live contracts pass. GitHub `https_enforced` can remain `false` while Cloudflare terminates and enforces HTTPS, but this must be tracked as an accepted edge-ownership decision, not as a hidden unknown.
 
+For the Actions-based root Pages repository, the Pages REST API can return `protected_domain_state: null` when repository `cname` is empty. In that topology, the production readiness signal is the combination of readable root Pages API, public TXT record, verified GitHub profile UI state, Cloudflare edge DNS and immutable app bundle.
+
 ## Cross-repository audit token
 
 The canonical repository `jadeldiaz01-png/jadeltechrd.com` audits the root Pages repository `jadeldiaz01-png/jadeldiaz01-png.github.io`. Add a fine-grained GitHub token as repository secret `PAGES_AUDIT_TOKEN` with read-only access sufficient to call the Pages REST API for the root repository.
