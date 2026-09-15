@@ -77,7 +77,7 @@ jobs:
           existing=$(mktemp)
           existing_code=$(curl -sS -o "$existing" -w '%{http_code}' "${auth[@]}" "$endpoint" || true)
 
-          csp="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+          csp="default-src 'none'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://intake.jadeltechrd.com https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
           permissions='accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()'
           rule=$(jq -n --arg domain "$DOMAIN" --arg csp "$csp" --arg pp "$permissions" '{
             ref: "jadel_security_headers_v1",
@@ -182,6 +182,9 @@ jobs:
             corp=$(header_value Cross-Origin-Resource-Policy)
             if printf '%s' "$hsts" | grep -Fq 'max-age=15552000' && \
                printf '%s' "$csp" | grep -Fq "default-src 'none'" && \
+               printf '%s' "$csp" | grep -Fq "script-src 'self' https://challenges.cloudflare.com" && \
+               printf '%s' "$csp" | grep -Fq "connect-src 'self' https://intake.jadeltechrd.com https://challenges.cloudflare.com" && \
+               printf '%s' "$csp" | grep -Fq "frame-src https://challenges.cloudflare.com" && \
                printf '%s' "$csp" | grep -Fq "frame-ancestors 'none'" && \
                [ "$xfo" = DENY ] && [ "$nosniff" = nosniff ] && \
                [ "$referrer" = strict-origin-when-cross-origin ] && \
