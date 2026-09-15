@@ -60,7 +60,7 @@ jobs:
           npx puppeteer browsers install chrome
           test "$(node -p "require('puppeteer/package.json').version")" = "$PUPPETEER_VERSION"
 
-      - name: Click every deployed Add control on Android-sized viewport
+      - name: Click eligible Add controls on Android-sized viewport
         shell: bash
         run: |
           set -euo pipefail
@@ -111,7 +111,8 @@ jobs:
               const ids = await page.$$eval('[data-add-service]', nodes => nodes.map(node => node.getAttribute('data-add-service')));
               assert.deepEqual(ids, ['architecture','support','sales','social','cineforge','meta','analytics','revenue','quant','governance','multiagent']);
 
-              for (let index = 0; index < ids.length; index += 1) {
+              const maxSelectable = 8;
+              for (let index = 0; index < maxSelectable; index += 1) {
                 const id = ids[index];
                 const selector = `[data-add-service="${id}"]`;
                 await page.evaluate(sel => document.querySelector(sel)?.scrollIntoView({ block: 'center' }), selector);
@@ -120,7 +121,7 @@ jobs:
                 assert.equal(await clickWithin(page, selector), true, `${id}: deployed Add control froze`);
                 await page.waitForFunction(expected => document.querySelectorAll('[data-remove-service]').length === expected, {}, before + 1);
 
-                const expectedServices = ids.slice(0, Math.min(index + 1, 8));
+                const expectedServices = ids.slice(0, index + 1);
                 await page.waitForFunction((expected) => {
                   const node = document.querySelector('#request-payment');
                   if (node?.dataset.governedIntake !== 'true') return false;
@@ -138,8 +139,24 @@ jobs:
                 console.log(`LIVE_${id}_ADD_MS=${elapsed}`);
               }
 
+              const cappedState = await page.$$eval('[data-add-service]', nodes => nodes.map(node => ({
+                id: node.getAttribute('data-add-service'),
+                disabled: node.disabled,
+                text: node.textContent.trim(),
+                pressed: node.getAttribute('aria-pressed'),
+              })));
+              assert.deepEqual(
+                cappedState.slice(0, maxSelectable).map(node => [node.id, node.disabled, node.pressed]),
+                ids.slice(0, maxSelectable).map(id => [id, false, 'true']),
+              );
+              assert.deepEqual(
+                cappedState.slice(maxSelectable).map(node => [node.id, node.disabled, node.text]),
+                ids.slice(maxSelectable).map(id => [id, true, 'Máximo 8']),
+              );
+
               assert.deepEqual(pageErrors, [], `page errors: ${pageErrors.join(' | ')}`);
-              console.log('LIVE_ALL_11_ADD_CONTROLS=PASS');
+              console.log('LIVE_MAX_8_ADD_CONTROLS=PASS');
+              console.log('LIVE_REMAINING_ADD_CONTROLS_DISABLED=PASS');
               console.log('LIVE_GOVERNED_INTAKE_ROUTING=PASS');
               console.log('LIVE_SINGLE_OWNER=PASS');
               console.log('LIVE_IMMUTABLE_APP=PASS');
