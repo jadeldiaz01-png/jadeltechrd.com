@@ -44,12 +44,33 @@ jobs:
           set -euo pipefail
           auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
           patch_setting() {
-            local setting="$1" payload="$2"
-            local tmp code success
+            local setting="$1" payload="$2" expected="$3"
+            local tmp code success actual
             tmp=$(mktemp)
             code=$(curl -sS -o "$tmp" -w '%{http_code}' --request PATCH "${auth[@]}" \
               --data "$payload" "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/settings/${setting}" || true)
             if [ "$code" != 200 ]; then
+              if [ "$code" = 403 ]; then
+                code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" \
+                  "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/settings/${setting}" || true)
+                if [ "$code" = 200 ]; then
+                  if [ "$expected" = "__HSTS__" ]; then
+                    test "$(jq -r '.result.value.strict_transport_security.enabled' "$tmp")" = true && \
+                    test "$(jq -r '.result.value.strict_transport_security.max_age' "$tmp")" = 15552000 && \
+                    test "$(jq -r '.result.value.strict_transport_security.include_subdomains' "$tmp")" = false && \
+                    test "$(jq -r '.result.value.strict_transport_security.preload' "$tmp")" = false && \
+                    test "$(jq -r '.result.value.strict_transport_security.nosniff' "$tmp")" = true && {
+                      echo "CF_SETTING_${setting}=READ_ONLY_ALREADY_COMPLIANT"
+                      return 0
+                    }
+                  fi
+                  actual=$(jq -r '.result.value' "$tmp")
+                  test "$actual" = "$expected" && {
+                    echo "CF_SETTING_${setting}=READ_ONLY_ALREADY_COMPLIANT"
+                    return 0
+                  }
+                fi
+              fi
               echo "CF_SETTING_${setting}=WRITE_FAILED_HTTP_${code}" >&2
               jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' "$tmp" >&2 || true
               exit 20
@@ -58,12 +79,12 @@ jobs:
             test "$success" = true
             echo "CF_SETTING_${setting}=UPDATED"
           }
-          patch_setting min_tls_version '{"value":"1.2"}'
-          patch_setting tls_1_3 '{"value":"on"}'
-          patch_setting always_use_https '{"value":"on"}'
-          patch_setting automatic_https_rewrites '{"value":"on"}'
-          patch_setting browser_check '{"value":"on"}'
-          patch_setting security_header '{"value":{"strict_transport_security":{"enabled":true,"max_age":15552000,"include_subdomains":false,"preload":false,"nosniff":true}}}'
+          patch_setting min_tls_version '{"value":"1.2"}' 1.2
+          patch_setting tls_1_3 '{"value":"on"}' on
+          patch_setting always_use_https '{"value":"on"}' on
+          patch_setting automatic_https_rewrites '{"value":"on"}' on
+          patch_setting browser_check '{"value":"on"}' on
+          patch_setting security_header '{"value":{"strict_transport_security":{"enabled":true,"max_age":15552000,"include_subdomains":false,"preload":false,"nosniff":true}}}' __HSTS__
           echo 'TRANSPORT_HARDENING=PASS'
 
       - name: Install deterministic response security headers without replacing unrelated rules
