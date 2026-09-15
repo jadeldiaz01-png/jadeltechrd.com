@@ -32,6 +32,7 @@
       <nav class="nav" aria-label="Navegación principal">
         <a href="/" data-nav="home">Inicio</a>
         <a href="/#servicios">Servicios</a>
+        <a href="/#nexus">Nexus</a>
         <a href="/#precios">Precios</a>
         <a href="/#pagos">Pagos</a>
         <a href="/?view=privacy" data-nav="privacy">Privacidad</a>
@@ -153,6 +154,44 @@
           <div><span>HITL</span><strong>Confirmación humana</strong><small>alcance y entregables se aprueban antes del pago.</small></div>
           <div><span>PAY</span><strong>PayPal</strong><small>pago manual o link oficial verificado cuando esté disponible.</small></div>
           <div><span>OPS</span><strong>nexus_ai_automation_v0.3.0</strong><small>seguimiento, evidencias y operación con gates de seguridad.</small></div>
+        </div>
+      </section>
+
+      <section class="section-block nexus-section" id="nexus">
+        <div class="section-heading reveal">
+          <div>
+            <div class="eyebrow">Control plane privado</div>
+            <h2>Qué agrega nexus_ai_automation_v0.3.0 a tu página.</h2>
+          </div>
+          <p>Nexus convierte la web comercial en una operación gobernada: solicitudes, oportunidades, propuestas, pagos evidenciados, aprobaciones, artefactos y seguimiento sin exponer el panel privado ni credenciales.</p>
+        </div>
+        <div class="nexus-capability-grid reveal" aria-label="Capacidades Nexus para Jadel Tech RD">
+          <article><span>INTAKE</span><strong>Solicitudes estructuradas</strong><p>Convierte botones y formularios en briefs con servicios, alcance, presupuesto estimado y prioridad.</p></article>
+          <article><span>SCORE</span><strong>Evaluación de oportunidades</strong><p>Clasifica leads, proyectos y fuentes por evidencia, riesgo, coste, ajuste y siguiente acción.</p></article>
+          <article><span>PROPOSAL</span><strong>Propuestas versionadas</strong><p>Prepara borradores revisables para clientes, con versiones, notas y aprobación antes de enviar.</p></article>
+          <article><span>PAY</span><strong>Ledger de ingresos</strong><p>Registra pagos manuales o PayPal verificados; no cuenta revenue sin evidencia reconciliada.</p></article>
+          <article><span>APPROVAL</span><strong>Aprobaciones con recibo</strong><p>Acciones externas, publicaciones, contratos y despliegues pasan por autorización humana y TTL.</p></article>
+          <article><span>OPS</span><strong>Work orders y artefactos</strong><p>Crea tareas internas, adjunta entregables, recupera trabajos atascados y mantiene trazabilidad.</p></article>
+          <article><span>DATA</span><strong>Fuentes y claims</strong><p>Separa hechos, inferencias e hipótesis con registro de fuente, verificación y vigencia.</p></article>
+          <article><span>OBS</span><strong>Readiness y métricas</strong><p>Health, readiness, métricas Prometheus, OpenTelemetry, límites de body y headers de seguridad.</p></article>
+        </div>
+        <div class="nexus-operating-model reveal">
+          <div class="nexus-model-copy">
+            <div class="eyebrow">Modelo seguro</div>
+            <h3>La web pública vende; Nexus opera en privado.</h3>
+            <p>La arquitectura recomendada mantiene jadeltechrd.com como entrada pública y Nexus como plano de control en VPS o red privada. El público nunca recibe admin endpoints, tokens, conectores de marketplace, pagos ejecutables, retiros, trading ni publicación automática.</p>
+          </div>
+          <ol class="nexus-flow">
+            <li><span>01</span><strong>Cliente solicita alcance</strong><small>servicios, contexto, presupuesto y urgencia.</small></li>
+            <li><span>02</span><strong>Nexus prepara evidencia</strong><small>brief, propuesta, riesgos, precio y siguientes pasos.</small></li>
+            <li><span>03</span><strong>Humano aprueba</strong><small>alcance, mensaje externo, pago o activación.</small></li>
+            <li><span>04</span><strong>Operación supervisada</strong><small>work orders, artefactos, ledger y seguimiento.</small></li>
+          </ol>
+        </div>
+        <div class="nexus-boundaries reveal" aria-label="Límites operativos">
+          <div><strong>Permitido</strong><p>Briefs, scoring, propuestas, artefactos, seguimiento, dashboards, evidencia, reportes y recomendaciones.</p></div>
+          <div><strong>Con aprobación</strong><p>Emails externos, propuestas a plataformas, publicaciones, deploys, OAuth scopes, contratos y cambios de infraestructura.</p></div>
+          <div><strong>Bloqueado por defecto</strong><p>Retiros, pagos salientes, aceptación de contratos, spam, scraping, trading real y acciones financieras sin gates.</p></div>
         </div>
       </section>
 
