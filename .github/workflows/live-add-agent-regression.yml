@@ -73,7 +73,10 @@ jobs:
             let timer;
             try {
               return await Promise.race([
-                page.click(selector).then(() => true),
+                page.$eval(selector, node => {
+                  node.scrollIntoView({ block: 'center' });
+                  node.click();
+                }).then(() => true),
                 new Promise(resolve => { timer = setTimeout(() => resolve(false), ms); }),
               ]);
             } finally {
