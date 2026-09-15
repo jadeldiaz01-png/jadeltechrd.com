@@ -505,98 +505,6 @@ h1, h2, h3 {
   line-height: 1.5;
 }
 
-.nexus-capability-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: .85rem;
-}
-.nexus-capability-grid article,
-.nexus-flow li,
-.nexus-boundaries > div {
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 16px;
-  background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.016));
-}
-.nexus-capability-grid article {
-  min-height: 210px;
-  padding: 1rem;
-}
-.nexus-capability-grid span,
-.nexus-flow span {
-  display: inline-flex;
-  margin-bottom: .65rem;
-  color: var(--accent);
-  font-size: .62rem;
-  font-weight: 900;
-  letter-spacing: .1em;
-}
-.nexus-capability-grid strong,
-.nexus-flow strong {
-  display: block;
-  line-height: 1.2;
-}
-.nexus-capability-grid p,
-.nexus-model-copy p,
-.nexus-flow small,
-.nexus-boundaries p {
-  color: var(--muted);
-}
-.nexus-capability-grid p {
-  margin: .6rem 0 0;
-  font-size: .82rem;
-  line-height: 1.55;
-}
-.nexus-operating-model {
-  display: grid;
-  grid-template-columns: minmax(0, .86fr) minmax(0, 1.14fr);
-  gap: 1rem;
-  margin-top: 1rem;
-}
-.nexus-model-copy {
-  padding: 1.35rem;
-  border: 1px solid rgba(99,230,190,.18);
-  border-radius: 22px;
-  background: radial-gradient(circle at 10% 0%, rgba(99,230,190,.1), transparent 34%), rgba(255,255,255,.025);
-}
-.nexus-model-copy h3 {
-  margin: .65rem 0 .8rem;
-  font-size: clamp(1.7rem, 3vw, 2.8rem);
-}
-.nexus-flow {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: .85rem;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-.nexus-flow li {
-  min-height: 145px;
-  padding: 1rem;
-}
-.nexus-flow small {
-  display: block;
-  margin-top: .35rem;
-  line-height: 1.5;
-}
-.nexus-boundaries {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: .85rem;
-  margin-top: 1rem;
-}
-.nexus-boundaries > div {
-  padding: 1rem;
-}
-.nexus-boundaries strong {
-  color: var(--accent-2);
-}
-.nexus-boundaries p {
-  margin: .5rem 0 0;
-  font-size: .84rem;
-  line-height: 1.55;
-}
-
 .governance-panel { display: grid; grid-template-columns: .92fr 1.08fr; gap: 2.2rem; padding: clamp(1.5rem, 4vw, 2.8rem); border: 1px solid rgba(177,151,252,.18); border-radius: 26px; background: radial-gradient(circle at 10% 0%, rgba(177,151,252,.11), transparent 34%), linear-gradient(135deg, rgba(255,255,255,.04), rgba(255,255,255,.015)); }
 .governance-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .8rem; }
 .governance-grid > div { min-height: 118px; display: grid; align-content: center; padding: 1rem; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(3,5,10,.28); }
@@ -665,8 +573,6 @@ h1, h2, h3 {
   .pricing-card.featured { transform: none; }
   .process-grid { grid-template-columns: repeat(2, 1fr); }
   .benchmark-grid { grid-template-columns: repeat(2, 1fr); }
-  .nexus-capability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .nexus-operating-model { grid-template-columns: 1fr; }
   .payment-link-grid, .nexus-payment-protocol { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -683,7 +589,7 @@ h1, h2, h3 {
   .orbit-b { width: 275px; height: 275px; }
   .signal-strip { grid-template-columns: repeat(2, 1fr); }
   .section-heading { grid-template-columns: 1fr; align-items: start; }
-  .services-grid, .pricing-grid, .governance-panel, .configurator, .final-cta, .nexus-boundaries { grid-template-columns: 1fr; }
+  .services-grid, .pricing-grid, .governance-panel, .configurator, .final-cta { grid-template-columns: 1fr; }
   .payment-panel { grid-template-columns: 1fr; }
   .estimate-card { position: static; }
   .governance-grid { grid-template-columns: repeat(2, 1fr); }
@@ -696,7 +602,7 @@ h1, h2, h3 {
   .hero-trust { display: grid; grid-template-columns: 1fr 1fr; }
   .agent-console { min-height: 430px; border-radius: 20px; }
   .console-events > div { grid-template-columns: 44px 1fr; }
-  .signal-strip, .services-grid, .process-grid, .pricing-grid, .benchmark-grid, .governance-grid, .payment-link-grid, .nexus-payment-protocol, .nexus-capability-grid, .nexus-flow { grid-template-columns: 1fr; }
+  .signal-strip, .services-grid, .process-grid, .pricing-grid, .benchmark-grid, .governance-grid, .payment-link-grid, .nexus-payment-protocol { grid-template-columns: 1fr; }
   .signal-strip > div { min-height: 105px; }
   .service-card { min-height: 395px; }
   .section-block { padding-top: 5.5rem; }
