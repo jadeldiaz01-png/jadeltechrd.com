@@ -1,0 +1,90 @@
+name: D1 recovery readiness
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type READ_ONLY_RECOVERY_CHECK. This workflow never restores or mutates D1."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  d1-recovery-capability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DRILL_DATABASE_NAME: ${{ vars.D1_RECOVERY_DRILL_DATABASE_NAME }}
+      DRILL_DATABASE_ID: ${{ vars.D1_RECOVERY_DRILL_DATABASE_ID }}
+      WRANGLER_VERSION: "4.33.1"
+    steps:
+      - name: Enforce non-production recovery target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "READ_ONLY_RECOVERY_CHECK"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$DRILL_DATABASE_NAME"
+          test -n "$DRILL_DATABASE_ID"
+          case "$DRILL_DATABASE_NAME" in
+            *-recovery-drill) ;;
+            *)
+              echo "D1 recovery checks must target a dedicated database ending in -recovery-drill." >&2
+              exit 1
+              ;;
+          esac
+          test "$DRILL_DATABASE_NAME" != "jadel-commercial-runtime"
+          echo 'D1_NON_PRODUCTION_TARGET=PASS'
+
+      - name: Build ephemeral Wrangler config
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >/tmp/wrangler.recovery.jsonc <<EOF
+          {
+            "name": "jadel-d1-recovery-readiness",
+            "compatibility_date": "2026-09-19",
+            "d1_databases": [
+              {
+                "binding": "DB",
+                "database_name": "$DRILL_DATABASE_NAME",
+                "database_id": "$DRILL_DATABASE_ID"
+              }
+            ]
+          }
+          EOF
+
+      - name: Verify D1 production backend and Time Travel bookmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 info "$DRILL_DATABASE_NAME" \
+            --config /tmp/wrangler.recovery.jsonc --json > evidence/d1-info.json
+          version=$(jq -r '.. | .version? // empty' evidence/d1-info.json | head -n1)
+          test "$version" = "production"
+
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 time-travel info "$DRILL_DATABASE_NAME" \
+            --config /tmp/wrangler.recovery.jsonc --json > evidence/time-travel.json
+
+          bookmark=$(jq -r '.. | .bookmark? // empty' evidence/time-travel.json | head -n1)
+          if [ -z "$bookmark" ]; then
+            bookmark=$(grep -oE '[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]+' evidence/time-travel.json | head -n1 || true)
+          fi
+          test -n "$bookmark"
+          printf '%s\n' "D1_VERSION=production" "TIME_TRAVEL_BOOKMARK_PRESENT=yes" > evidence/summary.txt
+          echo 'D1_TIME_TRAVEL_CAPABILITY=PASS'
+          echo 'D1_RESTORE_DRILL=NOT_EXECUTED_READ_ONLY'
+
+      - name: Retain read-only recovery evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: d1-recovery-readiness-${{ github.run_id }}
+          path: evidence/
+          retention-days: 30
+          if-no-files-found: error
