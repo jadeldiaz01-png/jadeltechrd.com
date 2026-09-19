@@ -5,16 +5,24 @@ on:
     paths:
       - "config/institutional-production-manifest-2026.json"
       - "config/institutional-production-manifest-2026.schema.json"
+      - "config/site-production-readiness-2026.json"
       - "scripts/validate-institutional-production-manifest.mjs"
       - ".github/workflows/institutional-production-manifest.yml"
       - ".github/workflows/commercial-live-smoke.yml"
+      - ".github/workflows/pages.yml"
+      - ".github/workflows/d1-recovery-drill-readiness.yml"
+      - "docs/PRODUCTION-READINESS-2026.md"
+      - "docs/operations/D1-RECOVERY-DRILL-2026.md"
   push:
     branches: [main]
     paths:
       - "config/institutional-production-manifest-2026.json"
       - "config/institutional-production-manifest-2026.schema.json"
+      - "config/site-production-readiness-2026.json"
       - "scripts/validate-institutional-production-manifest.mjs"
       - ".github/workflows/institutional-production-manifest.yml"
+      - ".github/workflows/pages.yml"
+      - ".github/workflows/d1-recovery-drill-readiness.yml"
   workflow_dispatch:
 
 permissions:
@@ -87,3 +95,16 @@ jobs:
           if (m.decision.autonomous_external_publication_authorized !== false) throw new Error('autonomous publication must remain closed');
           console.log('INSTITUTIONAL_FAIL_CLOSED=PASS');
           NODE
+
+      - name: Verify promotion and recovery workflows stay fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'attestations: write' .github/workflows/pages.yml
+          grep -Fq 'actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6' .github/workflows/pages.yml
+          grep -Fq 'gh attestation verify' .github/workflows/pages.yml
+          grep -Fq 'CycloneDX' .github/workflows/pages.yml
+          grep -Fq 'READ_ONLY_RECOVERY_CHECK' .github/workflows/d1-recovery-drill-readiness.yml
+          grep -Fq 'test "$DRILL_DATABASE_NAME" != "jadel-commercial-runtime"' .github/workflows/d1-recovery-drill-readiness.yml
+          ! grep -Eq 'd1[[:space:]]+time-travel[[:space:]]+restore' .github/workflows/d1-recovery-drill-readiness.yml
+          echo 'PROMOTION_RECOVERY_FAIL_CLOSED=PASS'
