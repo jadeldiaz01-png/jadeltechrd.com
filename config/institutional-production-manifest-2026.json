@@ -1,0 +1,566 @@
+{
+  "schema_version": "2026.2",
+  "manifest_id": "jadeltechrd-institutional-production-manifest",
+  "generated_at": "2026-09-19T21:45:00Z",
+  "owner": "Jadel Tech RD",
+  "repository": "jadeldiaz01-png/jadeltechrd.com",
+  "baseline_sha": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+  "decision": {
+    "institutional_production_authorized": false,
+    "execution_enabled_by_default": false,
+    "fail_closed": true,
+    "live_financial_capital_authorized": false,
+    "autonomous_external_publication_authorized": false,
+    "reason": "Current public-site evidence is strong, but institutional authorization remains closed until every domain-specific mandatory gate is current, exact-revision-bound, and independently satisfied."
+  },
+  "authority_model": {
+    "umbrella_manifest": "config/institutional-production-manifest-2026.json",
+    "domain_manifests": [
+      "config/site-production-readiness-2026.json",
+      "config/agent-production-manifest.json",
+      "config/agent-production-readiness.json",
+      "config/slo-policy.json",
+      "security/api-security-manifest.json"
+    ],
+    "rule": "A PASS in one domain never promotes another domain. The umbrella decision is the logical AND of applicable domain promotion decisions plus human approval.",
+    "critical_actions_never_authorized_by_probabilistic_output_alone": true
+  },
+  "architecture": {
+    "public_frontend_origin": "GitHub Pages via GitHub Actions",
+    "public_edge_security_and_dns": "Cloudflare",
+    "intake_runtime": "Cloudflare Worker",
+    "intake_state": "Cloudflare D1",
+    "human_verification": "Cloudflare Turnstile with mandatory server-side Siteverify",
+    "private_control_plane_target": "governed runtime with OPA/Rego policy, OpenBao-managed secrets and durable workflow semantics where side effects require recovery",
+    "observability": "OpenTelemetry traces, metrics and logs with semantic conventions",
+    "single_owner_public_intake": true,
+    "separation_of_duties": [
+      "GitHub owns source, review and CI/CD evidence",
+      "Cloudflare owns DNS, edge enforcement and public runtime controls",
+      "runtime credentials remain outside repositories",
+      "model output proposes; deterministic policy and human approval authorize critical side effects",
+      "research, pilot and production identities are separated"
+    ]
+  },
+  "standards_2026": {
+    "cyber_risk": [
+      "NIST CSF 2.0"
+    ],
+    "secure_development": [
+      "NIST SP 800-218 SSDF 1.1",
+      "NIST SP 800-218A for AI model and AI-system development"
+    ],
+    "ai_risk": [
+      "NIST AI RMF 1.0",
+      "NIST AI 600-1 Generative AI Profile",
+      "OWASP Top 10 for Agentic Applications 2026",
+      "OWASP GenAI LLM Top 10 2026",
+      "OWASP MCP Top 10 and Secure MCP Server Development guidance"
+    ],
+    "identity_and_tokens": [
+      "NIST IR 8587 token and assertion protection",
+      "short-lived workload identity preferred over static cloud credentials",
+      "GitHub OIDC immutable subject claims using owner_id and repo_id where supported"
+    ],
+    "application_security": [
+      "OWASP ASVS 5.0.0",
+      "OWASP Top 10:2025"
+    ],
+    "supply_chain": [
+      "SLSA 1.2",
+      "GitHub artifact attestations with verification before promotion",
+      "CycloneDX 1.7",
+      "SPDX 3.0.1 stable; SPDX 3.1-RC1 evaluation-only until stable"
+    ],
+    "observability": [
+      "OpenTelemetry semantic conventions 1.44.0"
+    ],
+    "finops": [
+      "FinOps Framework unit economics",
+      "FOCUS 1.4 normalized cost and usage schema"
+    ]
+  },
+  "governance": {
+    "required_institutional_gates": [
+      "AUTHORIZED",
+      "POLICY_ALLOWED",
+      "TOS_ALLOWED",
+      "GEO_ALLOWED",
+      "RISK_ALLOWED",
+      "IDENTITY_ALLOWED",
+      "AUDITABLE",
+      "IDEMPOTENT",
+      "RECONCILABLE",
+      "OBSERVABLE",
+      "REVERSIBLE_OR_COMPENSATABLE",
+      "COST_BOUNDED"
+    ],
+    "human_approval_required_for": [
+      "production_promotion",
+      "credential_or_permission_change",
+      "external_publication",
+      "financial_side_effect",
+      "destructive_action",
+      "paid_third_party_commitment",
+      "live_trading_or_capital_allocation",
+      "policy_exception"
+    ],
+    "evidence_rule": "No skipped, stale, blocked, inferred or merely documented control is a PASS.",
+    "exception_rule": "Exceptions require owner, rationale, expiry, compensating controls, evidence locator and explicit approver; critical controls cannot be silently waived."
+  },
+  "evidence_contract": {
+    "required_fields": [
+      "control_id",
+      "status",
+      "source",
+      "observed_at",
+      "subject_sha_or_runtime_revision",
+      "evidence_locator"
+    ],
+    "properties": [
+      "real",
+      "timestamped",
+      "exact_revision_bound",
+      "machine_verifiable_where_possible",
+      "replayable_or_reproducible_where_possible",
+      "non_secret",
+      "tamper_evident_where_material"
+    ],
+    "accepted_statuses": [
+      "PASS",
+      "FAIL",
+      "BLOCKED",
+      "NOT_APPLICABLE",
+      "NOT_YET_CERTIFIED",
+      "STALE"
+    ],
+    "freshness": {
+      "public_edge_hours": 24,
+      "runtime_contract_hours": 24,
+      "security_scan_hours": 24,
+      "dependency_inventory_hours": 24,
+      "supply_chain_attestation_hours": 24,
+      "restore_drill_days": 30,
+      "threat_model_days": 90,
+      "agent_adversarial_eval_days": 30,
+      "quant_market_regime_evidence_days": 30
+    }
+  },
+  "current_evidence_snapshot": {
+    "subject_sha": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+    "observed_date": "2026-09-19",
+    "evidence": [
+      {
+        "control_id": "PAGES_DOMAIN_READINESS",
+        "status": "PASS",
+        "source": "GitHub Actions",
+        "observed_at": "2026-09-19T16:04:28Z",
+        "subject_sha_or_runtime_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "evidence_locator": "actions/run/35453781584",
+        "facts": [
+          "ROOT_PAGES_WORKFLOW_BUILD=PASS",
+          "GITHUB_PAGES_DOMAIN_TXT=PASS",
+          "CLOUDFLARE_EDGE_DNS=PASS",
+          "PUBLIC_GOVERNED_INTAKE_BUNDLE=PASS",
+          "public immutable app is app.47d72e20c2d9ae6d48ba46cb7b2795c6272928a4.js"
+        ],
+        "topology_note": "For this Actions plus Cloudflare topology, Pages API cname=null and https_enforced=false are informational signals; public TLS is owned by Cloudflare and domain verification is evidenced by TXT plus live edge checks."
+      },
+      {
+        "control_id": "GOVERNED_INTAKE_LIVE_CONTRACT",
+        "status": "PASS",
+        "source": "GitHub Actions",
+        "observed_at": "2026-09-19T20:58:14Z",
+        "subject_sha_or_runtime_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "evidence_locator": "actions/run/35468993129",
+        "facts": [
+          "PUBLIC_INTAKE_ASSETS=PASS",
+          "PUBLIC_SINGLE_OWNER_SOURCE=PASS",
+          "API_CORS_TURNSTILE_CONTRACT=PASS",
+          "GOVERNED_CTA_SINGLE_OWNER_BROWSER_E2E=PASS",
+          "GOVERNED_CTA_IMMUTABLE_APP=PASS",
+          "INTAKE_SECURITY_POLICY=PASS"
+        ]
+      },
+      {
+        "control_id": "COMMERCIAL_SITE_LIVE_SMOKE",
+        "status": "PASS",
+        "source": "GitHub Actions rerun",
+        "observed_at": "2026-09-19T20:50:18Z",
+        "subject_sha_or_runtime_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "evidence_locator": "actions/run/35468609893 job/105971757480",
+        "facts": [
+          "HTTP and TLS verification passed",
+          "legal discovery passed",
+          "rendered Chrome experience passed"
+        ]
+      },
+      {
+        "control_id": "LIVE_ADD_AGENT_REGRESSION",
+        "status": "PASS",
+        "source": "GitHub Actions",
+        "observed_at": "2026-09-15T21:05:35Z",
+        "subject_sha_or_runtime_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "evidence_locator": "actions/run/35023571934",
+        "facts": [
+          "LIVE_MAX_8_ADD_CONTROLS=PASS",
+          "LIVE_REMAINING_ADD_CONTROLS_DISABLED=PASS",
+          "LIVE_GOVERNED_INTAKE_ROUTING=PASS",
+          "LIVE_SINGLE_OWNER=PASS",
+          "LIVE_IMMUTABLE_APP=PASS"
+        ]
+      },
+      {
+        "control_id": "SECURITY_BASELINE",
+        "status": "PASS",
+        "source": "GitHub Actions",
+        "observed_at": "2026-09-15T21:05:12Z",
+        "subject_sha_or_runtime_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "evidence_locator": "actions/run/35023533970",
+        "facts": [
+          "SOURCE_SECURITY=PASS",
+          "IMMUTABLE_ACTIONS=PASS",
+          "CSP_BROWSER_SMOKE=PASS"
+        ]
+      }
+    ],
+    "transient_incident": {
+      "initial_observation": "commercial live smoke received curl error 35 connection reset by peer on the data-deletion route after homepage, TLS, privacy and terms had passed",
+      "classification": "transient transport/edge failure after successful targeted rerun",
+      "remediation": "bounded transport-level retries are added to live-resource synthetics without weakening semantic assertions",
+      "final_state": "resolved_in_rerun"
+    }
+  },
+  "domain_authorization": {
+    "public_site": {
+      "state": "PRODUCTION_CANDIDATE",
+      "production_authorized": false,
+      "positive_evidence": [
+        "pages domain readiness current",
+        "immutable exact-SHA public bundle current",
+        "public TLS and HTTP smoke current",
+        "security baseline green",
+        "browser regression green"
+      ],
+      "remaining_mandatory_evidence": [
+        "supply-chain provenance and attestation verification for promoted deploy artifact",
+        "current restore/rollback exercise evidence",
+        "formal error-budget window and alert delivery evidence"
+      ]
+    },
+    "commercial_intake": {
+      "state": "SUPERVISED_PRODUCTION_CANDIDATE",
+      "production_authorized": false,
+      "positive_evidence": [
+        "health and fail-closed runtime contract",
+        "exact CORS policy",
+        "public Turnstile configuration",
+        "governed CTA browser E2E",
+        "intake CSP contract"
+      ],
+      "remaining_mandatory_evidence": [
+        "real authorized submission proving server-side Siteverify plus hostname/action validation",
+        "D1 project/evidence/outbox persistence and reconciliation proof on a non-synthetic authorized request",
+        "restore drill with measured RPO/RTO",
+        "rate-limit and abuse-control evidence under adversarial load"
+      ]
+    },
+    "agent_fleet": {
+      "state": "BLOCKED_PER_SERVICE",
+      "production_authorized": false,
+      "source_of_truth": "config/agent-production-readiness.json",
+      "rule": "Each agent is promoted independently only when its blocking_gates is empty and exact deployment evidence is current."
+    },
+    "external_connectors_and_publication": {
+      "state": "HUMAN_GATED",
+      "production_authorized": false,
+      "requirements": [
+        "official or terms-allowed API",
+        "least-privilege identity",
+        "current TOS and geo check",
+        "idempotency and reconciliation",
+        "auditable approval",
+        "rights and content policy review where applicable"
+      ]
+    },
+    "quant_and_trading": {
+      "state": "RESEARCH_ONLY_NO_LIVE_CAPITAL",
+      "production_authorized": false,
+      "live_capital_authorized": false,
+      "promotion_order": [
+        "RESEARCH",
+        "REPRODUCIBLE_BACKTEST",
+        "FROZEN_HOLDOUT",
+        "PAPER",
+        "TESTNET",
+        "SUPERVISED_PILOT",
+        "LIVE"
+      ],
+      "mandatory_scientific_gates": [
+        "point_in_time_data_and_lineage",
+        "lookahead_survivorship_and_leakage_tests",
+        "all_trials_registry",
+        "walk_forward_or_nested_out_of_sample",
+        "transaction_costs_fees_slippage_and_latency",
+        "multiple_testing_adjustment",
+        "deflated_sharpe_ratio",
+        "probability_of_backtest_overfitting_or_equivalent selection-bias control",
+        "regime_and_stress_tests",
+        "independent_reproduction",
+        "paper_and_testnet_reconciliation",
+        "hard_risk_limits_and_kill_switches",
+        "human_live_capital_approval"
+      ]
+    },
+    "social_media_intelligence": {
+      "state": "SUPERVISED_PILOT",
+      "production_authorized": false,
+      "requirements": [
+        "official_or_terms_allowed_signal_sources",
+        "source freshness and lineage",
+        "rights and originality review",
+        "platform-specific policy gate",
+        "human publication approval",
+        "post-publication measurement and rollback/takedown path"
+      ]
+    }
+  },
+  "agentic_and_mcp_security": {
+    "external_content_is_untrusted_data_not_instructions": true,
+    "tool_policy": [
+      "explicit allowlist",
+      "schema validation",
+      "least privilege",
+      "per-tool scopes",
+      "session isolation",
+      "egress allowlist",
+      "timeouts",
+      "rate and recursion budgets",
+      "side-effect classification",
+      "deterministic policy before execution"
+    ],
+    "threats_to_test": [
+      "prompt injection",
+      "tool poisoning",
+      "context spoofing",
+      "memory poisoning",
+      "cross-agent privilege escalation",
+      "secret exfiltration",
+      "confused deputy",
+      "replay",
+      "unbounded agent loops",
+      "model or tool substitution",
+      "malicious retrieved content"
+    ],
+    "approval_boundary": "Critical external actions require deterministic authorization and human approval; agent confidence is never an authorization credential."
+  },
+  "identity_and_secret_security": {
+    "preferred_authentication": "short-lived workload identity via OIDC where supported",
+    "github_oidc": {
+      "use_immutable_subject_claims": true,
+      "bind_trust_to_owner_id_repo_id_environment_or_ref": true,
+      "environment_protection_for_production": true
+    },
+    "token_controls": [
+      "audience issuer subject and expiry verification",
+      "short TTL",
+      "key rotation",
+      "replay resistance",
+      "least privilege",
+      "redaction from logs",
+      "continuous anomaly monitoring",
+      "revocation or compensating containment path"
+    ],
+    "static_secrets": "Only when federation is unavailable; store in managed secret system, rotate, scope narrowly and audit use."
+  },
+  "software_supply_chain": {
+    "actions_pinned_to_full_commit_sha": true,
+    "required_before_promotion": [
+      "dependency inventory",
+      "dependency review",
+      "secret scanning and push protection",
+      "SAST",
+      "SBOM",
+      "provenance",
+      "artifact attestation",
+      "attestation verification",
+      "release artifact hash binding",
+      "protected release path"
+    ],
+    "sbom": {
+      "preferred": "CycloneDX 1.7",
+      "alternate_stable": "SPDX 3.0.1",
+      "non_normative_tracking": "SPDX 3.1-RC1"
+    },
+    "rule": "Attestation generation alone is not a security gate; verification against repository, workflow, subject and policy is mandatory."
+  },
+  "data_and_knowledge_governance": {
+    "classification": [
+      "FACT",
+      "INFERENCE",
+      "HYPOTHESIS",
+      "UNVERIFIED_EXTERNAL_DATA",
+      "PII",
+      "SECRET",
+      "FINANCIAL_SENSITIVE"
+    ],
+    "requirements": [
+      "source provenance",
+      "event time and ingestion time",
+      "schema version",
+      "transformation lineage",
+      "retention class",
+      "consent or lawful-purpose metadata where applicable",
+      "quality assertions",
+      "deletion/export path where applicable"
+    ],
+    "rag_and_graph_rule": "Retrieval, vector search or graph enrichment is enabled only where quality is measurable and provenance can be surfaced with the answer.",
+    "d1_recovery": {
+      "time_travel_capability_required": true,
+      "scheduled_restore_drill_required": true,
+      "longer_term_export_to_object_storage_when_retention_exceeds_native_window": true
+    }
+  },
+  "reliability_and_operations": {
+    "sli": [
+      "homepage availability",
+      "intake availability",
+      "valid-request success rate",
+      "p50/p95/p99 intake latency",
+      "5xx rate",
+      "Turnstile validation failure rate",
+      "D1 write failure rate",
+      "outbox reconciliation lag",
+      "synthetic browser success",
+      "critical workflow success rate"
+    ],
+    "required": [
+      "SLO and error budget",
+      "multi-window burn-rate alerting",
+      "synthetic monitoring",
+      "incident severity model",
+      "runbooks",
+      "tested rollback",
+      "backup restore drill",
+      "capacity and quota headroom",
+      "dependency failure degradation mode"
+    ],
+    "synthetic_retry_policy": {
+      "scope": "transport-level transient failures only",
+      "bounded_attempts": 3,
+      "backoff": "exponential with jitter where supported",
+      "never_mask": [
+        "semantic assertion failure",
+        "authentication or authorization failure",
+        "persistent HTTP error",
+        "content mismatch",
+        "policy failure"
+      ]
+    }
+  },
+  "qa_and_adversarial_evaluation": {
+    "layers": [
+      "unit",
+      "integration",
+      "contract",
+      "end_to_end",
+      "property",
+      "fuzz",
+      "browser_mobile",
+      "security_adversarial",
+      "agent_evaluation",
+      "chaos_or_failure_injection",
+      "recovery",
+      "performance_and_capacity"
+    ],
+    "release_rule": "Flaky critical checks block promotion until classified; a rerun can establish transient recovery but does not remove the obligation to harden the synthetic when the failure mode is retry-safe.",
+    "agent_eval_dimensions": [
+      "task correctness",
+      "groundedness",
+      "tool selection",
+      "authorization adherence",
+      "prompt injection resistance",
+      "secret handling",
+      "handoff correctness",
+      "recovery after partial side effects",
+      "latency",
+      "cost per correct policy-compliant result"
+    ]
+  },
+  "finops": {
+    "cost_schema_target": "FOCUS 1.4",
+    "unit_economics": [
+      "cost_per_valid_intake",
+      "cost_per_completed_agent_task",
+      "cost_per_correct_policy_compliant_result",
+      "cost_per_published_asset_after_human_approval",
+      "cost_per_reconciled_commercial_outcome"
+    ],
+    "budgets": [
+      "GitHub Actions",
+      "Cloudflare Workers and D1",
+      "storage and egress",
+      "AI model tokens",
+      "external APIs",
+      "self-hosted runtime"
+    ],
+    "controls": [
+      "monthly budget",
+      "per-service attribution",
+      "forecast",
+      "anomaly alerts",
+      "quota ceilings",
+      "graceful degradation",
+      "cost-aware model routing without bypassing safety or quality gates"
+    ]
+  },
+  "promotion_policy": {
+    "stages": [
+      "RESEARCH",
+      "LOCAL_TEST",
+      "CI_VALIDATED",
+      "STAGING_OR_CANARY",
+      "PRODUCTION_CANDIDATE",
+      "PRODUCTION"
+    ],
+    "production_requires": [
+      "exact source SHA or runtime revision",
+      "all applicable mandatory domain gates PASS",
+      "no stale critical evidence",
+      "no unresolved critical/high finding without approved exception",
+      "artifact provenance verified where an artifact is promoted",
+      "observability and alert delivery active",
+      "rollback and restore evidence current",
+      "cost and quota controls active",
+      "human production approval"
+    ],
+    "automatic_demotion": [
+      "critical gate FAIL",
+      "evidence exceeds freshness window",
+      "unreconciled critical side effect",
+      "credential compromise",
+      "policy bypass",
+      "SLO burn beyond approved error budget",
+      "supply-chain verification failure"
+    ]
+  },
+  "research_references": [
+    "NIST CSF 2.0",
+    "NIST SP 800-218 and SP 800-218A",
+    "NIST AI RMF and NIST AI 600-1",
+    "NIST IR 8587",
+    "OWASP ASVS 5.0.0 and Top 10:2025",
+    "OWASP Top 10 for Agentic Applications 2026",
+    "OWASP GenAI LLM Top 10 2026",
+    "OWASP MCP security guidance",
+    "SLSA 1.2",
+    "GitHub artifact attestations and OIDC",
+    "CycloneDX 1.7",
+    "SPDX 3.0.1",
+    "OpenTelemetry semantic conventions 1.44.0",
+    "Cloudflare Turnstile Siteverify and D1 Time Travel",
+    "FinOps Framework and FOCUS 1.4",
+    "Bailey et al. Probability of Backtest Overfitting",
+    "Bailey and Lopez de Prado Deflated Sharpe Ratio"
+  ]
+}
