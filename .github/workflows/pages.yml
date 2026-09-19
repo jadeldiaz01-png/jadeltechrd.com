@@ -9,6 +9,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  attestations: write
 
 concurrency:
   group: pages
@@ -23,6 +24,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
 
       - name: Configure Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
@@ -33,7 +37,7 @@ jobs:
           set -euo pipefail
           rm -rf _site
           mkdir -p _site
-          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name _site ! -name CNAME -exec cp -a {} _site/ \;
+          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name _site ! -name evidence ! -name CNAME -exec cp -a {} _site/ \;
 
           immutable_app="app.${GITHUB_SHA}.js"
           cp app.js "_site/${immutable_app}"
@@ -53,6 +57,107 @@ jobs:
           grep -Fq "<script src=\"/${immutable_app}\" defer></script>" _site/index.html
           test -s "_site/${immutable_app}"
           echo "IMMUTABLE_APP_ASSET=${immutable_app}"
+
+      - name: Build deterministic deployment evidence and CycloneDX SBOM
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf evidence
+          mkdir -p evidence
+          SOURCE_SHA="$GITHUB_SHA" SOURCE_TIME="$(git show -s --format=%cI "$GITHUB_SHA")" python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path("_site")
+          files = []
+          components = []
+          for path in sorted(p for p in root.rglob("*") if p.is_file() and not p.is_symlink()):
+              rel = path.relative_to(root).as_posix()
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              size = path.stat().st_size
+              files.append({"path": rel, "sha256": digest, "size": size})
+              components.append({
+                  "type": "file",
+                  "name": rel,
+                  "hashes": [{"alg": "SHA-256", "content": digest}],
+                  "properties": [{"name": "jadeltechrd:fileSize", "value": str(size)}]
+              })
+
+          sha = os.environ["SOURCE_SHA"]
+          timestamp = os.environ["SOURCE_TIME"]
+          release_manifest = {
+              "schema_version": "1.0",
+              "source_repository": os.environ.get("GITHUB_REPOSITORY"),
+              "source_sha": sha,
+              "generated_from": "_site",
+              "file_count": len(files),
+              "files": files
+          }
+          sbom = {
+              "bomFormat": "CycloneDX",
+              "specVersion": "1.7",
+              "version": 1,
+              "metadata": {
+                  "timestamp": timestamp,
+                  "component": {
+                      "type": "application",
+                      "name": "jadeltechrd.com-public-site",
+                      "version": sha
+                  },
+                  "properties": [
+                      {"name": "jadeltechrd:sourceRepository", "value": os.environ.get("GITHUB_REPOSITORY", "")},
+                      {"name": "jadeltechrd:sourceSha", "value": sha}
+                  ]
+              },
+              "components": components
+          }
+          Path("evidence/site-release-manifest.json").write_text(json.dumps(release_manifest, indent=2) + "\n", encoding="utf-8")
+          Path("evidence/bom.cdx.json").write_text(json.dumps(sbom, indent=2) + "\n", encoding="utf-8")
+          PY
+
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -cf evidence/site-release.tar -C _site .
+          sha256sum evidence/site-release.tar evidence/bom.cdx.json evidence/site-release-manifest.json > evidence/SHA256SUMS
+          test -s evidence/site-release.tar
+          test -s evidence/bom.cdx.json
+          test -s evidence/site-release-manifest.json
+          echo 'DEPLOYMENT_EVIDENCE_BUNDLE=PASS'
+          echo 'CYCLONEDX_1_7_SBOM=PASS'
+
+      - name: Attest deployment bundle provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: evidence/site-release.tar
+
+      - name: Attest deployment SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: evidence/site-release.tar
+          sbom-path: evidence/bom.cdx.json
+
+      - name: Verify deployment attestations before promotion
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh attestation verify evidence/site-release.tar -R "$GITHUB_REPOSITORY" >/tmp/provenance-verify.txt
+          gh attestation verify evidence/site-release.tar -R "$GITHUB_REPOSITORY" \
+            --predicate-type https://cyclonedx.org/bom >/tmp/sbom-verify.txt
+          test -s /tmp/provenance-verify.txt
+          test -s /tmp/sbom-verify.txt
+          echo 'DEPLOYMENT_PROVENANCE_VERIFY=PASS'
+          echo 'DEPLOYMENT_SBOM_ATTESTATION_VERIFY=PASS'
+
+      - name: Retain promotion evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: public-site-promotion-evidence-${{ github.sha }}
+          path: evidence/
+          retention-days: 30
+          if-no-files-found: error
 
       - name: Upload static site
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
