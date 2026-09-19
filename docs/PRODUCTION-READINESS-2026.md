@@ -1,99 +1,123 @@
 # Jadel Tech RD — Production Readiness 2026
 
-This document defines the evidence-driven release standard for `jadeltechrd.com`. It does not grant production authority by itself. The authoritative machine-readable decision is `config/site-production-readiness-2026.json` and remains fail-closed until every mandatory live gate is PASS.
+This document is the human-readable site-readiness view. The institutional promotion authority is now `config/institutional-production-manifest-2026.json`; the site-specific machine-readable evidence remains `config/site-production-readiness-2026.json`.
 
-## Current release decision
+Neither document grants production authority by prose. Promotion remains fail-closed and evidence-driven.
 
-- Baseline SHA: `1033a65c0c2d1c3cdf7c32a52c3b81d55792b70c`
-- `production_authorized=false`
-- `GITHUB_PAGES_CNAME=FAIL` from authenticated GitHub Pages API evidence: `cname=null`
-- TLS, direct-origin, public fingerprint, governed intake and Android 11/11 remain blocked downstream.
+## Current evidence snapshot — 2026-09-19
 
-No skipped or blocked gate is equivalent to PASS.
+Baseline public revision: `47d72e20c2d9ae6d48ba46cb7b2795c6272928a4`.
 
-## 2026 control baseline
+Current verified evidence includes:
 
-### Application security
+- Pages domain readiness PASS — run `35453781584`.
+  - GitHub Pages workflow build PASS.
+  - GitHub domain TXT verification PASS.
+  - Cloudflare edge DNS PASS.
+  - Public governed immutable bundle PASS.
+- Governed intake live contract PASS — run `35468993129`.
+  - Public intake assets and single-owner source PASS.
+  - CORS/Turnstile public contract PASS.
+  - Governed CTA browser E2E PASS.
+  - Immutable app PASS.
+  - Intake CSP/security policy PASS.
+- Commercial live smoke PASS — run `35468609893`, successful rerun job `105971757480`.
+  - HTTP/TLS PASS.
+  - Legal discovery PASS.
+  - Chrome render PASS.
+- Live add-agent governed regression PASS — run `35023571934`.
+  - Max-8 selection contract PASS.
+  - Remaining Add controls disabled PASS.
+  - Governed intake routing PASS.
+  - Single-owner and immutable app PASS.
+- Security baseline PASS — run `35023533970`.
+  - Source security PASS.
+  - Immutable GitHub Actions PASS.
+  - CSP browser smoke PASS.
 
-Use OWASP ASVS 5.0.0 as the verification catalog and OWASP Top 10:2025 as the risk-awareness baseline. The 2025 Top 10 explicitly includes software supply-chain failures, security misconfiguration, integrity failures, logging/alerting failures and mishandling of exceptional conditions.
+The live immutable frontend observed on 2026-09-19 is:
 
-### Secure software development
+`/app.47d72e20c2d9ae6d48ba46cb7b2795c6272928a4.js`
 
-Use NIST SP 800-218 SSDF 1.1 as the secure-development lifecycle baseline. Security controls belong in planning, implementation, verification, release and operations, not only in a final scan.
+## Topology correction
+
+The earlier readiness model treated GitHub Pages `cname` and `https_enforced` fields as mandatory public-production signals. That is no longer correct for the deployed topology.
+
+Current authority model:
+
+`GitHub Actions/Pages origin -> Cloudflare DNS/edge/TLS -> public user`
+
+The authenticated Pages audit reports `build_type=workflow`, `cname=null`, and `https_enforced=false`, while the GitHub Pages verification TXT, Cloudflare edge DNS, immutable bundle, public HTTPS/TLS, and live browser contracts pass. Therefore the legacy CNAME gate is retained only as a compatibility/diagnostic record and is not a promotion dependency.
+
+The old `ANDROID_11_OF_11` gate is likewise obsolete because governed intake intentionally caps one request at 8 services. It is replaced by `ANDROID_GOVERNED_MAX_8`.
+
+## Remaining site blockers
+
+Full site promotion is intentionally still closed until both controls below produce current evidence:
+
+1. **Supply-chain promotion verification**
+   - deterministic deploy bundle;
+   - CycloneDX 1.7 SBOM;
+   - build provenance attestation;
+   - SBOM attestation;
+   - verification against expected repository/workflow/SHA before deployment;
+   - retained promotion evidence.
+
+2. **Restore/rollback drill**
+   - tested frontend rollback;
+   - stateful intake recovery procedure;
+   - measured RPO/RTO;
+   - D1 recovery drill on a safe non-production recovery target or other approved non-destructive method;
+   - current evidence no older than 30 days.
+
+The proposed Pages workflow in the institutional production PR implements the first blocker. The second remains fail-closed until a safe recovery target and evidence are available.
+
+## 2026 institutional baseline
+
+### Cybersecurity and governance
+
+- NIST CSF 2.0, including the Govern function.
+- OWASP ASVS 5.0.0 and OWASP Top 10:2025.
+- NIST SP 800-218 SSDF 1.1.
+- NIST IR 8587 for identity/access token and assertion protection.
+
+### AI and agentic systems
+
+- NIST SP 800-218A.
+- NIST AI RMF 1.0 and NIST AI 600-1.
+- OWASP Top 10 for Agentic Applications 2026.
+- OWASP GenAI LLM Top 10 2026.
+- OWASP MCP security guidance.
+- Probabilistic output may propose but never independently authorize a critical action.
 
 ### Software supply chain
 
-Target SLSA 1.2 concepts for provenance and build integrity. Use GitHub artifact attestations for public release artifacts where appropriate, generate SBOMs, and verify attestations before promotion. An attestation is evidence of provenance, not proof that the artifact is secure.
+- SLSA 1.2 concepts.
+- GitHub Actions pinned to full commit SHA.
+- CycloneDX 1.7 or stable SPDX 3.0.1 for BOM evidence.
+- Artifact provenance/SBOM attestations must be verified, not merely generated.
+- SPDX 3.1-RC1 is evaluation-only until stable.
 
-### Repository security
+### Reliability
 
-Use protected `main`, pull requests, required checks, least-privilege workflow permissions, commit-SHA-pinned Actions, dependency review, secret scanning/push protection and CodeQL or an equivalent SAST gate. Critical bypasses require explicit review and evidence.
+Required operational evidence includes SLOs, error budgets, synthetic monitoring, alert delivery, rollback, restore, capacity/quota headroom, and dependency-failure degradation.
 
-### Edge, domain and transport
+Transport-level synthetic failures may be retried a bounded number of times. Semantic failures, authorization failures, persistent HTTP errors, policy failures and content mismatches must never be converted into PASS by retries.
 
-GitHub Pages remains the frontend origin/deployment authority. Cloudflare remains DNS/proxy/security. Do not introduce a second frontend authority for the same hostname without an architectural decision record and migration plan.
+### Data
 
-The domain release chain is:
+Every material data product should carry provenance, event/ingestion time, schema version, transformation lineage, retention class and quality state. Facts, inferences, hypotheses and unverified external data must remain distinguishable.
 
-`DOMAIN_OWNERSHIP_VERIFIED → GITHUB_PAGES_CNAME → TLS_CERTIFICATE → DIRECT_ORIGIN_4_OF_4 → PUBLIC_CURRENT_FINGERPRINT → GOVERNED_INTAKE_LIVE_CONTRACT → ANDROID_11_OF_11 → PRODUCTION_DOMAIN_GATE`
+### Quantitative research
 
-### Governed intake
-
-Cloudflare Turnstile must be validated server-side with Siteverify. Tokens are single use and expire after five minutes. Validate hostname/action, enforce body limits, use idempotency, keep secrets server-side, and persist project/evidence/outbox state transactionally enough to support reconciliation.
-
-### Data and recovery
-
-Classify PII, minimize collection, define retention, encrypt in transit, use least privilege and maintain lineage. D1 state requires point-in-time recovery capability appropriate to the plan plus periodic restore testing. Outbox/reconciliation state must have bounded lag and explicit alerting.
-
-### Reliability and SRE
-
-Minimum SLIs: homepage availability, intake availability, valid-request success rate, p95 intake latency, 5xx rate, Turnstile failure rate, D1 write failure rate and reconciliation lag. Initial targets live in the production manifest and must be revisited after enough real traffic exists.
-
-### AI and agentic safety
-
-A probabilistic model output may not authorize a critical action by itself. Treat retrieved content as untrusted, separate instructions from data, enforce least-privilege tool access, apply deterministic policy before side effects, and require human approval for production, credentials, publication, financial or destructive actions.
-
-### QA and adversarial evaluation
-
-Production promotion requires unit, integration, contract and E2E coverage plus property/fuzz tests where parsers or external inputs exist. Add adversarial cases for prompt injection, permission escalation, secret exfiltration, replay/idempotency, stale deployments, partial failure, retries and reconciliation.
+Trading remains `RESEARCH_ONLY_NO_LIVE_CAPITAL`. Promotion requires point-in-time data, leakage controls, trial registry, out-of-sample/walk-forward evidence, realistic costs/slippage/latency, multiple-testing adjustment, Deflated Sharpe/PBO or equivalent selection-bias controls, stress/regime testing, independent reproduction, paper/testnet reconciliation, hard limits/kill switches and explicit human capital approval.
 
 ### FinOps
 
-Track cost per correct policy-compliant result. Monitor GitHub Actions, Cloudflare, storage, egress and AI model/token consumption. Cost reduction may not remove mandatory security or evidence gates.
+Normalize cost/usage where practical with FOCUS 1.4 and track unit economics such as cost per valid intake, correct policy-compliant agent result, and reconciled commercial outcome.
 
-## Evidence model
+## Promotion rule
 
-Each production assertion should include:
+A public site being live does not authorize the commercial runtime, agent fleet, social publication, connectors, financial side effects, or trading.
 
-- `control_id`
-- `status`
-- `source`
-- `observed_at`
-- `subject_sha_or_revision`
-- `evidence_locator`
-
-Evidence should be exact-SHA/revision-bound, timestamped, machine-verifiable where possible, reproducible/replayable where possible and free of secret material.
-
-## Current blocking evidence
-
-Latest authenticated Pages diagnostic returned HTTP 200 with:
-
-- `cname=null`
-- `build_type=workflow`
-- `https_certificate=null`
-- `https_enforced=false`
-
-Therefore no downstream public production gate may be promoted yet.
-
-## Primary references
-
-- OWASP ASVS 5.0.0: https://owasp.org/www-project-application-security-verification-standard/
-- OWASP Top 10:2025: https://owasp.org/Top10/
-- NIST SSDF 1.1: https://csrc.nist.gov/pubs/sp/800/218/final
-- SLSA 1.2: https://slsa.dev/spec/v1.2/
-- GitHub artifact attestations: https://docs.github.com/en/actions/concepts/security/artifact-attestations
-- GitHub dependency review: https://docs.github.com/en/code-security/concepts/supply-chain-security/dependency-review
-- GitHub push protection: https://docs.github.com/en/code-security/concepts/secret-security/push-protection
-- OpenTelemetry signals: https://opentelemetry.io/docs/concepts/signals/
-- Cloudflare Turnstile server-side validation: https://developers.cloudflare.com/turnstile/get-started/server-side-validation/
-- Cloudflare D1 limits and Time Travel: https://developers.cloudflare.com/d1/platform/limits/
+The institutional production decision may become true only when every applicable domain is independently authorized on current exact-revision evidence and a human production approval is recorded.
