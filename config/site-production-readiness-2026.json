@@ -1,15 +1,15 @@
 {
   "schema_version": "2026.1",
   "manifest_id": "jadeltechrd-site-production-readiness",
-  "generated_at": "2026-09-09T10:04:00Z",
+  "generated_at": "2026-09-19T21:50:00Z",
   "owner": "Jadel Tech RD",
   "repository": "jadeldiaz01-png/jadeltechrd.com",
-  "baseline_sha": "1033a65c0c2d1c3cdf7c32a52c3b81d55792b70c",
+  "baseline_sha": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
   "decision": {
     "production_authorized": false,
     "execution_enabled_by_default": false,
     "fail_closed": true,
-    "reason": "Administrative GitHub Pages custom-domain binding and TLS evidence are not yet certified; downstream live acceptance gates remain blocked.",
+    "reason": "Public site and governed intake have current exact-SHA evidence, but full site promotion remains fail-closed pending current supply-chain promotion verification and a restore/rollback drill. Legacy Pages CNAME and 11-of-11 gates are retained as non-applicable compatibility records because the deployed topology now uses GitHub Actions + Cloudflare edge and the governed intake contract caps selection at 8.",
     "required_final_state": "PRODUCTION_DOMAIN_GATE=PASS"
   },
   "governance": {
@@ -49,10 +49,10 @@
       "NIST SP 800-218 SSDF 1.1"
     ],
     "software_supply_chain": [
-      "SLSA 1.2 target",
-      "GitHub artifact attestations",
-      "Sigstore-backed provenance",
-      "SBOM: SPDX 2.3 or CycloneDX"
+      "SLSA 1.2",
+      "GitHub artifact attestations with verification",
+      "CycloneDX 1.7",
+      "SPDX 3.0.1 stable"
     ],
     "observability": [
       "OpenTelemetry traces",
@@ -61,6 +61,24 @@
     ],
     "policy": [
       "OPA/Rego fail-closed"
+    ],
+    "cyber_risk": [
+      "NIST CSF 2.0"
+    ],
+    "identity_and_tokens": [
+      "NIST IR 8587",
+      "GitHub OIDC immutable subject claims where supported"
+    ],
+    "ai_security": [
+      "NIST SP 800-218A",
+      "NIST AI 600-1",
+      "OWASP Top 10 for Agentic Applications 2026",
+      "OWASP GenAI LLM Top 10 2026",
+      "OWASP MCP security guidance"
+    ],
+    "finops": [
+      "FinOps Framework unit economics",
+      "FOCUS 1.4"
     ]
   },
   "architecture": {
@@ -114,60 +132,95 @@
     {
       "id": "DOMAIN_OWNERSHIP_VERIFIED",
       "category": "identity_and_domain",
-      "status": "NOT_YET_CERTIFIED",
-      "required_evidence": ["GitHub verified-domain state or equivalent authenticated administrative evidence"]
+      "status": "PASS",
+      "required_evidence": [
+        "GitHub verified-domain state or equivalent authenticated administrative evidence"
+      ],
+      "evidence": {
+        "source": "GitHub Actions Pages domain readiness",
+        "workflow_run_id": 35453781584,
+        "observed_at": "2026-09-19T16:04:28Z",
+        "subject_sha_or_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "result": "GITHUB_PAGES_DOMAIN_TXT=PASS; PAGES_DOMAIN_READINESS=PASS"
+      }
     },
     {
       "id": "GITHUB_PAGES_CNAME",
       "category": "deployment",
-      "status": "FAIL",
+      "status": "NOT_APPLICABLE",
       "required_value": "jadeltechrd.com",
       "observed_value": null,
       "evidence": {
-        "source": "GitHub Pages REST diagnostic via GitHub Actions",
-        "workflow_run_id": 34179731843,
-        "job_id": 102329684482,
-        "observed_at": "2026-09-09T03:45:54Z",
-        "result": "HTTP 200; cname=null; build_type=workflow; https_certificate=null; https_enforced=false"
-      }
+        "source": "GitHub Actions Pages domain readiness",
+        "workflow_run_id": 35453781584,
+        "observed_at": "2026-09-19T16:04:28Z",
+        "subject_sha_or_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "result": "ROOT_PAGES_WORKFLOW_BUILD=PASS; ROOT_PAGES_REPOSITORY_CNAME=INFO_EMPTY_ACTIONS_WORKFLOW"
+      },
+      "topology_reason": "GitHub Pages publishes with build_type=workflow while Cloudflare owns public edge/DNS/TLS; current authenticated audit treats cname=null as informational when domain TXT and public edge evidence pass."
     },
     {
       "id": "TLS_CERTIFICATE",
       "category": "transport_security",
-      "status": "BLOCKED",
-      "depends_on": ["GITHUB_PAGES_CNAME"],
-      "acceptance": ["valid certificate for jadeltechrd.com", "HTTPS reachable", "https_enforced=true after certificate issuance"]
+      "status": "PASS",
+      "depends_on": [
+        "DOMAIN_OWNERSHIP_VERIFIED"
+      ],
+      "acceptance": [
+        "public HTTPS reachable",
+        "certificate verification succeeds at Cloudflare edge"
+      ],
+      "evidence": {
+        "source": "Verify live commercial site",
+        "workflow_run_id": 35468609893,
+        "job_id": 105971757480,
+        "observed_at": "2026-09-19T20:50:18Z",
+        "subject_sha_or_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "result": "LIVE_TLS_HTTP=PASS; TLS_VERIFY=0"
+      }
     },
     {
       "id": "DIRECT_ORIGIN_4_OF_4",
       "category": "origin_integrity",
-      "status": "BLOCKED",
-      "depends_on": ["GITHUB_PAGES_CNAME"],
+      "status": "NOT_APPLICABLE",
+      "depends_on": [],
       "acceptance": [
-        "185.199.108.153 serves current fingerprint for Host jadeltechrd.com",
-        "185.199.109.153 serves current fingerprint for Host jadeltechrd.com",
-        "185.199.110.153 serves current fingerprint for Host jadeltechrd.com",
-        "185.199.111.153 serves current fingerprint for Host jadeltechrd.com"
-      ]
+        "diagnostic only; may be audited by TLS/origin readiness workflow"
+      ],
+      "topology_reason": "Direct GitHub origin 4-of-4 is retained as diagnostic defense-in-depth, not as a production dependency, because Cloudflare is the declared public edge authority."
     },
     {
       "id": "PUBLIC_CURRENT_FINGERPRINT",
       "category": "edge_integrity",
-      "status": "BLOCKED",
-      "depends_on": ["DIRECT_ORIGIN_4_OF_4"],
+      "status": "PASS",
+      "depends_on": [
+        "TLS_CERTIFICATE"
+      ],
       "acceptance": [
         "HTTP 200",
         "immutable app.<40hex>.js referenced",
         "project-intake-bridge.js absent",
         "directCheckout absent from governed CTA",
         "current single-owner intake routing present"
-      ]
+      ],
+      "evidence": {
+        "source": "GitHub Actions Pages domain readiness and governed intake live contract",
+        "workflow_run_ids": [
+          35453781584,
+          35468993129
+        ],
+        "observed_at": "2026-09-19T20:58:14Z",
+        "subject_sha_or_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "result": "PUBLIC_IMMUTABLE_APP=/app.47d72e20c2d9ae6d48ba46cb7b2795c6272928a4.js; PUBLIC_GOVERNED_INTAKE_BUNDLE=PASS"
+      }
     },
     {
       "id": "GOVERNED_INTAKE_LIVE_CONTRACT",
       "category": "application_contract",
-      "status": "BLOCKED",
-      "depends_on": ["PUBLIC_CURRENT_FINGERPRINT"],
+      "status": "PASS",
+      "depends_on": [
+        "PUBLIC_CURRENT_FINGERPRINT"
+      ],
       "acceptance": [
         "intake health HTTP 200",
         "exact CORS policy",
@@ -178,13 +231,28 @@
         "idempotency enforced",
         "D1 project/evidence/outbox persistence verified",
         "no secrets exposed"
-      ]
+      ],
+      "evidence": {
+        "source": "Governed intake live contract",
+        "workflow_run_id": 35468993129,
+        "job_id": 105966399374,
+        "observed_at": "2026-09-19T20:58:14Z",
+        "subject_sha_or_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "result": [
+          "PUBLIC_INTAKE_ASSETS=PASS",
+          "PUBLIC_SINGLE_OWNER_SOURCE=PASS",
+          "API_CORS_TURNSTILE_CONTRACT=PASS",
+          "GOVERNED_CTA_SINGLE_OWNER_BROWSER_E2E=PASS",
+          "GOVERNED_CTA_IMMUTABLE_APP=PASS",
+          "INTAKE_SECURITY_POLICY=PASS"
+        ]
+      }
     },
     {
       "id": "ANDROID_11_OF_11",
       "category": "mobile_e2e",
-      "status": "BLOCKED",
-      "depends_on": ["GOVERNED_INTAKE_LIVE_CONTRACT"],
+      "status": "NOT_APPLICABLE",
+      "depends_on": [],
       "acceptance": [
         "viewport=412x915",
         "deviceScaleFactor=2.625",
@@ -198,7 +266,9 @@
         "LIVE_GOVERNED_INTAKE_ROUTING=PASS",
         "LIVE_SINGLE_OWNER=PASS",
         "LIVE_IMMUTABLE_APP=PASS"
-      ]
+      ],
+      "replaced_by": "ANDROID_GOVERNED_MAX_8",
+      "topology_reason": "The governed intake contract now intentionally caps selection at 8 services; expecting all 11 Add controls to be simultaneously selected is obsolete."
     },
     {
       "id": "PRODUCTION_DOMAIN_GATE",
@@ -206,14 +276,110 @@
       "status": "FAIL",
       "depends_on": [
         "DOMAIN_OWNERSHIP_VERIFIED",
-        "GITHUB_PAGES_CNAME",
         "TLS_CERTIFICATE",
-        "DIRECT_ORIGIN_4_OF_4",
         "PUBLIC_CURRENT_FINGERPRINT",
         "GOVERNED_INTAKE_LIVE_CONTRACT",
-        "ANDROID_11_OF_11"
+        "ANDROID_GOVERNED_MAX_8",
+        "LIVE_COMMERCIAL_SMOKE",
+        "SECURITY_BASELINE",
+        "SUPPLY_CHAIN_PROMOTION",
+        "RESTORE_ROLLBACK_DRILL"
       ],
-      "policy": "PASS only when every dependency is PASS on current accepted deployment evidence"
+      "policy": "PASS only when every applicable dependency is PASS on current accepted exact-revision evidence; NOT_APPLICABLE legacy compatibility gates do not promote production."
+    },
+    {
+      "id": "ANDROID_GOVERNED_MAX_8",
+      "category": "mobile_e2e",
+      "status": "PASS",
+      "depends_on": [
+        "GOVERNED_INTAKE_LIVE_CONTRACT"
+      ],
+      "acceptance": [
+        "Android-sized viewport exercised",
+        "maximum 8 selected services enforced",
+        "remaining Add controls disabled",
+        "governed same-origin intake routing",
+        "single-owner immutable app"
+      ],
+      "evidence": {
+        "source": "Live add-agent regression",
+        "workflow_run_id": 35023571934,
+        "job_id": 104565029067,
+        "observed_at": "2026-09-15T21:05:35Z",
+        "subject_sha_or_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "result": [
+          "LIVE_MAX_8_ADD_CONTROLS=PASS",
+          "LIVE_REMAINING_ADD_CONTROLS_DISABLED=PASS",
+          "LIVE_GOVERNED_INTAKE_ROUTING=PASS",
+          "LIVE_SINGLE_OWNER=PASS",
+          "LIVE_IMMUTABLE_APP=PASS"
+        ]
+      }
+    },
+    {
+      "id": "LIVE_COMMERCIAL_SMOKE",
+      "category": "live_e2e",
+      "status": "PASS",
+      "depends_on": [
+        "TLS_CERTIFICATE"
+      ],
+      "acceptance": [
+        "legal routes reachable",
+        "robots/sitemap discoverable",
+        "Chrome commercial render succeeds"
+      ],
+      "evidence": {
+        "source": "Verify live commercial site rerun",
+        "workflow_run_id": 35468609893,
+        "job_id": 105971757480,
+        "observed_at": "2026-09-19T20:50:18Z",
+        "subject_sha_or_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "result": "success after transient transport reset was isolated and rerun"
+      }
+    },
+    {
+      "id": "SECURITY_BASELINE",
+      "category": "security",
+      "status": "PASS",
+      "acceptance": [
+        "source security",
+        "immutable GitHub Actions",
+        "CSP browser smoke"
+      ],
+      "evidence": {
+        "source": "Security baseline CI",
+        "workflow_run_id": 35023533970,
+        "job_id": 104564901263,
+        "observed_at": "2026-09-15T21:05:12Z",
+        "subject_sha_or_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "result": [
+          "SOURCE_SECURITY=PASS",
+          "IMMUTABLE_ACTIONS=PASS",
+          "CSP_BROWSER_SMOKE=PASS"
+        ]
+      }
+    },
+    {
+      "id": "SUPPLY_CHAIN_PROMOTION",
+      "category": "software_supply_chain",
+      "status": "NOT_YET_CERTIFIED",
+      "acceptance": [
+        "SBOM generated for promoted artifact",
+        "provenance attested",
+        "attestation verified against expected repo/workflow/SHA",
+        "release hash bound to deployment evidence"
+      ]
+    },
+    {
+      "id": "RESTORE_ROLLBACK_DRILL",
+      "category": "recovery",
+      "status": "NOT_YET_CERTIFIED",
+      "acceptance": [
+        "rollback path exercised",
+        "D1 recovery/restore procedure exercised where stateful",
+        "measured RPO/RTO recorded",
+        "evidence current within 30 days"
+      ]
     }
   ],
   "security_controls": {
@@ -300,7 +466,18 @@
       "runbooks",
       "rollback procedure",
       "backup and restore test for stateful data"
-    ]
+    ],
+    "synthetic_retry_policy": {
+      "scope": "transport-level transient failures only",
+      "bounded_attempts": 3,
+      "never_mask": [
+        "semantic assertion failure",
+        "authentication or authorization failure",
+        "persistent HTTP error",
+        "content mismatch",
+        "policy failure"
+      ]
+    }
   },
   "data_governance": {
     "principles": [
