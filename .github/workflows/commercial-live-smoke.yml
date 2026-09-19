@@ -56,21 +56,61 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          fetch_transport_retry() {
+            local url="$1"
+            local body="$2"
+            local meta="$3"
+            local attempt rc
+            for attempt in 1 2 3; do
+              : >"$body"
+              : >"$meta"
+              set +e
+              curl --silent --show-error --location \
+                --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 \
+                --output "$body" --write-out '%{http_code}' "$url" >"$meta"
+              rc=$?
+              set -e
+              if [ "$rc" -eq 0 ]; then
+                return 0
+              fi
+              echo "transport retry ${attempt}/3 for $url curl_exit=$rc" >&2
+              if [ "$attempt" -lt 3 ]; then
+                sleep $((2 ** (attempt - 1)))
+              fi
+            done
+            return "$rc"
+          }
+
           for url in \
             "$BASE_URL/?view=privacy" \
             "$BASE_URL/?view=terms" \
             "$BASE_URL/?view=data-deletion" \
             "$BASE_URL/robots.txt" \
             "$BASE_URL/sitemap.xml"; do
-            code=$(curl --silent --show-error --location --output /tmp/body --write-out '%{http_code}' \
-              --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 "$url")
+            body=$(mktemp)
+            meta=$(mktemp)
+            fetch_transport_retry "$url" "$body" "$meta"
+            code=$(cat "$meta")
             echo "$url -> HTTP=$code"
             test "$code" = '200'
-            test -s /tmp/body
+            test -s "$body"
+            rm -f "$body" "$meta"
           done
-          curl --fail --silent --show-error --location "$BASE_URL/robots.txt" | grep -Fq 'Sitemap: https://jadeltechrd.com/sitemap.xml'
-          curl --fail --silent --show-error --location "$BASE_URL/sitemap.xml" | grep -Fq 'https://jadeltechrd.com/?view=data-deletion'
+
+          robots=$(mktemp)
+          robots_meta=$(mktemp)
+          sitemap=$(mktemp)
+          sitemap_meta=$(mktemp)
+          fetch_transport_retry "$BASE_URL/robots.txt" "$robots" "$robots_meta"
+          test "$(cat "$robots_meta")" = '200'
+          grep -Fq 'Sitemap: https://jadeltechrd.com/sitemap.xml' "$robots"
+          fetch_transport_retry "$BASE_URL/sitemap.xml" "$sitemap" "$sitemap_meta"
+          test "$(cat "$sitemap_meta")" = '200'
+          grep -Fq 'https://jadeltechrd.com/?view=data-deletion' "$sitemap"
+          rm -f "$robots" "$robots_meta" "$sitemap" "$sitemap_meta"
           echo 'LIVE_LEGAL_DISCOVERY=PASS'
+          echo 'LIVE_TRANSPORT_RETRY_POLICY=PASS'
 
       - name: Verify rendered commercial experience in Chrome
         shell: bash
