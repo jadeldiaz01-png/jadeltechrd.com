@@ -1,15 +1,15 @@
 {
   "schema_version": "2026.1",
   "manifest_id": "jadeltechrd-site-production-readiness",
-  "generated_at": "2026-09-19T21:50:00Z",
+  "generated_at": "2026-09-20T01:32:00Z",
   "owner": "Jadel Tech RD",
   "repository": "jadeldiaz01-png/jadeltechrd.com",
-  "baseline_sha": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+  "baseline_sha": "cf190d28282958ff4f04f74e0325109df5c7b62e",
   "decision": {
     "production_authorized": false,
     "execution_enabled_by_default": false,
     "fail_closed": true,
-    "reason": "Public site and governed intake have current exact-SHA evidence, but full site promotion remains fail-closed pending current supply-chain promotion verification and a restore/rollback drill. Legacy Pages CNAME and 11-of-11 gates are retained as non-applicable compatibility records because the deployed topology now uses GitHub Actions + Cloudflare edge and the governed intake contract caps selection at 8.",
+    "reason": "Public site deployment, exact-SHA fingerprint, security baseline and verified supply-chain promotion are current. Production remains fail-closed pending an isolated D1 restore/RPO/RTO drill and measured SLO/alert-delivery evidence.",
     "required_final_state": "PRODUCTION_DOMAIN_GATE=PASS"
   },
   "governance": {
@@ -204,14 +204,14 @@
         "current single-owner intake routing present"
       ],
       "evidence": {
-        "source": "GitHub Actions Pages domain readiness and governed intake live contract",
+        "source": "GitHub Pages deployment + governed intake live contract",
         "workflow_run_ids": [
-          35453781584,
-          35468993129
+          35481552952,
+          35481579425
         ],
-        "observed_at": "2026-09-19T20:58:14Z",
-        "subject_sha_or_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
-        "result": "PUBLIC_IMMUTABLE_APP=/app.47d72e20c2d9ae6d48ba46cb7b2795c6272928a4.js; PUBLIC_GOVERNED_INTAKE_BUNDLE=PASS"
+        "observed_at": "2026-09-20T01:30:46Z",
+        "subject_sha_or_revision": "cf190d28282958ff4f04f74e0325109df5c7b62e",
+        "result": "PUBLIC_IMMUTABLE_APP=/app.cf190d28282958ff4f04f74e0325109df5c7b62e.js; PUBLIC_INTAKE_ASSETS=PASS; PUBLIC_SINGLE_OWNER_SOURCE=PASS"
       }
     },
     {
@@ -234,10 +234,10 @@
       ],
       "evidence": {
         "source": "Governed intake live contract",
-        "workflow_run_id": 35468993129,
-        "job_id": 105966399374,
-        "observed_at": "2026-09-19T20:58:14Z",
-        "subject_sha_or_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "workflow_run_id": 35481579425,
+        "job_id": 106000245198,
+        "observed_at": "2026-09-20T01:30:46Z",
+        "subject_sha_or_revision": "cf190d28282958ff4f04f74e0325109df5c7b62e",
         "result": [
           "PUBLIC_INTAKE_ASSETS=PASS",
           "PUBLIC_SINGLE_OWNER_SOURCE=PASS",
@@ -283,7 +283,8 @@
         "LIVE_COMMERCIAL_SMOKE",
         "SECURITY_BASELINE",
         "SUPPLY_CHAIN_PROMOTION",
-        "RESTORE_ROLLBACK_DRILL"
+        "RESTORE_ROLLBACK_DRILL",
+        "SLO_ERROR_BUDGET_ALERTING"
       ],
       "policy": "PASS only when every applicable dependency is PASS on current accepted exact-revision evidence; NOT_APPLICABLE legacy compatibility gates do not promote production."
     },
@@ -303,10 +304,10 @@
       ],
       "evidence": {
         "source": "Live add-agent regression",
-        "workflow_run_id": 35023571934,
-        "job_id": 104565029067,
-        "observed_at": "2026-09-15T21:05:35Z",
-        "subject_sha_or_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "workflow_run_id": 35481579443,
+        "job_id": 106000245218,
+        "observed_at": "2026-09-20T01:30:46Z",
+        "subject_sha_or_revision": "cf190d28282958ff4f04f74e0325109df5c7b62e",
         "result": [
           "LIVE_MAX_8_ADD_CONTROLS=PASS",
           "LIVE_REMAINING_ADD_CONTROLS_DISABLED=PASS",
@@ -348,10 +349,10 @@
       ],
       "evidence": {
         "source": "Security baseline CI",
-        "workflow_run_id": 35023533970,
-        "job_id": 104564901263,
-        "observed_at": "2026-09-15T21:05:12Z",
-        "subject_sha_or_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "workflow_run_id": 35481552955,
+        "job_id": 106000177803,
+        "observed_at": "2026-09-20T01:30:15Z",
+        "subject_sha_or_revision": "cf190d28282958ff4f04f74e0325109df5c7b62e",
         "result": [
           "SOURCE_SECURITY=PASS",
           "IMMUTABLE_ACTIONS=PASS",
@@ -362,13 +363,30 @@
     {
       "id": "SUPPLY_CHAIN_PROMOTION",
       "category": "software_supply_chain",
-      "status": "NOT_YET_CERTIFIED",
+      "status": "PASS",
       "acceptance": [
         "SBOM generated for promoted artifact",
         "provenance attested",
         "attestation verified against expected repo/workflow/SHA",
         "release hash bound to deployment evidence"
-      ]
+      ],
+      "evidence": {
+        "source": "Deploy public site to GitHub Pages",
+        "workflow_run_id": 35481552952,
+        "job_id": 106000178150,
+        "evidence_artifact_id": 10595394537,
+        "evidence_artifact_sha256": "2dd541430d0df713950af7f6e429b54c729b083ff3dc3f55265b6af7e8a4b073",
+        "observed_at": "2026-09-20T01:30:15Z",
+        "subject_sha_or_revision": "cf190d28282958ff4f04f74e0325109df5c7b62e",
+        "result": [
+          "CYCLONEDX_SERIAL_VALID=PASS",
+          "DEPLOYMENT_EVIDENCE_BUNDLE=PASS",
+          "CYCLONEDX_1_7_SBOM=PASS",
+          "DEPLOYMENT_PROVENANCE_VERIFY=PASS",
+          "DEPLOYMENT_SBOM_ATTESTATION_VERIFY=PASS",
+          "Deploy to GitHub Pages=PASS"
+        ]
+      }
     },
     {
       "id": "RESTORE_ROLLBACK_DRILL",
@@ -380,6 +398,25 @@
         "measured RPO/RTO recorded",
         "evidence current within 30 days"
       ]
+    },
+    {
+      "id": "SLO_ERROR_BUDGET_ALERTING",
+      "category": "reliability",
+      "status": "NOT_YET_CERTIFIED",
+      "acceptance": [
+        "hourly synthetic probes active",
+        "public-site and intake HTTP/semantic checks measured",
+        "latency objectives measured",
+        "failed probe produces operational alert",
+        "30-day measurement window retained",
+        "alert-delivery path tested"
+      ],
+      "implementation": {
+        "workflow": ".github/workflows/site-slo-evidence.yml",
+        "cadence": "hourly",
+        "retention_days": 35
+      },
+      "note": "Workflow implementation is not equivalent to measured 30-day SLO evidence. This gate remains closed until observation and alert-delivery evidence exist."
     }
   ],
   "security_controls": {
@@ -438,7 +475,15 @@
       "protected release path"
     ],
     "attestation_policy": "Attestation generation is not sufficient; verification is mandatory before production promotion.",
-    "target_slsa": "Build L3 where supported by the build path"
+    "target_slsa": "Build L3 where supported by the build path",
+    "observed_release": {
+      "subject_sha": "cf190d28282958ff4f04f74e0325109df5c7b62e",
+      "workflow_run_id": 35481552952,
+      "artifact_id": 10595394537,
+      "artifact_sha256": "2dd541430d0df713950af7f6e429b54c729b083ff3dc3f55265b6af7e8a4b073",
+      "provenance_verified": true,
+      "sbom_attestation_verified": true
+    }
   },
   "reliability": {
     "sli": [
@@ -477,6 +522,13 @@
         "content mismatch",
         "policy failure"
       ]
+    },
+    "measurement_implementation": {
+      "workflow": ".github/workflows/site-slo-evidence.yml",
+      "cadence": "hourly",
+      "evidence_retention_days": 35,
+      "alert_delivery": "GitHub issue on synthetic failure or explicit alert-path test",
+      "production_gate": "SLO_ERROR_BUDGET_ALERTING"
     }
   },
   "data_governance": {
