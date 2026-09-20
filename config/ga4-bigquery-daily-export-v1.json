@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "name": "GA4 BigQuery Daily Export Readiness",
-  "status": "READY_FOR_EXTERNAL_LINK",
+  "status": "READY_TO_LINK_PROJECT_CONFIRMED",
   "effective_date": "2026-09-20",
   "ga4": {
     "property_id": "555066228",
@@ -12,7 +12,7 @@
     "debugview_evidence": "User-provided GA4 DebugView screenshot on 2026-09-20 showing page_view, session_start and user_engagement"
   },
   "bigquery": {
-    "gcp_project_id": null,
+    "gcp_project_id": "jadeltechrd-analytics-prod",
     "dataset_expected": "analytics_555066228",
     "dataset_location": null,
     "daily_export": true,
@@ -24,7 +24,8 @@
     "legacy_service_account": "firebase-measurement@system.gserviceaccount.com",
     "legacy_service_account_policy": "LEGACY_ONLY_DO_NOT_REQUIRE_FOR_NEW_LINK",
     "required_project_role_for_resource_identity": "roles/bigquery.user",
-    "required_dataset_role_for_resource_identity": "roles/bigquery.dataOwner"
+    "required_dataset_role_for_resource_identity": "roles/bigquery.dataOwner",
+    "project_id_source": "User-provided Google Cloud Console screenshot, 2026-09-20"
   },
   "security": {
     "static_service_account_json_allowed": false,
