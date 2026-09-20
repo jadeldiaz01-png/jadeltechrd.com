@@ -150,3 +150,14 @@ Implementation is not evidence. Neither of these gates becomes PASS merely becau
 ### Independent domains
 
 Commercial intake authorization, agent-service authorization, social publication, external connectors and quant/live-capital authorization remain independent. A public-site PASS cannot promote those domains.
+
+
+## D1 recovery certification — 2026-09-20
+
+`RESTORE_ROLLBACK_DRILL` now has real PASS evidence from isolated D1 recovery target `jadel-commercial-runtime-recovery-drill` (UUID `a23852a8-7cf0-409a-a9cc-6eb317c55a11`).
+
+Evidence: run `35487635556`, job `106016824689`, artifact `10598422044`, digest `sha256:e591b70d9b72322a2fbf81e290e5218ce44db3d1aa66953993a5c48e4898884b`. Measured restore RTO was `1175 ms`; recovery-point age was `1 s`; data correctness and attestation verification passed; production D1 was not touched.
+
+The persistent environment authorization flag remained `ALLOW_D1_RECOVERY_DRILL=false` before and after execution. The temporary one-shot workflow is removed after use.
+
+`PRODUCTION_DOMAIN_GATE` remains fail-closed because `SLO_ERROR_BUDGET_ALERTING` still requires its measured observation window and alert-delivery evidence. Independent agent, connector, social and quant/trading authorizations remain unchanged.
