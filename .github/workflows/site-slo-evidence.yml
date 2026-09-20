@@ -50,9 +50,9 @@ jobs:
             seconds="${seconds:-99}"
             remote_ip="${remote_ip:-unknown}"
             ms=$(python - "$seconds" <<'PY'
-import sys
-print(round(float(sys.argv[1]) * 1000))
-PY
+          import sys
+          print(round(float(sys.argv[1]) * 1000))
+          PY
             )
 
             jq -n \

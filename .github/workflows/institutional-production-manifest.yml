@@ -100,6 +100,16 @@ jobs:
           console.log('INSTITUTIONAL_FAIL_CLOSED=PASS');
           NODE
 
+      - name: Parse critical workflow YAML
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby -rpsych -e 'ARGV.each { |path| Psych.parse_file(path); puts "WORKFLOW_YAML_PARSE=PASS #{path}" }' \
+            .github/workflows/pages.yml \
+            .github/workflows/d1-recovery-drill-readiness.yml \
+            .github/workflows/d1-recovery-drill-execute.yml \
+            .github/workflows/site-slo-evidence.yml
+
       - name: Verify promotion and recovery workflows stay fail-closed
         shell: bash
         run: |
