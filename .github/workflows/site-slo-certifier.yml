@@ -43,7 +43,7 @@ jobs:
           set -euo pipefail
           end_date=$(date -u -d "yesterday" +%F)
           query_start=$(date -u -d "$end_date - 40 days" +%F)
-          query_end="${end_date}T23:59:59Z"
+          query_end=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           echo "end_date=$end_date" >> "$GITHUB_OUTPUT"
           echo "query_start=$query_start" >> "$GITHUB_OUTPUT"
           echo "query_end=$query_end" >> "$GITHUB_OUTPUT"
