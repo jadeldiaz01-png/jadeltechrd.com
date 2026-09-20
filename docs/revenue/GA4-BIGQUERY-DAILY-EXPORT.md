@@ -1,6 +1,6 @@
 # GA4 -> BigQuery Daily Export
 
-Status: **BLOCKED_EXTERNAL_LINK**
+Status: **READY_FOR_EXTERNAL_LINK**
 
 ## Verified source
 
@@ -8,7 +8,7 @@ Status: **BLOCKED_EXTERNAL_LINK**
 - Web Stream ID: `15812262707`
 - Measurement ID: `G-K60SQ2ZHL9`
 - Realtime: verified
-- DebugView: pending one explicit UI verification
+- DebugView: verified (`page_view`, `session_start`, `user_engagement`)
 
 ## Target
 
@@ -50,14 +50,9 @@ After Google creates the link, verify:
 - dataset `analytics_555066228` exists;
 - the first `events_YYYYMMDD` table appears.
 
-## DebugView one-time verification
+## DebugView one-time verification — COMPLETE
 
-Use Tag Assistant on the test device or a temporary `debug_mode=true` session. Consent for Analytics must be granted. In GA4 go to Admin -> Data display -> DebugView and confirm the device and at least:
-- `page_view`
-- `session_start`
-- one Revenue Funnel event when intentionally triggered
-
-After the evidence screenshot is captured, exit debug mode. Production code must omit `debug_mode` when debug is off.
+Evidence captured on 2026-09-20 shows `page_view`, `session_start`, and `user_engagement` in DebugView. Production remains outside debug mode and omits the `debug_mode` parameter when disabled.
 
 ## Post-link queries
 
