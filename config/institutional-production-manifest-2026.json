@@ -1,7 +1,7 @@
 {
   "schema_version": "2026.2",
   "manifest_id": "jadeltechrd-institutional-production-manifest",
-  "generated_at": "2026-09-20T01:31:30Z",
+  "generated_at": "2026-09-20T03:52:30Z",
   "owner": "Jadel Tech RD",
   "repository": "jadeldiaz01-png/jadeltechrd.com",
   "baseline_sha": "cf190d28282958ff4f04f74e0325109df5c7b62e",
@@ -225,6 +225,28 @@
           "DEPLOYMENT_SBOM_ATTESTATION_VERIFY=PASS",
           "promotion evidence artifact digest sha256:2dd541430d0df713950af7f6e429b54c729b083ff3dc3f55265b6af7e8a4b073"
         ]
+      },
+      {
+        "control_id": "RESTORE_ROLLBACK_DRILL",
+        "status": "PASS",
+        "source": "GitHub Actions + Cloudflare D1 Time Travel + Sigstore",
+        "observed_at": "2026-09-20T03:51:17Z",
+        "subject_sha_or_runtime_revision": "075c5288f022e9f4ba3d938da465fcbaacc149af",
+        "evidence_locator": "actions/run/35487635556 job/106016824689 artifact/10598422044",
+        "facts": [
+          "target database jadel-commercial-runtime-recovery-drill",
+          "target UUID a23852a8-7cf0-409a-a9cc-6eb317c55a11",
+          "baseline seed PASS",
+          "bookmark capture PASS",
+          "controlled mutation PASS",
+          "restore correctness PASS",
+          "previous_bookmark captured",
+          "measured RTO 1175 ms",
+          "recovery-point age 1 s",
+          "Stage B evidence attestation verified",
+          "persistent ALLOW_D1_RECOVERY_DRILL remained false before and after",
+          "production_database_touched=false"
+        ]
       }
     ],
     "transient_incident": {
@@ -247,7 +269,6 @@
         "CycloneDX SBOM and signed provenance generated and cryptographically verified before deploy"
       ],
       "remaining_mandatory_evidence": [
-        "current restore/rollback exercise evidence on dedicated D1 recovery target",
         "measured SLO observation window and verified alert-delivery evidence"
       ]
     },
@@ -444,7 +465,24 @@
         "recovery-point age/RPO evidence",
         "attested evidence bundle"
       ],
-      "longer_term_export_to_object_storage_when_retention_exceeds_native_window": true
+      "longer_term_export_to_object_storage_when_retention_exceeds_native_window": true,
+      "last_certified_drill": {
+        "status": "PASS",
+        "workflow_run_id": 35487635556,
+        "job_id": 106016824689,
+        "artifact_id": 10598422044,
+        "artifact_sha256": "e591b70d9b72322a2fbf81e290e5218ce44db3d1aa66953993a5c48e4898884b",
+        "observed_at": "2026-09-20T03:51:17Z",
+        "database_name": "jadel-commercial-runtime-recovery-drill",
+        "database_id": "a23852a8-7cf0-409a-a9cc-6eb317c55a11",
+        "measured_rto_ms": 1175,
+        "recovery_point_age_seconds": 1,
+        "undo_bookmark_captured": true,
+        "data_correctness_verified": true,
+        "attestation_verified": true,
+        "production_database_touched": false,
+        "persistent_authorization_flag_after": false
+      }
     }
   },
   "reliability_and_operations": {
