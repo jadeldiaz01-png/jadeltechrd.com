@@ -1,7 +1,7 @@
 {
   "schema_version": "2026.1",
   "manifest_id": "jadeltechrd-site-production-readiness",
-  "generated_at": "2026-09-20T04:05:00Z",
+  "generated_at": "2026-09-20T04:12:00Z",
   "owner": "Jadel Tech RD",
   "repository": "jadeldiaz01-png/jadeltechrd.com",
   "baseline_sha": "cf190d28282958ff4f04f74e0325109df5c7b62e",
@@ -430,7 +430,7 @@
       "category": "reliability",
       "status": "NOT_YET_CERTIFIED",
       "acceptance": [
-        "hourly synthetic probes active",
+        "10-minute scheduled first-attempt synthetic probes active",
         "public-site and intake HTTP/semantic checks measured",
         "latency objectives measured",
         "failed probe produces operational alert",
@@ -451,7 +451,41 @@
         "maximum_gap_minutes": 30,
         "evidence_retention_days": 45
       },
-      "note": "Implementation is active but the gate remains NOT_YET_CERTIFIED until 30 complete UTC days contain sufficient scheduled first-attempt samples, SLO/error-budget and p95 latency objectives pass, multi-window burn evaluation is complete with no active burn alert, and a fresh attested alert-delivery round trip exists."
+      "note": "Alert delivery is now independently PASS with attested create/read/comment/close evidence. The gate remains NOT_YET_CERTIFIED only until the 30-day scheduled first-attempt measurement window satisfies coverage, maximum-gap, availability, p95 latency, error-budget, burn-rate and hard-invariant checks.",
+      "bootstrap_evidence": {
+        "probe": {
+          "workflow_run_id": 35488352198,
+          "job_id": 106018729362,
+          "artifact_id": 10597703848,
+          "artifact_sha256": "33699fa579d12b081e8f0592ee94ccf8989d28d8921e1751bc9a290305efdcc6",
+          "event": "push-diagnostic-not-eligible-for-coverage",
+          "public_site_first_attempt_latency_ms": 227,
+          "commercial_intake_first_attempt_latency_ms": 152,
+          "status": "PASS"
+        },
+        "alert_delivery": {
+          "workflow_run_id": 35488352208,
+          "job_id": 106018729600,
+          "artifact_id": 10598088523,
+          "artifact_sha256": "0d7ef02832631fc915cf3a30fda8aa766fcf15975a57e273e742a25298206e80",
+          "create_read_comment_close": "PASS",
+          "attestation_verify": "PASS",
+          "status": "PASS"
+        },
+        "certifier": {
+          "workflow_run_id": 35488501229,
+          "job_id": 106019132700,
+          "artifact_id": 10598047338,
+          "artifact_sha256": "265ed350d335c4ff0675d2261989018f4a46246a420134d2979b084461ea7aea",
+          "daily_rollups_found": 1,
+          "observed_slots": 0,
+          "expected_slots": 4320,
+          "alert_delivery": "PASS",
+          "attestation_verify": "PASS",
+          "status": "NOT_YET_CERTIFIED",
+          "blocker": "30-day eligible scheduled measurement window has not yet accumulated"
+        }
+      }
     }
   ],
   "security_controls": {
