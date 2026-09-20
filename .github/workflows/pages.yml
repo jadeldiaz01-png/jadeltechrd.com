@@ -68,6 +68,7 @@ jobs:
           import hashlib
           import json
           import os
+          import uuid
           from pathlib import Path
 
           root = Path("_site")
@@ -87,6 +88,8 @@ jobs:
 
           sha = os.environ["SOURCE_SHA"]
           timestamp = os.environ["SOURCE_TIME"]
+          repo = os.environ.get("GITHUB_REPOSITORY", "unknown")
+          sbom_serial = uuid.uuid5(uuid.NAMESPACE_URL, f"https://github.com/{repo}@{sha}")
           release_manifest = {
               "schema_version": "1.0",
               "source_repository": os.environ.get("GITHUB_REPOSITORY"),
@@ -98,6 +101,7 @@ jobs:
           sbom = {
               "bomFormat": "CycloneDX",
               "specVersion": "1.7",
+              "serialNumber": f"urn:uuid:{sbom_serial}",
               "version": 1,
               "metadata": {
                   "timestamp": timestamp,
@@ -123,6 +127,16 @@ jobs:
           test -s evidence/site-release.tar
           test -s evidence/bom.cdx.json
           test -s evidence/site-release-manifest.json
+          jq -e '.bomFormat == "CycloneDX" and .specVersion == "1.7" and (.serialNumber | startswith("urn:uuid:"))' evidence/bom.cdx.json >/dev/null
+          python - <<'PY'
+          import json
+          import uuid
+          from pathlib import Path
+          bom = json.loads(Path("evidence/bom.cdx.json").read_text(encoding="utf-8"))
+          serial = bom["serialNumber"]
+          uuid.UUID(serial.removeprefix("urn:uuid:"))
+          print("CYCLONEDX_SERIAL_VALID=PASS")
+          PY
           echo 'DEPLOYMENT_EVIDENCE_BUNDLE=PASS'
           echo 'CYCLONEDX_1_7_SBOM=PASS'
 
