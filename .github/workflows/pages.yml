@@ -43,6 +43,7 @@ jobs:
           cp app.js "_site/${immutable_app}"
           IMMUTABLE_APP="$immutable_app" python - <<'PY'
           import os
+          import uuid
           from pathlib import Path
 
           path = Path("_site/index.html")
@@ -98,6 +99,7 @@ jobs:
           sbom = {
               "bomFormat": "CycloneDX",
               "specVersion": "1.7",
+              "serialNumber": f"urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, f'https://github.com/{os.environ.get("GITHUB_REPOSITORY", "unknown")}@{sha}')}",
               "version": 1,
               "metadata": {
                   "timestamp": timestamp,
