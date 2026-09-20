@@ -141,11 +141,13 @@ jobs:
           echo 'CYCLONEDX_1_7_SBOM=PASS'
 
       - name: Attest deployment bundle provenance
+        id: provenance_attest
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: evidence/site-release.tar
 
       - name: Attest deployment SBOM
+        id: sbom_attest
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: evidence/site-release.tar
@@ -157,11 +159,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh attestation verify evidence/site-release.tar -R "$GITHUB_REPOSITORY" >/tmp/provenance-verify.txt
-          gh attestation verify evidence/site-release.tar -R "$GITHUB_REPOSITORY" \
-            --predicate-type https://cyclonedx.org/bom >/tmp/sbom-verify.txt
-          test -s /tmp/provenance-verify.txt
-          test -s /tmp/sbom-verify.txt
+          provenance_bundle='${{ steps.provenance_attest.outputs.bundle-path }}'
+          sbom_bundle='${{ steps.sbom_attest.outputs.bundle-path }}'
+          test -s "$provenance_bundle"
+          test -s "$sbom_bundle"
+          signer_workflow="$GITHUB_REPOSITORY/.github/workflows/pages.yml"
+
+          gh attestation verify evidence/site-release.tar \
+            -R "$GITHUB_REPOSITORY" \
+            --bundle "$provenance_bundle" \
+            --signer-workflow "$signer_workflow" \
+            --source-digest "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF" \
+            --format json | tee /tmp/provenance-verify.json
+
+          gh attestation verify evidence/site-release.tar \
+            -R "$GITHUB_REPOSITORY" \
+            --bundle "$sbom_bundle" \
+            --predicate-type https://cyclonedx.org/bom \
+            --signer-workflow "$signer_workflow" \
+            --source-digest "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF" \
+            --format json | tee /tmp/sbom-verify.json
+
+          test -s /tmp/provenance-verify.json
+          test -s /tmp/sbom-verify.json
+          jq -e 'length > 0' /tmp/provenance-verify.json >/dev/null
+          jq -e 'length > 0' /tmp/sbom-verify.json >/dev/null
           echo 'DEPLOYMENT_PROVENANCE_VERIFY=PASS'
           echo 'DEPLOYMENT_SBOM_ATTESTATION_VERIFY=PASS'
 
