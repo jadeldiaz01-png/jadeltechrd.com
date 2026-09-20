@@ -231,7 +231,7 @@
         "status": "PASS",
         "source": "GitHub Actions + Cloudflare D1 Time Travel + Sigstore",
         "observed_at": "2026-09-20T03:51:17Z",
-        "subject_sha_or_runtime_revision": "075c5288f022e9f4ba3d938da465fcbaacc149af",
+        "subject_sha_or_runtime_revision": "runtime:d1-recovery:a23852a8-7cf0-409a-a9cc-6eb317c55a11@075c5288f022e9f4ba3d938da465fcbaacc149af",
         "evidence_locator": "actions/run/35487635556 job/106016824689 artifact/10598422044",
         "facts": [
           "target database jadel-commercial-runtime-recovery-drill",
