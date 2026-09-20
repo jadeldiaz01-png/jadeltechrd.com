@@ -1,7 +1,7 @@
 {
   "schema_version": "2026.1",
   "manifest_id": "jadeltechrd-site-production-readiness",
-  "generated_at": "2026-09-20T01:32:00Z",
+  "generated_at": "2026-09-20T03:52:00Z",
   "owner": "Jadel Tech RD",
   "repository": "jadeldiaz01-png/jadeltechrd.com",
   "baseline_sha": "cf190d28282958ff4f04f74e0325109df5c7b62e",
@@ -9,7 +9,7 @@
     "production_authorized": false,
     "execution_enabled_by_default": false,
     "fail_closed": true,
-    "reason": "Public site deployment, exact-SHA fingerprint, security baseline and verified supply-chain promotion are current. Production remains fail-closed pending an isolated D1 restore/RPO/RTO drill and measured SLO/alert-delivery evidence.",
+    "reason": "Public release, supply-chain promotion, security baseline and isolated D1 restore/RPO/RTO evidence are current. Production remains fail-closed pending measured SLO/error-budget observation and alert-delivery evidence.",
     "required_final_state": "PRODUCTION_DOMAIN_GATE=PASS"
   },
   "governance": {
@@ -391,13 +391,39 @@
     {
       "id": "RESTORE_ROLLBACK_DRILL",
       "category": "recovery",
-      "status": "NOT_YET_CERTIFIED",
+      "status": "PASS",
       "acceptance": [
         "rollback path exercised",
         "D1 recovery/restore procedure exercised where stateful",
         "measured RPO/RTO recorded",
         "evidence current within 30 days"
-      ]
+      ],
+      "evidence": {
+        "source": "Authorized once D1 Stage B",
+        "workflow_run_id": 35487635556,
+        "job_id": 106016824689,
+        "evidence_artifact_id": 10598422044,
+        "evidence_artifact_sha256": "e591b70d9b72322a2fbf81e290e5218ce44db3d1aa66953993a5c48e4898884b",
+        "observed_at": "2026-09-20T03:51:17Z",
+        "subject_sha_or_revision": "075c5288f022e9f4ba3d938da465fcbaacc149af",
+        "target_database_name": "jadel-commercial-runtime-recovery-drill",
+        "target_database_id": "a23852a8-7cf0-409a-a9cc-6eb317c55a11",
+        "result": [
+          "STAGE_B_EXACT_TARGET=PASS",
+          "D1_BASELINE_SEED=PASS",
+          "D1_RECOVERY_BOOKMARK_CAPTURED=PASS",
+          "D1_CONTROLLED_MUTATION=PASS",
+          "D1_RESTORE_DATA_CORRECTNESS=PASS",
+          "D1_UNDO_BOOKMARK_CAPTURED=PASS",
+          "D1_RTO_MEASURED_MS=1175",
+          "D1_RECOVERY_POINT_AGE_SECONDS=1",
+          "RESTORE_ROLLBACK_DRILL=PASS",
+          "D1_STAGE_B_ATTESTATION_VERIFY=PASS",
+          "PERSISTENT_ALLOW_BEFORE=false",
+          "PERSISTENT_ALLOW_AFTER=false"
+        ],
+        "production_database_touched": false
+      }
     },
     {
       "id": "SLO_ERROR_BUDGET_ALERTING",
