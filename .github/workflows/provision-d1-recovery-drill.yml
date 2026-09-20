@@ -94,6 +94,8 @@ jobs:
           if [ "$token_family" = "account" ]; then
             token_id=$(jq -r '.result.id // empty' "$verify_tmp")
             if [ -n "$token_id" ]; then
+              token_id_sha256=$(printf '%s' "$token_id" | sha256sum | awk '{print $1}')
+              echo "CLOUDFLARE_D1_TOKEN_ID_SHA256=$token_id_sha256"
               details_tmp=$(mktemp)
               details_code=$(curl -sS -o "$details_tmp" -w '%{http_code}' -H "Authorization: Bearer $token" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/$token_id" || true)
 
