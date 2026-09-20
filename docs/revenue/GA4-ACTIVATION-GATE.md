@@ -1,6 +1,6 @@
 # GA4 Activation Gate — Jadel Tech RD
 
-Status: **BLOCKED_ACCOUNT_CONNECTION**
+Status: **MEASUREMENT_ID_CONFIRMED_PENDING_VALIDATION**
 
 This gate prepares GA4 without fabricating a property, stream, Measurement ID or verification result.
 
@@ -16,7 +16,7 @@ If no suitable property exists and the connected account has Editor-or-higher ac
 - Web stream target: **jadeltechrd.com Web**
 - URL: **https://jadeltechrd.com/**
 
-The Measurement ID must be copied from GA4 Admin > Data streams > Web stream details and must begin with `G-`.
+The Measurement ID has now been confirmed from the GA4 installation instructions supplied by the account owner: `G-K60SQ2ZHL9`. The loader remains disabled until consent/CSP and Realtime/DebugView validation are complete.
 
 ## Privacy-by-default
 
@@ -58,9 +58,9 @@ If Google Ads is authorized later, 2026 offline/enhanced lead uploads must use t
 
 The gate remains blocked until:
 
-- account/property/stream are confirmed;
-- Editor-or-higher access is confirmed;
-- the real `G-` ID is recorded;
+- account/property/stream are confirmed from the GA4 installation flow;
+- Editor-or-higher access is still to be confirmed;
+- the real Measurement ID `G-K60SQ2ZHL9` is recorded;
 - consent UI is verified;
 - minimum CSP changes are reviewed;
 - Realtime and DebugView show the expected non-PII events;
