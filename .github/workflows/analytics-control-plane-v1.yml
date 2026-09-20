@@ -1,0 +1,69 @@
+name: Analytics control plane v1
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "config/analytics-control-plane-v1.json"
+      - "config/ga4-activation-gate.json"
+      - "ga4-config.js"
+      - "ga4-loader.js"
+      - "revenue-funnel.js"
+      - "scripts/validate-analytics-control-plane-v1.mjs"
+      - ".github/workflows/analytics-control-plane-v1.yml"
+  push:
+    branches: [main]
+    paths:
+      - "config/analytics-control-plane-v1.json"
+      - "config/ga4-activation-gate.json"
+      - "ga4-config.js"
+      - "ga4-loader.js"
+      - "revenue-funnel.js"
+      - "scripts/validate-analytics-control-plane-v1.mjs"
+      - ".github/workflows/analytics-control-plane-v1.yml"
+  schedule:
+    - cron: "23 10 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate analytics contract
+        run: |
+          set -euo pipefail
+          node --check ga4-loader.js
+          node --check revenue-funnel.js
+          node scripts/validate-analytics-control-plane-v1.mjs
+
+  public-edge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify public CSP and Google tag availability without emitting analytics events
+        shell: bash
+        run: |
+          set -euo pipefail
+          headers=$(curl --fail --silent --show-error --location --head https://jadeltechrd.com/)
+          csp=$(printf '%s\n' "$headers" | awk 'BEGIN{IGNORECASE=1} /^content-security-policy:/{sub(/^[^:]+:[[:space:]]*/, ""); print; exit}')
+          test -n "$csp"
+          grep -Fq "*.googletagmanager.com" <<<"$csp"
+          grep -Fq "*.google-analytics.com" <<<"$csp"
+          grep -Fq "*.analytics.google.com" <<<"$csp"
+          ! grep -Fq "doubleclick.net" <<<"$csp"
+          ! grep -Fq "googlesyndication.com" <<<"$csp"
+
+          code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}'             'https://www.googletagmanager.com/gtag/js?id=G-K60SQ2ZHL9')
+          test "$code" = 200
+
+          echo 'PUBLIC_GA4_CSP=PASS'
+          echo 'GTAG_AVAILABILITY=PASS'
+          echo 'SYNTHETIC_GA4_COLLECTION=DISABLED'
