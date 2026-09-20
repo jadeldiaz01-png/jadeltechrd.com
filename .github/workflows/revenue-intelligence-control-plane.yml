@@ -6,6 +6,7 @@ on:
     paths:
       - 'config/revenue-intelligence-control-plane-2026.json'
       - 'config/revenue-model-registry-2026.json'
+      - 'config/revenue-agent-spec-2026.json'
       - 'config/analytics-control-plane-v1.json'
       - 'scripts/revenue-decision-engine.mjs'
       - 'scripts/test-revenue-decision-engine.mjs'
@@ -19,6 +20,7 @@ on:
     paths:
       - 'config/revenue-intelligence-control-plane-2026.json'
       - 'config/revenue-model-registry-2026.json'
+      - 'config/revenue-agent-spec-2026.json'
       - 'scripts/revenue-decision-engine.mjs'
       - 'scripts/validate-revenue-intelligence-control-plane.mjs'
       - 'analytics/bigquery/1*.sql.tmpl'
