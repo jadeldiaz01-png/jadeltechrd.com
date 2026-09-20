@@ -13,11 +13,67 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment:
+      name: jadeltechrd
+    env:
+      DOMAIN: jadeltechrd.com
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+      CLOUDFLARE_ZONE_ID_RAW: ${{ secrets.CLOUDFLARE_ZONE_ID || secrets.CF_ZONE_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+
+      - name: Inspect live response headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== jadeltechrd.com response headers ==='
+          curl --silent --show-error --location --head "https://${DOMAIN}/" | sed -n '1,40p'
+
+      - name: Inspect Cloudflare CSP response-header rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          test -n "$token" || { echo 'CLOUDFLARE_TOKEN_PRESENT=NO'; exit 20; }
+          echo "::add-mask::$token"
+
+          zone_id=$(printf '%s' "${CLOUDFLARE_ZONE_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          if [ -z "$zone_id" ]; then
+            zone_json=$(curl -fsS -H "Authorization: Bearer $token" -H 'Content-Type: application/json' "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50")
+            zone_id=$(jq -r --arg d "$DOMAIN" '.result[]? | select(.name==$d) | .id' <<<"$zone_json" | head -n1)
+          fi
+          test -n "$zone_id"
+          echo "::add-mask::$zone_id"
+
+          rulesets=$(curl -fsS -H "Authorization: Bearer $token" -H 'Content-Type: application/json' "https://api.cloudflare.com/client/v4/zones/${zone_id}/rulesets")
+          ruleset_id=$(jq -r '.result[]? | select(.phase=="http_response_headers_transform") | .id' <<<"$rulesets" | head -n1)
+          if [ -z "$ruleset_id" ]; then
+            echo 'CLOUDFLARE_RESPONSE_HEADER_RULESET=ABSENT'
+            exit 21
+          fi
+          echo "::add-mask::$ruleset_id"
+          detail=$(curl -fsS -H "Authorization: Bearer $token" -H 'Content-Type: application/json' "https://api.cloudflare.com/client/v4/zones/${zone_id}/rulesets/${ruleset_id}")
+          jq -c '
+            [.result.rules[]? |
+              {
+                id,
+                description,
+                enabled,
+                expression,
+                csp: (
+                  (.action_parameters.headers // {})
+                  | to_entries
+                  | map(select((.key|ascii_downcase)=="content-security-policy"))
+                  | map({operation:.value.operation, value:(.value.value // null)})
+                )
+              }
+              | select((.csp|length)>0)
+            ]' <<<"$detail"
+          echo 'CLOUDFLARE_CSP_RULE_INSPECTION=PASS'
 
       - name: Install Selenium
         run: python -m pip install --disable-pip-version-check "selenium==4.35.0"
