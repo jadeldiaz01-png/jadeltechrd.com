@@ -39,7 +39,22 @@ A separate D1 database is mandatory. The drill must:
 10. record the undo bookmark returned by the restore operation;
 11. clean up or reprovision the drill target after evidence collection.
 
-Stage B must remain manual and approval-gated until the dedicated target exists and the non-interactive restore behavior of the pinned Wrangler version is validated.
+Stage B is implemented by `.github/workflows/d1-recovery-drill-execute.yml` and remains manual, destructive-action approval-gated and bound to the GitHub environment `d1-recovery-drill`.
+
+The workflow requires all of the following before it can mutate anything:
+
+- input confirmation exactly `DESTROY_RECOVERY_DRILL_ONLY`;
+- input database name exactly equal to `D1_RECOVERY_DRILL_DATABASE_NAME`;
+- environment variable `ALLOW_D1_RECOVERY_DRILL=true`;
+- database name ending in `-recovery-drill`;
+- rejection of `jadel-commercial-runtime` and production-like names;
+- UUID-shaped D1 database id;
+- D1 `version=production`;
+- Cloudflare API credentials supplied only through GitHub secrets.
+
+The destructive restore uses Cloudflare's Time Travel REST API so the JSON response can be retained and the `previous_bookmark` (undo point) can be certified. Data mutation and correctness probes use pinned Wrangler `4.135.0`. The workflow measures recovery-point age and RTO, creates a deterministic evidence bundle, generates a GitHub/Sigstore attestation, verifies that attestation against the exact repository/workflow/SHA/ref, and retains the evidence for 90 days.
+
+Execution remains blocked until the dedicated database and protected GitHub environment are provisioned and a human explicitly approves the destructive drill.
 
 ## Production gate
 
@@ -58,3 +73,12 @@ Native Time Travel retention is plan-dependent. Where required retention exceeds
 - Never treat a successful `d1 time-travel info` call as proof that restore works.
 - A restore drill is not PASS until data correctness and measured RPO/RTO are recorded.
 - Restore evidence must be tied to the exact workflow revision and drill database identity without exposing secrets.
+
+
+## 2026 implementation notes
+
+Cloudflare documents Time Travel as always-on for D1 production storage and explicitly warns that restore overwrites the selected database in place and cancels in-flight work. The restore response includes a previous bookmark that can be used to undo the restore. This is why the production intake database is categorically rejected by the drill workflow.
+
+Current stable Wrangler pin validated for this control-plane update: `4.135.0` (released 2026-09-18). The Time Travel API, rather than interactive CLI restore, is the authority used for the destructive restore response and undo-bookmark evidence.
+
+Longer-than-native retention should use scheduled D1 export to R2/controlled object storage with integrity hashes and tested import/recovery. Native Time Travel retention remains plan-dependent.
