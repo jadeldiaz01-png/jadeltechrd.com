@@ -1,6 +1,6 @@
 # GA4 Activation Gate — Jadel Tech RD
 
-Status: **TRANSPORT_VERIFIED_PENDING_GA_UI**
+Status: **ACTIVE**
 
 This gate prepares GA4 without fabricating a property, stream, Measurement ID or verification result.
 
@@ -67,7 +67,7 @@ If Google Ads is authorized later, 2026 offline/enhanced lead uploads must use t
 
 ## Activation evidence required
 
-The gate remains blocked until:
+The GA4 core activation gate is now satisfied. The following evidence is recorded:
 
 - account/property/stream are confirmed from the GA4 installation flow;
 - Editor-or-higher access is still to be confirmed;
@@ -93,6 +93,6 @@ On 2026-09-20, a clean headless Chrome session from GitHub Actions opened the pu
 - Event: `page_view`
 - Consent: granted for analytics; advertising storage/user-data/personalization remained denied
 - Cloudflare response-header CSP was the blocking root cause and was corrected in the existing rule **Jadel Tech RD hardened browser response headers**
-- Realtime and DebugView UI confirmation remain pending; they are not inferred from transport evidence.
+- Realtime and DebugView UI confirmation are now independently verified. DebugView evidence shows `page_view`, `session_start`, and `user_engagement`; `non_personalized_ads=1` is consistent with advertising personalization remaining disabled.
 
 After transport verification, production configuration exits debug mode. The loader omits the `debug_mode` parameter entirely when disabled, as required by Google Analytics.

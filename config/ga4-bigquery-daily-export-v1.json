@@ -1,14 +1,15 @@
 {
   "schema_version": "1.0.0",
   "name": "GA4 BigQuery Daily Export Readiness",
-  "status": "BLOCKED_EXTERNAL_LINK",
+  "status": "READY_FOR_EXTERNAL_LINK",
   "effective_date": "2026-09-20",
   "ga4": {
     "property_id": "555066228",
     "stream_id": "15812262707",
     "measurement_id": "G-K60SQ2ZHL9",
     "realtime_verified": true,
-    "debugview_verified": false
+    "debugview_verified": true,
+    "debugview_evidence": "User-provided GA4 DebugView screenshot on 2026-09-20 showing page_view, session_start and user_engagement"
   },
   "bigquery": {
     "gcp_project_id": null,
@@ -30,7 +31,6 @@
     "max_unapproved_ad_spend_usd": 0
   },
   "activation_requirements": [
-    "DebugView evidence captured once with consent granted and debug mode enabled only for the test device",
     "GA4 property user has Editor-or-higher access",
     "Google Cloud project selected or created",
     "BigQuery API enabled in the selected project",

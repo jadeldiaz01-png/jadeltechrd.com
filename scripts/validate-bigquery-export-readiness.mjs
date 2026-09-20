@@ -9,6 +9,7 @@ if (cfg.ga4.property_id !== "555066228") fail("property id");
 if (cfg.ga4.stream_id !== "15812262707") fail("stream id");
 if (cfg.ga4.measurement_id !== "G-K60SQ2ZHL9") fail("measurement id");
 if (cfg.ga4.realtime_verified !== true) fail("Realtime evidence required");
+if (cfg.ga4.debugview_verified !== true) fail("DebugView evidence required");
 if (cfg.bigquery.dataset_expected !== "analytics_555066228") fail("dataset naming");
 if (cfg.bigquery.daily_export !== true) fail("daily export must be target");
 if (cfg.bigquery.streaming_export !== false) fail("streaming must remain off");
@@ -24,4 +25,4 @@ for (const p of templates) {
   if (!sql.includes("__GCP_PROJECT_ID__")) fail("missing GCP placeholder " + p);
   if (!sql.includes("analytics_555066228")) fail("wrong dataset " + p);
 }
-console.log("BIGQUERY_EXPORT_READINESS=PASS_BLOCKED_EXTERNAL_LINK");
+console.log("BIGQUERY_EXPORT_READINESS=PASS_READY_FOR_EXTERNAL_LINK");

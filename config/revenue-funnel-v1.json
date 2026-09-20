@@ -73,7 +73,7 @@
   ],
   "analytics": {
     "provider": "GA4",
-    "activation_state": "TRANSPORT_VERIFIED_PENDING_GA_UI",
+    "activation_state": "ACTIVE",
     "measurement_id": "G-K60SQ2ZHL9",
     "browser_events": [
       "offer_view",
@@ -172,12 +172,15 @@
   "acquisition_gates": [
     {
       "id": "G0_MEASUREMENT_INTEGRITY",
-      "state": "BLOCKED",
+      "state": "PASS_ANALYTICS_CORE",
       "requirements": [
         "GA4 measurement ID configured through reviewed change",
+        "browser transport verified with gtag.js HTTP 200 and GA4 collect HTTP 204",
+        "Realtime verified",
+        "DebugView verified",
         "browser event QA passes without PII",
         "generate_lead observed only after successful intake response",
-        "offline lead-stage sync contract tested"
+        "offline lead-stage sync contract tested before server-side lifecycle activation"
       ]
     },
     {

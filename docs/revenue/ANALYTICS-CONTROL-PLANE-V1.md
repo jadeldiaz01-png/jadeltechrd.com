@@ -1,6 +1,6 @@
 # Analytics Control Plane v1
 
-Status: **ACTIVE_WITH_GATED_EXPANSION**
+Status: **GA4_VERIFIED_BIGQUERY_GATED**
 
 ## Verified production chain
 
@@ -17,7 +17,7 @@ Verified evidence:
 - Windsor.ai can read Property 555066228
 - Google Ads remains unlinked and unapproved spend remains USD 0
 
-DebugView UI evidence remains pending and is not inferred from Realtime.
+DebugView UI evidence is verified independently from Realtime: `page_view`, `session_start`, and `user_engagement` were visible in the debug timeline.
 
 ## Robust architecture
 
@@ -68,8 +68,8 @@ The automation deliberately does **not** generate synthetic GA4 pageviews. A syn
 ## Expansion order
 
 1. Realtime verification — PASS.
-2. DebugView verification — pending.
+2. DebugView verification — PASS.
 3. Developer-traffic filter — pending.
-4. BigQuery daily export — pending external Google Cloud/GA4 setup.
+4. BigQuery daily export — READY FOR EXTERNAL LINK; pending Google Cloud project/GA4 product link.
 5. Measurement Protocol server events — pending secret and privacy review.
 6. Google Ads/offline conversion optimization — outside this phase and remains disabled.
