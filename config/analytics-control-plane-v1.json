@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "name": "Analytics Control Plane v1",
-  "status": "ACTIVE_WITH_GATED_EXPANSION",
+  "status": "GA4_VERIFIED_BIGQUERY_GATED",
   "effective_date": "2026-09-20",
   "property": {
     "property_id": "555066228",
@@ -15,8 +15,10 @@
     "ga4_collect_http_status": 204,
     "realtime_verified": true,
     "realtime_evidence": "User-provided GA4 Realtime screenshot on 2026-09-20 showing 1 active user in the last 30 minutes",
-    "debugview_verified": false,
-    "windsor_read_connection_verified": true
+    "debugview_verified": true,
+    "windsor_read_connection_verified": true,
+    "debugview_evidence": "User-provided GA4 DebugView screenshot showing page_view, session_start and user_engagement; non_personalized_ads=1",
+    "ga4_core_verified": true
   },
   "architecture": {
     "browser_layer": {
