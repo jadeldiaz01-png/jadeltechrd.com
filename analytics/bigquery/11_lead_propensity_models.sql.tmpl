@@ -1,0 +1,45 @@
+-- MODEL TRAINING TEMPLATE — NEVER RUN AUTOMATICALLY.
+-- Prerequisite: a privacy-reviewed point-in-time table
+-- `__GCP_PROJECT_ID__.jadel_features.lead_training_v1`
+-- with a frozen split column and no direct identifiers/free text.
+-- Required columns: converted BOOL, split STRING, plus approved numeric/categorical features.
+
+CREATE OR REPLACE MODEL `__GCP_PROJECT_ID__.jadel_ml.lead_propensity_logreg`
+OPTIONS(
+  MODEL_TYPE='LOGISTIC_REG',
+  INPUT_LABEL_COLS=['converted'],
+  AUTO_CLASS_WEIGHTS=TRUE,
+  DATA_SPLIT_METHOD='NO_SPLIT'
+) AS
+SELECT * EXCEPT(split)
+FROM `__GCP_PROJECT_ID__.jadel_features.lead_training_v1`
+WHERE split='TRAIN';
+
+-- Challenger: activate only after the logistic baseline is independently evaluated.
+CREATE OR REPLACE MODEL `__GCP_PROJECT_ID__.jadel_ml.lead_propensity_boosted_tree`
+OPTIONS(
+  MODEL_TYPE='BOOSTED_TREE_CLASSIFIER',
+  INPUT_LABEL_COLS=['converted'],
+  AUTO_CLASS_WEIGHTS=TRUE,
+  DATA_SPLIT_METHOD='NO_SPLIT'
+) AS
+SELECT * EXCEPT(split)
+FROM `__GCP_PROJECT_ID__.jadel_features.lead_training_v1`
+WHERE split='TRAIN';
+
+-- Evaluation must use a frozen temporal holdout, never the training rows.
+SELECT
+  'logreg' AS model_id,
+  *
+FROM ML.EVALUATE(
+  MODEL `__GCP_PROJECT_ID__.jadel_ml.lead_propensity_logreg`,
+  (SELECT * EXCEPT(split) FROM `__GCP_PROJECT_ID__.jadel_features.lead_training_v1` WHERE split='HOLDOUT')
+);
+
+SELECT
+  'boosted_tree' AS model_id,
+  *
+FROM ML.EVALUATE(
+  MODEL `__GCP_PROJECT_ID__.jadel_ml.lead_propensity_boosted_tree`,
+  (SELECT * EXCEPT(split) FROM `__GCP_PROJECT_ID__.jadel_features.lead_training_v1` WHERE split='HOLDOUT')
+);
