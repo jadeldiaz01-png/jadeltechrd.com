@@ -3,6 +3,16 @@ name: Deploy public site to GitHub Pages
 on:
   push:
     branches: [main]
+    paths:
+      - "index.html"
+      - "app.js"
+      - "styles.css"
+      - "project-request.css"
+      - "project-request.js"
+      - "solicitar-proyecto.html"
+      - "robots.txt"
+      - "sitemap.xml"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:

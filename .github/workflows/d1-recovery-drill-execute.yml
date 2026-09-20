@@ -1,0 +1,248 @@
+name: D1 recovery drill execute
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type DESTROY_RECOVERY_DRILL_ONLY. This workflow mutates and restores only the dedicated recovery-drill D1 database."
+        required: true
+        type: string
+      database_name:
+        description: "Exact dedicated D1 recovery-drill database name."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  attestations: write
+  id-token: write
+
+concurrency:
+  group: d1-recovery-drill
+  cancel-in-progress: false
+
+jobs:
+  destructive-recovery-drill:
+    environment:
+      name: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DRILL_DATABASE_NAME: ${{ vars.D1_RECOVERY_DRILL_DATABASE_NAME }}
+      DRILL_DATABASE_ID: ${{ vars.D1_RECOVERY_DRILL_DATABASE_ID }}
+      ALLOW_D1_RECOVERY_DRILL: ${{ vars.ALLOW_D1_RECOVERY_DRILL }}
+      WRANGLER_VERSION: "4.135.0"
+
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Enforce isolated destructive target and explicit approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "DESTROY_RECOVERY_DRILL_ONLY"
+          test "${{ inputs.database_name }}" = "$DRILL_DATABASE_NAME"
+          test "$ALLOW_D1_RECOVERY_DRILL" = "true"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$DRILL_DATABASE_NAME"
+          test -n "$DRILL_DATABASE_ID"
+
+          case "$DRILL_DATABASE_NAME" in
+            *-recovery-drill) ;;
+            *)
+              echo "Refusing destructive recovery drill: target must end in -recovery-drill." >&2
+              exit 1
+              ;;
+          esac
+
+          case "$DRILL_DATABASE_NAME" in
+            *prod*|*production*|jadel-commercial-runtime)
+              echo "Refusing destructive recovery drill: production-like target detected." >&2
+              exit 1
+              ;;
+          esac
+
+          case "$DRILL_DATABASE_ID" in
+            ????????-????-????-????-????????????) ;;
+            *)
+              echo "Refusing destructive recovery drill: D1 database id is not UUID-shaped." >&2
+              exit 1
+              ;;
+          esac
+
+          echo "D1_DESTRUCTIVE_TARGET_ISOLATION=PASS"
+
+      - name: Build ephemeral Wrangler config
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >/tmp/wrangler.recovery.jsonc <<EOF
+          {
+            "name": "jadel-d1-recovery-drill",
+            "compatibility_date": "2026-09-19",
+            "d1_databases": [
+              {
+                "binding": "DB",
+                "database_name": "$DRILL_DATABASE_NAME",
+                "database_id": "$DRILL_DATABASE_ID"
+              }
+            ]
+          }
+          EOF
+
+      - name: Verify D1 production backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 info "$DRILL_DATABASE_NAME"             --config /tmp/wrangler.recovery.jsonc --json > evidence/d1-info.json
+          version=$(jq -r '.. | .version? // empty' evidence/d1-info.json | head -n1)
+          test "$version" = "production"
+          echo "D1_PRODUCTION_BACKEND=PASS"
+
+      - name: Seed deterministic disposable baseline
+        id: seed
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="baseline-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mutated="mutated-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          printf '%s\n' "$baseline" > /tmp/baseline.txt
+          printf '%s\n' "$mutated" > /tmp/mutated.txt
+
+          sql="CREATE TABLE IF NOT EXISTS __recovery_drill_marker (id INTEGER PRIMARY KEY, marker_value TEXT NOT NULL, updated_at TEXT NOT NULL); DELETE FROM __recovery_drill_marker WHERE id=1; INSERT INTO __recovery_drill_marker(id, marker_value, updated_at) VALUES (1, '$baseline', datetime('now'));"
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 execute "$DRILL_DATABASE_NAME"             --remote --yes --config /tmp/wrangler.recovery.jsonc --command "$sql" --json             > evidence/seed.json
+
+          observed=$(npx --yes "wrangler@$WRANGLER_VERSION" d1 execute "$DRILL_DATABASE_NAME"             --remote --yes --config /tmp/wrangler.recovery.jsonc             --command "SELECT marker_value FROM __recovery_drill_marker WHERE id=1" --json             | jq -r '.[0].results[0].marker_value // empty')
+          test "$observed" = "$baseline"
+          echo "D1_BASELINE_SEED=PASS"
+
+      - name: Capture exact recovery point
+        id: bookmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          capture_epoch=$(date +%s)
+          response=$(curl --fail-with-body --silent --show-error             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$DRILL_DATABASE_ID/time_travel/bookmark")
+          printf '%s\n' "$response" > evidence/bookmark.json
+          test "$(jq -r '.success' evidence/bookmark.json)" = "true"
+          bookmark=$(jq -r '.result.bookmark // empty' evidence/bookmark.json)
+          test -n "$bookmark"
+          printf '%s\n' "$bookmark" > /tmp/recovery-bookmark.txt
+          printf '%s\n' "$capture_epoch" > /tmp/bookmark-capture-epoch.txt
+          echo "D1_RECOVERY_BOOKMARK_CAPTURED=PASS"
+
+      - name: Apply controlled mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mutated=$(cat /tmp/mutated.txt)
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 execute "$DRILL_DATABASE_NAME"             --remote --yes --config /tmp/wrangler.recovery.jsonc             --command "UPDATE __recovery_drill_marker SET marker_value='$mutated', updated_at=datetime('now') WHERE id=1"             --json > evidence/mutation.json
+
+          observed=$(npx --yes "wrangler@$WRANGLER_VERSION" d1 execute "$DRILL_DATABASE_NAME"             --remote --yes --config /tmp/wrangler.recovery.jsonc             --command "SELECT marker_value FROM __recovery_drill_marker WHERE id=1" --json             | jq -r '.[0].results[0].marker_value // empty')
+          test "$observed" = "$mutated"
+          echo "D1_CONTROLLED_MUTATION=PASS"
+
+      - name: Restore dedicated drill database to bookmark
+        id: restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          bookmark=$(cat /tmp/recovery-bookmark.txt)
+          restore_start_ns=$(date +%s%N)
+          restore_start_epoch=$(date +%s)
+
+          response=$(curl --fail-with-body --silent --show-error             -X POST             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$DRILL_DATABASE_ID/time_travel/restore?bookmark=$bookmark")
+          printf '%s\n' "$response" > evidence/restore.json
+          test "$(jq -r '.success' evidence/restore.json)" = "true"
+
+          undo_bookmark=$(jq -r '.result.previous_bookmark // empty' evidence/restore.json)
+          restored_bookmark=$(jq -r '.result.bookmark // empty' evidence/restore.json)
+          test -n "$undo_bookmark"
+          test -n "$restored_bookmark"
+          printf '%s\n' "$undo_bookmark" > /tmp/undo-bookmark.txt
+
+          baseline=$(cat /tmp/baseline.txt)
+          restored="false"
+          for attempt in $(seq 1 30); do
+            observed=$(npx --yes "wrangler@$WRANGLER_VERSION" d1 execute "$DRILL_DATABASE_NAME"               --remote --yes --config /tmp/wrangler.recovery.jsonc               --command "SELECT marker_value FROM __recovery_drill_marker WHERE id=1" --json               | jq -r '.[0].results[0].marker_value // empty' || true)
+            if [ "$observed" = "$baseline" ]; then
+              restored="true"
+              break
+            fi
+            sleep 2
+          done
+          test "$restored" = "true"
+
+          restore_end_ns=$(date +%s%N)
+          capture_epoch=$(cat /tmp/bookmark-capture-epoch.txt)
+          rto_ms=$(( (restore_end_ns - restore_start_ns) / 1000000 ))
+          recovery_point_age_seconds=$(( restore_start_epoch - capture_epoch ))
+
+          jq -n             --arg database_name "$DRILL_DATABASE_NAME"             --arg database_id_sha256 "$(printf '%s' "$DRILL_DATABASE_ID" | sha256sum | awk '{print $1}')"             --arg source_sha "$GITHUB_SHA"             --arg run_id "$GITHUB_RUN_ID"             --arg run_attempt "$GITHUB_RUN_ATTEMPT"             --arg bookmark "$bookmark"             --arg restored_bookmark "$restored_bookmark"             --arg undo_bookmark "$undo_bookmark"             --argjson measured_rto_ms "$rto_ms"             --argjson recovery_point_age_seconds "$recovery_point_age_seconds"             '{
+              schema_version:"1.0",
+              control_id:"RESTORE_ROLLBACK_DRILL",
+              status:"PASS",
+              target_class:"DEDICATED_RECOVERY_DRILL_ONLY",
+              database_name:$database_name,
+              database_id_sha256:$database_id_sha256,
+              source_sha:$source_sha,
+              workflow_run_id:$run_id,
+              workflow_run_attempt:$run_attempt,
+              recovery_bookmark:$bookmark,
+              restored_bookmark:$restored_bookmark,
+              undo_bookmark:$undo_bookmark,
+              measured_rto_ms:$measured_rto_ms,
+              recovery_point_age_seconds:$recovery_point_age_seconds,
+              production_database_touched:false
+            }' > evidence/recovery-summary.json
+
+          test "$(jq -r '.production_database_touched' evidence/recovery-summary.json)" = "false"
+          test "$(jq -r '.status' evidence/recovery-summary.json)" = "PASS"
+          echo "D1_RESTORE_DATA_CORRECTNESS=PASS"
+          echo "D1_UNDO_BOOKMARK_CAPTURED=PASS"
+          echo "D1_RTO_MEASURED_MS=$rto_ms"
+          echo "D1_RECOVERY_POINT_AGE_SECONDS=$recovery_point_age_seconds"
+          echo "RESTORE_ROLLBACK_DRILL=PASS"
+
+      - name: Build recovery evidence bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum evidence/*.json > evidence/SHA256SUMS
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner             -cf evidence/d1-recovery-drill-evidence.tar -C evidence             d1-info.json seed.json bookmark.json mutation.json restore.json recovery-summary.json SHA256SUMS
+          test -s evidence/d1-recovery-drill-evidence.tar
+          echo "D1_RECOVERY_EVIDENCE_BUNDLE=PASS"
+
+      - name: Attest recovery evidence
+        id: recovery_attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: evidence/d1-recovery-drill-evidence.tar
+
+      - name: Verify recovery evidence attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle='${{ steps.recovery_attest.outputs.bundle-path }}'
+          test -s "$bundle"
+          gh attestation verify evidence/d1-recovery-drill-evidence.tar             -R "$GITHUB_REPOSITORY"             --bundle "$bundle"             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/d1-recovery-drill-execute.yml"             --source-digest "$GITHUB_SHA"             --source-ref "$GITHUB_REF"             --format json > evidence/attestation-verification.json
+          jq -e 'length > 0' evidence/attestation-verification.json >/dev/null
+          echo "D1_RECOVERY_ATTESTATION_VERIFY=PASS"
+
+      - name: Retain certified recovery evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: d1-recovery-drill-certified-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          retention-days: 90
+          if-no-files-found: error
