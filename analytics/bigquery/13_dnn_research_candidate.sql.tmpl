@@ -1,0 +1,21 @@
+-- DEEP LEARNING RESEARCH CANDIDATE — DISABLED BY DEFAULT.
+-- DO NOT EXECUTE until the revenue model registry's DNN data-volume,
+-- incremental-value, reproducibility and compute-budget gates pass.
+-- This is intentionally a template, not an activation workflow.
+CREATE OR REPLACE MODEL `__GCP_PROJECT_ID__.jadel_ml.lead_propensity_dnn_research`
+OPTIONS(
+  MODEL_TYPE='DNN_CLASSIFIER',
+  INPUT_LABEL_COLS=['converted'],
+  DATA_SPLIT_METHOD='NO_SPLIT',
+  EARLY_STOP=TRUE
+) AS
+SELECT * EXCEPT(split)
+FROM `__GCP_PROJECT_ID__.jadel_features.lead_training_v1`
+WHERE split='TRAIN';
+
+-- Never promote based on training fit. Evaluate only on the frozen holdout.
+SELECT *
+FROM ML.EVALUATE(
+  MODEL `__GCP_PROJECT_ID__.jadel_ml.lead_propensity_dnn_research`,
+  (SELECT * EXCEPT(split) FROM `__GCP_PROJECT_ID__.jadel_features.lead_training_v1` WHERE split='HOLDOUT')
+);
