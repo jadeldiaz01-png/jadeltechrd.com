@@ -132,32 +132,60 @@ function serviceWindow(xs, def) {
 const services={};
 for (const [name,def] of Object.entries(serviceDefs)) services[name]=serviceWindow(samples,def);
 
-function burnWindow(hours, threshold, minCoverage, def) {
-  const start=windowEndExclusiveMs-hours*3600000;
+function parseWindowMinutes(value) {
+  const match=String(value).match(/^(\\d+)(m|h|d)$/);
+  if (!match) throw new Error(\`invalid burn-rate window: \${value}\`);
+  const n=Number(match[1]);
+  const multiplier=match[2]==='m' ? 1 : match[2]==='h' ? 60 : 1440;
+  return n*multiplier;
+}
+
+function burnWindow(windowSpec, threshold, minCoverage, def) {
+  const minutes=parseWindowMinutes(windowSpec);
+  const start=windowEndExclusiveMs-minutes*60000;
   const xs=samples.filter(s=>{const t=Date.parse(s.observed_at); return t>=start && t<windowEndExclusiveMs;});
-  const expected=Math.round(hours*60/cert.probe_interval_minutes);
+  const expected=Math.max(1,Math.round(minutes/cert.probe_interval_minutes));
   const coverage=xs.length/expected;
   const sw=serviceWindow(xs,def);
   const burn=sw.error_budget_fraction>0 ? sw.error_fraction/sw.error_budget_fraction : Infinity;
   const evaluable=coverage>=minCoverage;
   return {
-    hours,threshold,expected_slots:expected,observed_slots:xs.length,coverage_ratio:coverage,
+    window:windowSpec,minutes,threshold,expected_slots:expected,observed_slots:xs.length,coverage_ratio:coverage,
     burn_rate:Number.isFinite(burn)?burn:null,
     evaluable,
     threshold_exceeded:evaluable && Number.isFinite(burn) && burn>=threshold
   };
 }
 
+const burnRules=cert.multiwindow_burn_rate_rules;
+if (!Array.isArray(burnRules) || !burnRules.length) throw new Error('multiwindow_burn_rate_rules missing');
 const burnRate={};
 let burnEvaluationComplete=true;
 let burnAlertActive=false;
+let burnPageActive=false;
+let burnTicketActive=false;
 for (const [name,def] of Object.entries(serviceDefs)) {
-  burnRate[name]=cert.burn_rate_windows.map(w=>{
-    const hours=Number(String(w.window).replace('h',''));
-    const x=burnWindow(hours,Number(w.threshold),Number(w.minimum_window_coverage_ratio),def);
-    if (!x.evaluable) burnEvaluationComplete=false;
-    if (x.threshold_exceeded) burnAlertActive=true;
-    return x;
+  burnRate[name]=burnRules.map(rule=>{
+    const threshold=Number(rule.threshold);
+    const longWindow=burnWindow(rule.long_window,threshold,Number(rule.minimum_long_window_coverage_ratio),def);
+    const shortWindow=burnWindow(rule.short_window,threshold,Number(rule.minimum_short_window_coverage_ratio),def);
+    const evaluable=longWindow.evaluable && shortWindow.evaluable;
+    const active=evaluable && longWindow.threshold_exceeded && shortWindow.threshold_exceeded;
+    if (!evaluable) burnEvaluationComplete=false;
+    if (active) {
+      burnAlertActive=true;
+      if (rule.severity==='page') burnPageActive=true;
+      if (rule.severity==='ticket') burnTicketActive=true;
+    }
+    return {
+      severity:rule.severity,
+      threshold,
+      budget_fraction:Number(rule.budget_fraction),
+      evaluable,
+      active,
+      long_window:longWindow,
+      short_window:shortWindow
+    };
   });
 }
 
@@ -199,9 +227,12 @@ const result={
   },
   services,
   burn_rate:{
+    model:'multiwindow_multi_burn_rate',
     evaluation_complete:burnEvaluationComplete,
     alert_active:burnAlertActive,
-    windows:burnRate
+    page_active:burnPageActive,
+    ticket_active:burnTicketActive,
+    rules:burnRate
   },
   alert_delivery:{
     pass:alertDeliveryPass,
@@ -218,7 +249,8 @@ const result={
   notes:[
     'Only scheduled first-attempt samples count toward certification; push/manual probes cannot inflate coverage.',
     'Missing monitor observations are a separate coverage failure and are never counted as healthy service responses.',
-    'Public-domain intake health availability is distinct from the higher valid-request acceptance SLO owned by the commercial-intake domain.'
+    'Public-domain intake health availability is distinct from the higher valid-request acceptance SLO owned by the commercial-intake domain.',
+    'Burn-rate activation requires both the long and short windows to exceed the same threshold; the 1h rule uses a 10m short window because the governed synthetic cadence is 10 minutes.'
   ]
 };
 
