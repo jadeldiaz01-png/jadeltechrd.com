@@ -1,0 +1,21 @@
+-- FORECASTING TEMPLATE — NEVER RUN AUTOMATICALLY.
+-- Source must contain reconciled commercial outcomes, not GA4 revenue inference.
+-- Expected source: __GCP_PROJECT_ID__.jadel_features.reconciled_revenue_daily_v1
+CREATE OR REPLACE MODEL `__GCP_PROJECT_ID__.jadel_ml.revenue_forecast_arima_plus`
+OPTIONS(
+  MODEL_TYPE='ARIMA_PLUS',
+  TIME_SERIES_TIMESTAMP_COL='revenue_date',
+  TIME_SERIES_DATA_COL='reconciled_usd_revenue',
+  DATA_FREQUENCY='DAILY',
+  CLEAN_SPIKES_AND_DIPS=TRUE,
+  ADJUST_STEP_CHANGES=TRUE
+) AS
+SELECT revenue_date, reconciled_usd_revenue
+FROM `__GCP_PROJECT_ID__.jadel_features.reconciled_revenue_daily_v1`
+WHERE evidence_state='RECONCILED';
+
+SELECT *
+FROM ML.FORECAST(
+  MODEL `__GCP_PROJECT_ID__.jadel_ml.revenue_forecast_arima_plus`,
+  STRUCT(30 AS horizon, 0.90 AS confidence_level)
+);
