@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "name": "GA4 Activation Gate",
-  "state": "CONTROLLED_VALIDATION_ACTIVE",
+  "state": "TRANSPORT_VERIFIED_PENDING_GA_UI",
   "effective_date": "2026-09-20",
   "site": {
     "url": "https://jadeltechrd.com/",
@@ -27,7 +27,14 @@
     "analytics_account_id": null,
     "analytics_account_id_source": "Not yet independently verified",
     "windsor_property_selector_id": "555066228",
-    "id_hierarchy_verified": true
+    "id_hierarchy_verified": true,
+    "transport_verified": true,
+    "gtag_js_http_status": 200,
+    "collect_http_status": 204,
+    "transport_event_verified": "page_view",
+    "transport_verified_at": "2026-09-20T19:22:45Z",
+    "transport_evidence": "GitHub Actions run 35532073101; clean headless Chrome; consent=granted; tid=G-K60SQ2ZHL9; g/collect HTTP 204",
+    "debug_transport_verified": true
   },
   "privacy": {
     "default_analytics_storage": "denied",
@@ -99,10 +106,13 @@
     "offline_conversion_sync_enabled": false
   },
   "validation": {
-    "mode": "pre_slo_controlled_validation",
-    "debug_mode": true,
+    "mode": "transport_verified_pending_ga_ui",
+    "debug_mode": false,
     "started_on": "2026-09-20",
     "production_window_requirement": "complete validation and set debugMode=false before 2026-09-21T00:00:00Z",
-    "rollback_main_sha": "26564e74095e3eac61396480d70ee4c7d356743c"
+    "rollback_main_sha": "26564e74095e3eac61396480d70ee4c7d356743c",
+    "cloudflare_csp_rule_corrected": true,
+    "cloudflare_csp_rule_description": "Jadel Tech RD hardened browser response headers",
+    "cloudflare_csp_corrected_at": "2026-09-20T19:21:00Z"
   }
 }
