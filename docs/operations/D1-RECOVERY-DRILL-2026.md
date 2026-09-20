@@ -12,12 +12,18 @@ Cloudflare D1 Time Travel is always available on the production storage backend,
 
 Workflow: `.github/workflows/d1-recovery-drill-readiness.yml`.
 
-Required GitHub configuration:
+Required GitHub environment: `d1-recovery-drill`.
 
-- secret `CLOUDFLARE_API_TOKEN` with the minimum permissions needed to read the dedicated D1 drill database;
-- secret `CLOUDFLARE_ACCOUNT_ID`;
-- variable `D1_RECOVERY_DRILL_DATABASE_NAME`, which must end in `-recovery-drill`;
-- variable `D1_RECOVERY_DRILL_DATABASE_ID`.
+Configure it before merging/enabling the provisioning workflow:
+
+- required reviewer(s) for protected-environment approval;
+- deployment branch restricted to `main`;
+- secret `CLOUDFLARE_D1_API_TOKEN`, scoped to the selected Cloudflare account with Account > D1 Write and no unrelated zone permissions;
+- variable `CLOUDFLARE_ACCOUNT_ID`;
+- variable `D1_RECOVERY_DRILL_ENV_READY=true` only after the protection rules and credential are complete;
+- variable `D1_RECOVERY_DRILL_DATABASE_NAME=jadel-commercial-runtime-recovery-drill`;
+- variable `D1_RECOVERY_DRILL_DATABASE_ID` after Stage A provisioning returns the UUID;
+- variable `ALLOW_D1_RECOVERY_DRILL=false` until the separate human authorization for Stage B.
 
 The workflow refuses the known production name `jadel-commercial-runtime`, verifies the D1 backend reports `version=production`, retrieves a current Time Travel bookmark and retains non-secret evidence for 30 days. It never issues a restore or mutation command.
 
@@ -50,7 +56,9 @@ The workflow requires all of the following before it can mutate anything:
 - rejection of `jadel-commercial-runtime` and production-like names;
 - UUID-shaped D1 database id;
 - D1 `version=production`;
-- Cloudflare API credentials supplied only through GitHub secrets.
+- dedicated Cloudflare D1 credential supplied only through environment secret `CLOUDFLARE_D1_API_TOKEN`;
+- account/database identifiers supplied as environment variables, not secrets;
+- `D1_RECOVERY_DRILL_ENV_READY=true` proving the protected environment was deliberately prepared.
 
 The destructive restore uses Cloudflare's Time Travel REST API so the JSON response can be retained and the `previous_bookmark` (undo point) can be certified. Data mutation and correctness probes use pinned Wrangler `4.135.0`. The workflow measures recovery-point age and RTO, creates a deterministic evidence bundle, generates a GitHub/Sigstore attestation, verifies that attestation against the exact repository/workflow/SHA/ref, and retains the evidence for 90 days.
 
@@ -90,9 +98,9 @@ Workflow: `.github/workflows/provision-d1-recovery-drill.yml`.
 
 Target database name is fixed to `jadel-commercial-runtime-recovery-drill`.
 
-On merge to `main`, the workflow:
+On merge to `main`, after protected-environment approval, the workflow:
 
-1. verifies the Cloudflare account/token secrets are present without printing them;
+1. requires `D1_RECOVERY_DRILL_ENV_READY=true`, the account id variable and the dedicated D1 secret without printing them;
 2. lists D1 databases by the exact recovery-drill name;
 3. reuses exactly one existing match or creates the database when none exists;
 4. fails closed if more than one exact match is returned;
@@ -106,6 +114,6 @@ The provisioning workflow intentionally contains no Time Travel restore endpoint
 
 ### GitHub protected environment boundary
 
-The destructive Stage B workflow references the environment `d1-recovery-drill`, but a protected GitHub environment must be created/updated by an identity with repository `Administration: write`. The ordinary workflow `GITHUB_TOKEN` cannot self-grant that administrative authority, and the current ChatGPT GitHub connector does not expose environment-administration writes.
+All D1 recovery workflows are bound to the dedicated environment `d1-recovery-drill`. A protected GitHub environment must be created/updated by an identity with repository `Administration: write`; the ordinary workflow `GITHUB_TOKEN` cannot self-grant that authority, and the current ChatGPT GitHub connector does not expose environment-administration writes.
 
-Therefore the environment protection rule remains a deliberate human/admin boundary. Stage B additionally requires `ALLOW_D1_RECOVERY_DRILL=true`, the exact recovery database name/id, and explicit destructive confirmation, so it remains fail-closed even before environment administration is completed.
+This is a deliberate human/admin boundary. The workflows also require `D1_RECOVERY_DRILL_ENV_READY=true`; Stage B further requires `ALLOW_D1_RECOVERY_DRILL=true`, the exact recovery database name/id, environment approval and explicit destructive confirmation.
