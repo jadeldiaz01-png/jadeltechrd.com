@@ -91,6 +91,25 @@ jobs:
           printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
           echo "CLOUDFLARE_D1_TOKEN_VERIFY=PASS family=$token_family status=active"
 
+          if [ "$token_family" = "account" ]; then
+            token_id=$(jq -r '.result.id // empty' "$verify_tmp")
+            if [ -n "$token_id" ]; then
+              details_tmp=$(mktemp)
+              details_code=$(curl -sS -o "$details_tmp" -w '%{http_code}' -H "Authorization: Bearer $token" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/$token_id" || true)
+
+              if [ "$details_code" = "200" ] && [ "$(jq -r '.success // false' "$details_tmp" 2>/dev/null || echo false)" = "true" ]; then
+                jq -r '.result.policies[]?.permission_groups[]?.name // empty' "$details_tmp" | sort -u > /tmp/token-permission-names.txt
+                if grep -Fxq 'D1 Write' /tmp/token-permission-names.txt || grep -Fxq 'D1 Read' /tmp/token-permission-names.txt; then
+                  echo "CLOUDFLARE_D1_TOKEN_POLICY_INTROSPECTION=PASS d1_permission=present"
+                else
+                  echo "CLOUDFLARE_D1_TOKEN_POLICY_INTROSPECTION=PASS d1_permission=absent"
+                fi
+              else
+                echo "CLOUDFLARE_D1_TOKEN_POLICY_INTROSPECTION=UNAVAILABLE http=$details_code"
+              fi
+            fi
+          fi
+
       - name: Verify protected recovery environment and provision target
         id: provision
         shell: bash
