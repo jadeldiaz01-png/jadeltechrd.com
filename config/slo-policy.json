@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.1.0",
+  "schema_version": "1.2.0",
   "policy_id": "jadel-control-plane-slo-v1",
   "measurement_window_days": 30,
   "error_budget_policy": {
@@ -92,29 +92,53 @@
       "monitoring coverage must satisfy minimum_coverage_ratio",
       "maximum blind gap must not exceed maximum_gap_minutes"
     ],
-    "burn_rate_windows": [
-      {
-        "window": "1h",
-        "threshold": 14.4,
-        "minimum_window_coverage_ratio": 0.8
-      },
-      {
-        "window": "6h",
-        "threshold": 6,
-        "minimum_window_coverage_ratio": 0.8
-      },
-      {
-        "window": "24h",
-        "threshold": 3,
-        "minimum_window_coverage_ratio": 0.8
-      }
-    ],
     "alert_delivery": {
       "channel": "github_issue",
       "test_freshness_days": 30,
       "requires_create_read_comment_close_round_trip": true
     },
-    "promotion_rule": "PASS only after 30 complete days satisfy coverage, maximum-gap, availability, p95 latency, error-budget, burn-rate, hard-invariant and alert-delivery checks."
+    "promotion_rule": "PASS only after 30 complete days satisfy coverage, maximum-gap, availability, p95 latency, error-budget, burn-rate, hard-invariant and alert-delivery checks.",
+    "multiwindow_burn_rate_rules": [
+      {
+        "severity": "page",
+        "long_window": "1h",
+        "short_window": "10m",
+        "threshold": 14.4,
+        "minimum_long_window_coverage_ratio": 0.8,
+        "minimum_short_window_coverage_ratio": 1,
+        "budget_fraction": 0.02,
+        "rationale": "The canonical 5m short window is intentionally adapted to 10m because the governed synthetic cadence is 10 minutes; using 5m would be structurally undersampled."
+      },
+      {
+        "severity": "page",
+        "long_window": "6h",
+        "short_window": "30m",
+        "threshold": 6,
+        "minimum_long_window_coverage_ratio": 0.8,
+        "minimum_short_window_coverage_ratio": 0.8,
+        "budget_fraction": 0.05
+      },
+      {
+        "severity": "ticket",
+        "long_window": "24h",
+        "short_window": "2h",
+        "threshold": 3,
+        "minimum_long_window_coverage_ratio": 0.8,
+        "minimum_short_window_coverage_ratio": 0.8,
+        "budget_fraction": 0.1
+      },
+      {
+        "severity": "ticket",
+        "long_window": "72h",
+        "short_window": "6h",
+        "threshold": 1,
+        "minimum_long_window_coverage_ratio": 0.8,
+        "minimum_short_window_coverage_ratio": 0.8,
+        "budget_fraction": 0.1
+      }
+    ],
+    "burn_rate_model": "multiwindow_multi_burn_rate; an alert is active only when both the long and short windows for the same rule exceed the threshold",
+    "low_traffic_caveat": "These are fixed-cadence synthetic availability SLIs, not raw low-volume user-request ratios. User-request SLOs remain separate domain evidence."
   },
   "telemetry_semantics": {
     "http_duration_metric": "http.client.request.duration",
