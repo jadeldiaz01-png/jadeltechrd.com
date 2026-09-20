@@ -133,8 +133,8 @@ const services={};
 for (const [name,def] of Object.entries(serviceDefs)) services[name]=serviceWindow(samples,def);
 
 function parseWindowMinutes(value) {
-  const match=String(value).match(/^(\\d+)(m|h|d)$/);
-  if (!match) throw new Error(\`invalid burn-rate window: \${value}\`);
+  const match=String(value).match(/^(\d+)(m|h|d)$/);
+  if (!match) throw new Error(`invalid burn-rate window: ${value}`);
   const n=Number(match[1]);
   const multiplier=match[2]==='m' ? 1 : match[2]==='h' ? 60 : 1440;
   return n*multiplier;
