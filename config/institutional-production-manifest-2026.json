@@ -1,7 +1,7 @@
 {
   "schema_version": "2026.2",
   "manifest_id": "jadeltechrd-institutional-production-manifest",
-  "generated_at": "2026-09-20T03:52:30Z",
+  "generated_at": "2026-09-20T04:05:30Z",
   "owner": "Jadel Tech RD",
   "repository": "jadeldiaz01-png/jadeltechrd.com",
   "baseline_sha": "cf190d28282958ff4f04f74e0325109df5c7b62e",
@@ -522,11 +522,20 @@
       ]
     },
     "slo_measurement": {
-      "workflow": ".github/workflows/site-slo-evidence.yml",
-      "cadence": "hourly",
-      "evidence_retention_days": 35,
-      "alert_channel": "GitHub issue on failed synthetic or explicit alert-path test",
-      "maturation_rule": "A configured workflow is not a PASS for the 30-day SLO window; measured history and alert delivery evidence are required."
+      "probe_workflow": ".github/workflows/site-slo-evidence.yml",
+      "probe_cadence_minutes": 10,
+      "measurement_model": "scheduled first attempt, no retry substitution",
+      "daily_rollup_workflow": ".github/workflows/site-slo-daily-rollup.yml",
+      "certifier_workflow": ".github/workflows/site-slo-certifier.yml",
+      "alert_test_workflow": ".github/workflows/slo-alert-path-test.yml",
+      "measurement_window_days": 30,
+      "expected_slots": 4320,
+      "minimum_coverage_ratio": 0.95,
+      "maximum_blind_gap_minutes": 30,
+      "evidence_retention_days": 45,
+      "alert_channel": "GitHub Issues",
+      "promotion_rule": "A workflow configuration never counts as PASS. PASS requires a complete attested 30-day certification artifact satisfying coverage, availability, p95 latency, error-budget, burn-rate, hard-invariant and alert-delivery checks.",
+      "scheduler_risk_control": "GitHub schedule delay/drop is treated as missing coverage, never as a healthy service sample."
     }
   },
   "qa_and_adversarial_evaluation": {
