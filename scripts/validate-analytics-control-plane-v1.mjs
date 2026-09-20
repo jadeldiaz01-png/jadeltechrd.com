@@ -18,6 +18,8 @@ if (cp.property.property_id === cp.property.stream_id) fail("property and stream
 
 if (cp.evidence.browser_transport_verified !== true) fail("transport evidence");
 if (cp.evidence.realtime_verified !== true) fail("Realtime evidence");
+if (cp.evidence.debugview_verified !== true) fail("DebugView evidence");
+if (cp.evidence.ga4_core_verified !== true) fail("GA4 core evidence");
 if (ga.google_analytics.realtime_verified !== true) fail("GA4 gate must record Realtime evidence");
 
 if (cp.architecture.browser_layer.pii_allowed !== false) fail("browser PII forbidden");
