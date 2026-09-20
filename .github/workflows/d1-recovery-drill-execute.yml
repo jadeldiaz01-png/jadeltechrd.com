@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       D1_RECOVERY_DRILL_ENV_READY: ${{ vars.D1_RECOVERY_DRILL_ENV_READY }}
       DRILL_DATABASE_NAME: ${{ vars.D1_RECOVERY_DRILL_DATABASE_NAME }}
@@ -37,6 +37,21 @@ jobs:
       WRANGLER_VERSION: "4.135.0"
 
     steps:
+      - name: Normalize dedicated D1 token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_D1_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then
+            token="${token:1:${#token}-2}"
+          elif [[ "$token" == \'*\' && "$token" == *\' ]]; then
+            token="${token:1:${#token}-2}"
+          fi
+          test -n "$token"
+          echo "::add-mask::$token"
+          printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+
       - name: Checkout immutable revision
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
