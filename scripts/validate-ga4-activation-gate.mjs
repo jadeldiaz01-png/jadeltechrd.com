@@ -36,8 +36,9 @@ if (!consent.includes("Preferencias de analítica")) fail("consent withdrawal/re
 for (const page of ["index.html","whatsapp-ia-empresas-rd.html","automatizacion-procesos-ia-rd.html","agente-ventas-ia-rd.html","solicitar-proyecto.html"]) {
   const html = fs.readFileSync(page, "utf8");
   if (html.includes("\\n  <script")) fail(page + " contains escaped newline markup");
-  if (!html.includes("https://www.googletagmanager.com")) fail(page + " CSP missing googletagmanager");
+  if (!html.includes("https://*.googletagmanager.com")) fail(page + " CSP missing wildcard googletagmanager");
   if (!html.includes("https://*.google-analytics.com")) fail(page + " CSP missing google-analytics endpoints");
+  if (!html.includes("https://*.analytics.google.com")) fail(page + " CSP missing analytics.google.com endpoints");
   if (html.includes("doubleclick.net") || html.includes("googlesyndication.com")) fail(page + " must not allow Ads endpoints");
   if (!html.includes("/analytics-consent.js") || !html.includes("/analytics-consent.css")) fail(page + " consent assets missing");
 }
