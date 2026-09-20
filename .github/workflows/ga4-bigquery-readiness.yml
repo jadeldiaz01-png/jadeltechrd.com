@@ -1,0 +1,41 @@
+name: GA4 BigQuery Daily Export readiness
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "config/ga4-bigquery-daily-export-v1.json"
+      - "analytics/bigquery/**"
+      - "scripts/render-bigquery-sql.mjs"
+      - "scripts/validate-bigquery-export-readiness.mjs"
+      - "docs/revenue/GA4-BIGQUERY-DAILY-EXPORT.md"
+      - ".github/workflows/ga4-bigquery-readiness.yml"
+  push:
+    branches: [main]
+    paths:
+      - "config/ga4-bigquery-daily-export-v1.json"
+      - "analytics/bigquery/**"
+      - "scripts/render-bigquery-sql.mjs"
+      - "scripts/validate-bigquery-export-readiness.mjs"
+      - "docs/revenue/GA4-BIGQUERY-DAILY-EXPORT.md"
+      - ".github/workflows/ga4-bigquery-readiness.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate fail-closed BigQuery readiness
+        run: |
+          set -euo pipefail
+          node scripts/validate-bigquery-export-readiness.mjs
+          ! grep -R --line-number --extended-regexp '"type"[[:space:]]*:[[:space:]]*"service_account"|private_key|BEGIN PRIVATE KEY'             config analytics scripts docs .github/workflows/ga4-bigquery-readiness.yml
+          echo 'STATIC_GCP_KEY_SCAN=PASS'

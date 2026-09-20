@@ -1,0 +1,19 @@
+-- Revenue Funnel v1 daily funnel.
+WITH events AS (
+  SELECT
+    PARSE_DATE('%Y%m%d', event_date) AS event_date,
+    event_name
+  FROM `__GCP_PROJECT_ID__.analytics_555066228.events_*`
+  WHERE _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY))
+                          AND FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY))
+)
+SELECT
+  event_date,
+  COUNTIF(event_name = 'offer_view') AS offer_view,
+  COUNTIF(event_name = 'offer_cta_click') AS offer_cta_click,
+  COUNTIF(event_name = 'intake_start') AS intake_start,
+  COUNTIF(event_name = 'generate_lead') AS generate_lead,
+  SAFE_DIVIDE(COUNTIF(event_name = 'generate_lead'), NULLIF(COUNTIF(event_name = 'offer_view'), 0)) AS offer_to_lead_rate
+FROM events
+GROUP BY event_date
+ORDER BY event_date DESC;

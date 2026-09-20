@@ -1,0 +1,12 @@
+-- Source / medium quality checks for the previous 30 complete days.
+SELECT
+  traffic_source.source AS first_user_source,
+  traffic_source.medium AS first_user_medium,
+  COUNT(*) AS events,
+  COUNT(DISTINCT user_pseudo_id) AS pseudo_users,
+  COUNTIF(event_name = 'generate_lead') AS generated_leads
+FROM `__GCP_PROJECT_ID__.analytics_555066228.events_*`
+WHERE _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY))
+                        AND FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY))
+GROUP BY first_user_source, first_user_medium
+ORDER BY generated_leads DESC, events DESC;

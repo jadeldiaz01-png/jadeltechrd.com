@@ -1,0 +1,29 @@
+-- Detect unexpected browser-side events.
+WITH allowed AS (
+  SELECT event_name
+  FROM UNNEST([
+    'page_view',
+    'session_start',
+    'user_engagement',
+    'first_visit',
+    'scroll',
+    'click',
+    'offer_view',
+    'offer_cta_click',
+    'intake_start',
+    'generate_lead'
+  ]) AS event_name
+),
+observed AS (
+  SELECT
+    event_name,
+    COUNT(*) AS event_count
+  FROM `__GCP_PROJECT_ID__.analytics_555066228.events_*`
+  WHERE _TABLE_SUFFIX = FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY))
+  GROUP BY event_name
+)
+SELECT o.*
+FROM observed o
+LEFT JOIN allowed a USING (event_name)
+WHERE a.event_name IS NULL
+ORDER BY event_count DESC;
