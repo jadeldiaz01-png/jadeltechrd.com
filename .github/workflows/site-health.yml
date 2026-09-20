@@ -15,7 +15,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   verify-public-access:
@@ -120,6 +119,9 @@ jobs:
 
 
   alert-on-health-failure:
+    permissions:
+      contents: read
+      issues: write
     needs: verify-public-access
     if: ${{ always() && needs.verify-public-access.result == 'failure' }}
     runs-on: ubuntu-24.04
@@ -149,6 +151,9 @@ jobs:
           echo "SLO_ALERT_DELIVERY=PASS issue=$number"
 
   alert-transport-drill:
+    permissions:
+      contents: read
+      issues: write
     if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
