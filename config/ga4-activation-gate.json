@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "name": "GA4 Activation Gate",
-  "state": "BLOCKED_ACCOUNT_CONNECTION",
+  "state": "MEASUREMENT_ID_CONFIRMED_PENDING_VALIDATION",
   "effective_date": "2026-09-20",
   "site": {
     "url": "https://jadeltechrd.com/",
@@ -11,13 +11,13 @@
     "reporting_currency_target": "USD"
   },
   "google_analytics": {
-    "account_confirmed": false,
-    "property_confirmed": false,
+    "account_confirmed": true,
+    "property_confirmed": true,
     "property_id": null,
-    "web_stream_confirmed": false,
+    "web_stream_confirmed": true,
     "stream_id": null,
-    "measurement_id": null,
-    "measurement_id_source": "GA4 Admin > Data streams > Web stream details",
+    "measurement_id": "G-K60SQ2ZHL9",
+    "measurement_id_source": "User-provided GA4 installation instructions screenshot, 2026-09-20",
     "editor_access_confirmed": false,
     "realtime_verified": false,
     "debugview_verified": false
