@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "surface": "commercial-runtime /api/v1/project-requests, /api/v1/paypal/webhooks, /api/v1/admin/approvals",
+  "surface": "commercial-runtime /api/v1/project-requests, /api/v1/paypal/webhooks, /api/v1/admin/approvals, /api/v1/admin/revenue-intelligence",
   "public_write_policy": "anonymous intake and verified PayPal webhooks only; no privileged action, payout, deployment, publication or agent execution directly from request",
   "controls": {
     "turnstile_on_abuse_prone_public_forms": true,
@@ -16,7 +16,10 @@
     "payment_webhook_signature_validation": true,
     "payment_event_deduplication": true,
     "admin_approval_authentication": true,
-    "fulfillment_requires_human_reconciliation": true
+    "fulfillment_requires_human_reconciliation": true,
+    "revenue_intelligence_admin_authentication": true,
+    "revenue_intelligence_read_only_aggregate": true,
+    "model_output_has_no_critical_action_authority": true
   },
   "implementation": {
     "turnstile": "commercial-runtime/src/worker.mjs::verifyTurnstile uses fixed Cloudflare Siteverify endpoint and server-only secret",
@@ -31,7 +34,8 @@
     "ssrf": "only server egress in intake is a compile-time constant Turnstile Siteverify URL",
     "durability": "D1 transactional batch writes project + evidence + dispatch outbox before asynchronous workflow dispatch",
     "payments": "verified PayPal webhooks write payment_events plus payment_ledger in REQUIRES_HUMAN; no automatic PAID transition",
-    "approvals": "admin approval endpoint records approval_events and can promote only policy status, not payment, deployment or ACTIVE state"
+    "approvals": "admin approval endpoint records approval_events and can promote only policy status, not payment, deployment or ACTIVE state",
+    "revenue_intelligence": "Authenticated GET-only aggregate endpoint; no PII fields, no write verb, no paid-media/publication/payment/trading authority; advanced ML/LLM/multimodal paths remain not activated."
   },
   "tests": {
     "injection": "commercial-runtime/test/injection.test.mjs",
@@ -39,7 +43,9 @@
     "replay": "commercial-runtime/test/replay.test.mjs",
     "access_control": "commercial-runtime/test/access-control.test.mjs",
     "paypal_webhook": "commercial-runtime/test/paypal-webhook.test.mjs",
-    "approvals": "commercial-runtime/test/approvals.test.mjs"
+    "approvals": "commercial-runtime/test/approvals.test.mjs",
+    "revenue_intelligence": "commercial-runtime/test/revenue-intelligence.test.mjs",
+    "revenue_intelligence_admin": "commercial-runtime/test/revenue-admin.test.mjs"
   },
   "promotion_blockers": [
     "Cloudflare Worker not deployed",
