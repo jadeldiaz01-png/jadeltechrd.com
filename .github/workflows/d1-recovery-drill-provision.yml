@@ -1,0 +1,77 @@
+name: Provision isolated D1 recovery drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type PROVISION_ISOLATED_RECOVERY_DRILL. Creates only the dedicated non-production D1 if absent."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d1-recovery-drill-provision
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    environment: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DRILL_DATABASE_NAME: jadel-commercial-runtime-recovery-drill
+      WRANGLER_VERSION: "4.135.0"
+    steps:
+      - name: Enforce isolated target and authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "PROVISION_ISOLATED_RECOVERY_DRILL"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test "$DRILL_DATABASE_NAME" = "jadel-commercial-runtime-recovery-drill"
+          test "$DRILL_DATABASE_NAME" != "jadel-commercial-runtime"
+          case "$DRILL_DATABASE_NAME" in
+            *-recovery-drill) ;;
+            *) echo "unsafe recovery target" >&2; exit 1 ;;
+          esac
+          echo 'D1_PROVISION_TARGET_ISOLATION=PASS'
+
+      - name: Discover or create dedicated D1
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 list --json > evidence/d1-list-before.json
+
+          count=$(jq --arg name "$DRILL_DATABASE_NAME" '[.[] | select(.name == $name)] | length' evidence/d1-list-before.json)
+          test "$count" -le 1
+          if [ "$count" -eq 0 ]; then
+            npx --yes "wrangler@$WRANGLER_VERSION" d1 create "$DRILL_DATABASE_NAME" \
+              --update-config=false --experimental-auto-create=false | tee evidence/d1-create.txt
+            echo 'D1_RECOVERY_DATABASE_CREATED=yes' | tee -a evidence/summary.txt
+          else
+            echo 'D1_RECOVERY_DATABASE_CREATED=no' | tee -a evidence/summary.txt
+          fi
+
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 list --json > evidence/d1-list-after.json
+          id=$(jq -r --arg name "$DRILL_DATABASE_NAME" '.[] | select(.name == $name) | (.uuid // .id // .database_id // empty)' evidence/d1-list-after.json | head -n1)
+          test -n "$id"
+          printf '%s\n' "D1_RECOVERY_DATABASE_NAME=$DRILL_DATABASE_NAME" "D1_RECOVERY_DATABASE_ID=$id" >> evidence/summary.txt
+
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 info "$DRILL_DATABASE_NAME" --json > evidence/d1-info.json
+          version=$(jq -r '.. | .version? // empty' evidence/d1-info.json | head -n1)
+          test "$version" = "production"
+          echo 'D1_RECOVERY_DATABASE_PROVISIONED=PASS' | tee -a evidence/summary.txt
+
+      - name: Retain provisioning evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: d1-recovery-provision-${{ github.run_id }}
+          path: evidence/
+          retention-days: 30
+          if-no-files-found: error
