@@ -49,18 +49,47 @@ jobs:
           test -n "$token"
           echo "::add-mask::$token"
 
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
+
           verify_tmp=$(mktemp)
-          verify_code=$(curl -sS -o "$verify_tmp" -w '%{http_code}'             -H "Authorization: Bearer $token"             "https://api.cloudflare.com/client/v4/user/tokens/verify" || true)
+          token_family="unknown"
+
+          case "$token" in
+            cfat_*)
+              token_family="account"
+              verify_url="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify"
+              ;;
+            cfut_*)
+              token_family="user"
+              verify_url="https://api.cloudflare.com/client/v4/user/tokens/verify"
+              ;;
+            cfk_*)
+              echo "CLOUDFLARE_D1_TOKEN_VERIFY=FAIL family=global_api_key_not_allowed" >&2
+              exit 6
+              ;;
+            *)
+              token_family="legacy_or_unknown"
+              verify_url="https://api.cloudflare.com/client/v4/user/tokens/verify"
+              ;;
+          esac
+
+          verify_code=$(curl -sS -o "$verify_tmp" -w '%{http_code}' -H "Authorization: Bearer $token" "$verify_url" || true)
+
+          if [ "$verify_code" != "200" ] && [ "$token_family" = "legacy_or_unknown" ]; then
+            verify_url="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify"
+            verify_code=$(curl -sS -o "$verify_tmp" -w '%{http_code}' -H "Authorization: Bearer $token" "$verify_url" || true)
+          fi
 
           if [ "$verify_code" != "200" ] || [ "$(jq -r '.success // false' "$verify_tmp" 2>/dev/null || echo false)" != "true" ]; then
-            echo "CLOUDFLARE_D1_TOKEN_VERIFY=FAIL http=$verify_code" >&2
+            echo "CLOUDFLARE_D1_TOKEN_VERIFY=FAIL family=$token_family http=$verify_code" >&2
             exit 6
           fi
 
           status=$(jq -r '.result.status // empty' "$verify_tmp")
           test "$status" = "active"
           printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
-          echo "CLOUDFLARE_D1_TOKEN_VERIFY=PASS status=active"
+          echo "CLOUDFLARE_D1_TOKEN_VERIFY=PASS family=$token_family status=active"
 
       - name: Verify protected recovery environment and provision target
         id: provision
