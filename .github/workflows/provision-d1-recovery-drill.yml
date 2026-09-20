@@ -27,6 +27,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       D1_RECOVERY_DRILL_ENV_READY: ${{ vars.D1_RECOVERY_DRILL_ENV_READY }}
       TARGET_DATABASE_NAME: jadel-commercial-runtime-recovery-drill
+      WRANGLER_VERSION: "4.135.0"
 
     steps:
       - name: Checkout immutable revision
@@ -126,13 +127,44 @@ jobs:
           echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
 
           list_tmp=$(mktemp)
-          list_code=$(curl -sS -o "$list_tmp" -w '%{http_code}' --get             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             --data-urlencode "name=$TARGET_DATABASE_NAME"             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database" || true)
+          list_code="000"
+          list_ok="false"
 
-          if [ "$list_code" != "200" ] || [ "$(jq -r '.success // false' "$list_tmp" 2>/dev/null || echo false)" != "true" ]; then
-            echo "D1_LIST_AUTHORIZATION=FAIL http=$list_code" >&2
+          for attempt in 1 2 3; do
+            list_code=$(curl -sS -o "$list_tmp" -w '%{http_code}' --get \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Accept: application/json" \
+              --data-urlencode "name=$TARGET_DATABASE_NAME" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database" || true)
+
+            echo "D1_REST_LIST_ATTEMPT=$attempt http=$list_code"
+            if [ "$list_code" = "200" ] && [ "$(jq -r '.success // false' "$list_tmp" 2>/dev/null || echo false)" = "true" ]; then
+              list_ok="true"
+              break
+            fi
+            sleep $(( attempt * 2 ))
+          done
+
+          if [ "$list_ok" != "true" ]; then
+            echo "D1_REST_LIST=FAIL final_http=$list_code" >&2
             jq -r '.errors[]? | "CLOUDFLARE_D1_ERROR code=\(.code) message=\(.message)"' "$list_tmp" >&2 || true
-            echo "Required Cloudflare permission: Account > D1 Read or D1 Write for list; D1 Write for create." >&2
-            exit 7
+
+            wrangler_out=$(mktemp)
+            wrangler_err=$(mktemp)
+            if npx --yes "wrangler@$WRANGLER_VERSION" d1 list --json >"$wrangler_out" 2>"$wrangler_err"; then
+              jq -e 'type=="array"' "$wrangler_out" >/dev/null
+              jq '{success:true,result:.}' "$wrangler_out" > "$list_tmp"
+              list_ok="true"
+              list_code="wrangler"
+              echo "D1_WRANGLER_LIST=PASS version=$WRANGLER_VERSION"
+            else
+              echo "D1_WRANGLER_LIST=FAIL version=$WRANGLER_VERSION" >&2
+              grep -E 'Authentication error|code: 10000|code=10000|unauthorized|permission' "$wrangler_err" | head -n 20 >&2 || true
+              echo "Required Cloudflare permission: Account > D1 Read or D1 Write for list; D1 Write for create." >&2
+              exit 7
+            fi
+          else
+            echo "D1_REST_LIST=PASS"
           fi
 
           cp "$list_tmp" evidence/database-list.json
