@@ -37,16 +37,17 @@ In Google Cloud:
 In GA4 Property **555066228**:
 1. Admin -> Product links -> BigQuery links -> Link.
 2. Select that GCP project.
-3. Choose the dataset location deliberately; do not guess it in repository code.
+3. Choose the dataset location deliberately. For this deployment, use **US** unless you have a specific residency or organization-policy requirement for another location.
 4. Include Web Stream **15812262707**.
 5. Enable **Daily** export.
 6. Leave **Streaming** off.
 7. Submit.
 
 After Google creates the link, verify:
-- service account `firebase-measurement@system.gserviceaccount.com` exists in the project;
-- project role is `roles/bigquery.user`;
-- the export dataset grants `bigquery.dataOwner` to that service account;
+- the BigQuery link details show the **built-in resource identity** created for the link;
+- that identity has `roles/bigquery.user` at project level;
+- the export dataset grants `bigquery.dataOwner` to that identity;
+- if Google shows `firebase-measurement@system.gserviceaccount.com`, treat it as a legacy-link identity rather than the expected identity for a new link;
 - dataset `analytics_555066228` exists;
 - the first `events_YYYYMMDD` table appears.
 
