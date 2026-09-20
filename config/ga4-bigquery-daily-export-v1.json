@@ -19,9 +19,12 @@
     "streaming_export": false,
     "fresh_daily_export": false,
     "sandbox_acceptable_for_initial_validation": true,
-    "service_account_expected": "firebase-measurement@system.gserviceaccount.com",
-    "required_project_role_for_google_service_account": "roles/bigquery.user",
-    "required_dataset_role_for_google_service_account": "roles/bigquery.dataOwner"
+    "dataset_location_recommendation": "US",
+    "identity_model": "BUILT_IN_RESOURCE_IDENTITY_FOR_NEW_LINK",
+    "legacy_service_account": "firebase-measurement@system.gserviceaccount.com",
+    "legacy_service_account_policy": "LEGACY_ONLY_DO_NOT_REQUIRE_FOR_NEW_LINK",
+    "required_project_role_for_resource_identity": "roles/bigquery.user",
+    "required_dataset_role_for_resource_identity": "roles/bigquery.dataOwner"
   },
   "security": {
     "static_service_account_json_allowed": false,
@@ -40,7 +43,7 @@
     "Daily export enabled",
     "Streaming export disabled",
     "dataset analytics_555066228 observed",
-    "firebase-measurement@system.gserviceaccount.com verified with roles/bigquery.user at project level and bigquery.dataOwner on export dataset",
+    "GA4 BigQuery link built-in resource identity verified with BigQuery User at project level and BigQuery Data Owner on the export dataset; legacy firebase-measurement service account accepted only for an older link",
     "first events_YYYYMMDD table observed before marking export active"
   ],
   "post_link_observability": {
