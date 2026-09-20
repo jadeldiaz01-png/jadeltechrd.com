@@ -1,7 +1,7 @@
 {
   "schema_version": "2026.2",
   "manifest_id": "jadeltechrd-institutional-production-manifest",
-  "generated_at": "2026-09-20T04:05:30Z",
+  "generated_at": "2026-09-20T04:12:30Z",
   "owner": "Jadel Tech RD",
   "repository": "jadeldiaz01-png/jadeltechrd.com",
   "baseline_sha": "cf190d28282958ff4f04f74e0325109df5c7b62e",
@@ -246,6 +246,39 @@
           "Stage B evidence attestation verified",
           "persistent ALLOW_D1_RECOVERY_DRILL remained false before and after",
           "production_database_touched=false"
+        ]
+      },
+      {
+        "control_id": "SLO_ALERT_DELIVERY",
+        "status": "PASS",
+        "source": "GitHub Actions + GitHub Issues + Sigstore",
+        "observed_at": "2026-09-20T04:08:00Z",
+        "subject_sha_or_runtime_revision": "runtime:github-issues-alert-path@1ab892c4812c346958321cb5d0f9c79b22b3c514",
+        "evidence_locator": "actions/run/35488352208 job/106018729600 artifact/10598088523",
+        "facts": [
+          "controlled test explicitly declared no outage",
+          "GitHub Issue create PASS",
+          "Issue read-back PASS",
+          "Issue comment PASS",
+          "Issue close/read-back PASS",
+          "alert evidence attestation verified",
+          "artifact digest sha256:0d7ef02832631fc915cf3a30fda8aa766fcf15975a57e273e742a25298206e80"
+        ]
+      },
+      {
+        "control_id": "SLO_30D_CERTIFIER_BOOTSTRAP",
+        "status": "NOT_YET_CERTIFIED",
+        "source": "GitHub Actions + Sigstore",
+        "observed_at": "2026-09-20T04:11:25Z",
+        "subject_sha_or_runtime_revision": "runtime:slo-certifier@00d0ef1cca6fbeb448c13eaa5317a572d6577e4f",
+        "evidence_locator": "actions/run/35488501229 job/106019132700 artifact/10598047338",
+        "facts": [
+          "daily rollups discovered=1",
+          "eligible scheduled slots=0 of 4320",
+          "coverage ratio=0.0",
+          "alert delivery=PASS",
+          "30-day certification attestation verified",
+          "status remains NOT_YET_CERTIFIED because historical measurement time cannot be fabricated"
         ]
       }
     ],
@@ -535,7 +568,15 @@
       "evidence_retention_days": 45,
       "alert_channel": "GitHub Issues",
       "promotion_rule": "A workflow configuration never counts as PASS. PASS requires a complete attested 30-day certification artifact satisfying coverage, availability, p95 latency, error-budget, burn-rate, hard-invariant and alert-delivery checks.",
-      "scheduler_risk_control": "GitHub schedule delay/drop is treated as missing coverage, never as a healthy service sample."
+      "scheduler_risk_control": "GitHub schedule delay/drop is treated as missing coverage, never as a healthy service sample.",
+      "bootstrap_evidence": {
+        "alert_delivery_status": "PASS",
+        "alert_delivery_run_id": 35488352208,
+        "certifier_status": "NOT_YET_CERTIFIED",
+        "certifier_run_id": 35488501229,
+        "certifier_artifact_id": 10598047338,
+        "certifier_artifact_sha256": "265ed350d335c4ff0675d2261989018f4a46246a420134d2979b084461ea7aea"
+      }
     }
   },
   "qa_and_adversarial_evaluation": {
