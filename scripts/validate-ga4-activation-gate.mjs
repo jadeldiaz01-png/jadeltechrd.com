@@ -31,10 +31,16 @@ const activationReady =
   gate.privacy.consent_ui_verified === true;
 
 if (!activationReady) {
-  if (measurement !== null) fail("measurement ID must remain null while gate is blocked");
-  if (!configJs.includes('enabled: false')) fail("GA4 config must remain disabled");
-  if (!configJs.includes('measurementId: ""')) fail("no placeholder Measurement ID allowed");
-  if (funnel.analytics.activation_state !== "MEASUREMENT_ID_REQUIRED") fail("funnel analytics state must remain gated");
+  if (measurement !== null) {
+    if (!/^G-[A-Z0-9]+$/.test(String(measurement))) fail("recorded Measurement ID must be a valid G- id");
+    if (!configJs.includes(`measurementId: "${measurement}"`)) fail("recorded Measurement ID must match ga4-config");
+    if (funnel.analytics.measurement_id !== measurement) fail("funnel Measurement ID mismatch");
+    if (funnel.analytics.activation_state !== "MEASUREMENT_ID_CONFIRMED_PENDING_VALIDATION") fail("funnel state must reflect pending validation");
+  } else {
+    if (!configJs.includes('measurementId: ""')) fail("no placeholder Measurement ID allowed");
+    if (funnel.analytics.activation_state !== "MEASUREMENT_ID_REQUIRED") fail("missing-id funnel state mismatch");
+  }
+  if (!configJs.includes('enabled: false')) fail("GA4 config must remain disabled until activation evidence passes");
   console.log("GA4_ACTIVATION_GATE=PASS_BLOCKED");
   process.exit(0);
 }
