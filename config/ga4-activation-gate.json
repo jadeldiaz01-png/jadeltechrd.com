@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "name": "GA4 Activation Gate",
-  "state": "TRANSPORT_VERIFIED_PENDING_GA_UI",
+  "state": "ACTIVE",
   "effective_date": "2026-09-20",
   "site": {
     "url": "https://jadeltechrd.com/",
@@ -20,7 +20,7 @@
     "measurement_id_source": "User-provided GA4 installation instructions screenshot, 2026-09-20",
     "editor_access_confirmed": false,
     "realtime_verified": true,
-    "debugview_verified": false,
+    "debugview_verified": true,
     "windsor_read_connection_confirmed": true,
     "stream_id_source": "User-provided GA4 Web Stream Details screenshot, 2026-09-20",
     "property_id_source": "Windsor.ai googleanalytics4 configured property selector, verified live on 2026-09-20",
@@ -36,7 +36,9 @@
     "transport_evidence": "GitHub Actions run 35532073101; clean headless Chrome; consent=granted; tid=G-K60SQ2ZHL9; g/collect HTTP 204",
     "debug_transport_verified": true,
     "realtime_verified_at": "2026-09-20T19:33:04Z",
-    "realtime_evidence": "User-provided GA4 Realtime screenshot showing 1 active user in the last 30 minutes"
+    "realtime_evidence": "User-provided GA4 Realtime screenshot showing 1 active user in the last 30 minutes",
+    "debugview_verified_at": "2026-09-20T20:45:19Z",
+    "debugview_evidence": "User-provided GA4 DebugView screenshot showing page_view, session_start and user_engagement in the debug timeline; non_personalized_ads=1"
   },
   "privacy": {
     "default_analytics_storage": "denied",
@@ -108,7 +110,7 @@
     "offline_conversion_sync_enabled": false
   },
   "validation": {
-    "mode": "transport_verified_pending_ga_ui",
+    "mode": "active",
     "debug_mode": false,
     "started_on": "2026-09-20",
     "production_window_requirement": "complete validation and set debugMode=false before 2026-09-21T00:00:00Z",
