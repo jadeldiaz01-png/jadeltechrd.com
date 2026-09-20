@@ -11,6 +11,7 @@ on:
       - ".github/workflows/commercial-live-smoke.yml"
       - ".github/workflows/pages.yml"
       - ".github/workflows/d1-recovery-drill-readiness.yml"
+      - ".github/workflows/d1-recovery-drill-execute.yml"
       - "docs/PRODUCTION-READINESS-2026.md"
       - "docs/operations/D1-RECOVERY-DRILL-2026.md"
   push:
@@ -23,6 +24,7 @@ on:
       - ".github/workflows/institutional-production-manifest.yml"
       - ".github/workflows/pages.yml"
       - ".github/workflows/d1-recovery-drill-readiness.yml"
+      - ".github/workflows/d1-recovery-drill-execute.yml"
   workflow_dispatch:
 
 permissions:
@@ -107,4 +109,14 @@ jobs:
           grep -Fq 'READ_ONLY_RECOVERY_CHECK' .github/workflows/d1-recovery-drill-readiness.yml
           grep -Fq 'test "$DRILL_DATABASE_NAME" != "jadel-commercial-runtime"' .github/workflows/d1-recovery-drill-readiness.yml
           ! grep -Eq 'd1[[:space:]]+time-travel[[:space:]]+restore' .github/workflows/d1-recovery-drill-readiness.yml
+          grep -Fq 'DESTROY_RECOVERY_DRILL_ONLY' .github/workflows/d1-recovery-drill-execute.yml
+          grep -Fq 'environment:' .github/workflows/d1-recovery-drill-execute.yml
+          grep -Fq 'name: d1-recovery-drill' .github/workflows/d1-recovery-drill-execute.yml
+          grep -Fq 'ALLOW_D1_RECOVERY_DRILL' .github/workflows/d1-recovery-drill-execute.yml
+          grep -Fq '*-recovery-drill' .github/workflows/d1-recovery-drill-execute.yml
+          grep -Fq 'jadel-commercial-runtime' .github/workflows/d1-recovery-drill-execute.yml
+          grep -Fq '/time_travel/restore?bookmark=' .github/workflows/d1-recovery-drill-execute.yml
+          grep -Fq 'previous_bookmark' .github/workflows/d1-recovery-drill-execute.yml
+          grep -Fq 'RESTORE_ROLLBACK_DRILL=PASS' .github/workflows/d1-recovery-drill-execute.yml
+          grep -Fq 'gh attestation verify' .github/workflows/d1-recovery-drill-execute.yml
           echo 'PROMOTION_RECOVERY_FAIL_CLOSED=PASS'
