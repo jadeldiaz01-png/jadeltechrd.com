@@ -109,7 +109,8 @@ jobs:
 
           if [ "$list_code" != "200" ] || [ "$(jq -r '.success // false' "$list_tmp" 2>/dev/null || echo false)" != "true" ]; then
             echo "D1_LIST_AUTHORIZATION=FAIL http=$list_code" >&2
-            echo "Required Cloudflare permission: Account > D1 Write for the selected account." >&2
+            jq -r '.errors[]? | "CLOUDFLARE_D1_ERROR code=\(.code) message=\(.message)"' "$list_tmp" >&2 || true
+            echo "Required Cloudflare permission: Account > D1 Read or D1 Write for list; D1 Write for create." >&2
             exit 7
           fi
 
