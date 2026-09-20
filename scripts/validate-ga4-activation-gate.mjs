@@ -13,6 +13,13 @@ const fail = (message) => {
 const state = gate.state;
 const measurement = gate.google_analytics.measurement_id;
 const validMeasurement = /^G-[A-Z0-9]+$/.test(String(measurement || ""));
+const propertyId = String(gate.google_analytics.property_id || "");
+const streamId = String(gate.google_analytics.stream_id || "");
+if (!/^\d+$/.test(propertyId)) fail("GA4 property_id must be numeric and verified");
+if (!/^\d+$/.test(streamId)) fail("GA4 stream_id must be numeric and verified");
+if (propertyId === streamId) fail("GA4 property_id and stream_id must be distinct resources");
+if (gate.google_analytics.windsor_property_selector_id !== propertyId) fail("Windsor selector must match verified GA4 property id");
+if (gate.google_analytics.id_hierarchy_verified !== true) fail("GA4 id hierarchy must be verified");
 const enabled = configJs.includes("enabled: true");
 const disabled = configJs.includes("enabled: false");
 const debugOn = configJs.includes("debugMode: true");
