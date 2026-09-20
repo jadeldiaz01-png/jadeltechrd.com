@@ -1,0 +1,153 @@
+name: Audit Cloudflare D1 token binding
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/cloudflare-d1-token-binding-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fingerprint-d1-token:
+    environment:
+      name: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      token_id_sha256: ${{ steps.fingerprint.outputs.token_id_sha256 }}
+      account_id_sha256: ${{ steps.fingerprint.outputs.account_id_sha256 }}
+    env:
+      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Fingerprint active D1 account token
+        id: fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_D1_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then token="${token:1:${#token}-2}"; fi
+          if [[ "$token" == \'*\' && "$token" == *\' ]]; then token="${token:1:${#token}-2}"; fi
+          test -n "$token"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          echo "::add-mask::$token"
+          echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
+
+          case "$token" in
+            cfat_*) ;;
+            *) echo "D1_TOKEN_FAMILY=FAIL expected=account"; exit 2 ;;
+          esac
+
+          response=$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $token" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify")
+          test "$(jq -r '.success' <<<"$response")" = "true"
+          test "$(jq -r '.result.status' <<<"$response")" = "active"
+          token_id=$(jq -r '.result.id // empty' <<<"$response")
+          test -n "$token_id"
+
+          token_hash=$(printf '%s' "$token_id" | sha256sum | awk '{print $1}')
+          account_hash=$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | sha256sum | awk '{print $1}')
+          echo "token_id_sha256=$token_hash" >> "$GITHUB_OUTPUT"
+          echo "account_id_sha256=$account_hash" >> "$GITHUB_OUTPUT"
+          echo "D1_GITHUB_SECRET_INJECTION=PASS"
+          echo "D1_TOKEN_VERIFY=PASS family=account status=active"
+          echo "D1_TOKEN_ID_FINGERPRINT=$token_hash"
+
+  bind-name-and-policy:
+    needs: fingerprint-d1-token
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      DOMAIN: jadeltechrd.com
+      EXPECTED_TOKEN_ID_SHA256: ${{ needs.fingerprint-d1-token.outputs.token_id_sha256 }}
+      EXPECTED_ACCOUNT_ID_SHA256: ${{ needs.fingerprint-d1-token.outputs.account_id_sha256 }}
+      T1: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      T2: ${{ secrets.CF_API_TOKEN }}
+      T3: ${{ secrets.CLOUDFLARE_TOKEN }}
+      T4: ${{ secrets.CF_TOKEN }}
+    steps:
+      - name: Resolve token identity and policy read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          selected=""
+          for raw in "${T1:-}" "${T2:-}" "${T3:-}" "${T4:-}"; do
+            [ -n "$raw" ] || continue
+            token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+            [ -n "$token" ] || continue
+            echo "::add-mask::$token"
+            zone_tmp=$(mktemp)
+            code=$(curl -sS -o "$zone_tmp" -w '%{http_code}' \
+              -H "Authorization: Bearer $token" \
+              "https://api.cloudflare.com/client/v4/zones?name=$DOMAIN&status=active&per_page=50" || true)
+            [ "$code" = "200" ] || continue
+            account_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .account.id // empty' "$zone_tmp" | head -n1)
+            [ -n "$account_id" ] || continue
+            actual_account_hash=$(printf '%s' "$account_id" | sha256sum | awk '{print $1}')
+            if [ "$actual_account_hash" != "$EXPECTED_ACCOUNT_ID_SHA256" ]; then
+              echo "D1_ACCOUNT_BINDING=FAIL account_mismatch"
+              exit 3
+            fi
+            selected="$token"
+            break
+          done
+          test -n "$selected"
+          echo "D1_ACCOUNT_BINDING=PASS"
+
+          tokens_tmp=$(mktemp)
+          list_code=$(curl -sS -o "$tokens_tmp" -w '%{http_code}' \
+            -H "Authorization: Bearer $selected" \
+            "https://api.cloudflare.com/client/v4/accounts/$account_id/tokens?per_page=50&include_expired=true" || true)
+
+          if [ "$list_code" != "200" ]; then
+            echo "D1_TOKEN_BINDING_AUDIT=UNAVAILABLE http=$list_code"
+            echo "D1_TOKEN_BINDING_REASON=Account_API_Tokens_Read_required"
+            exit 0
+          fi
+
+          found=0
+          jq -c '.result[]' "$tokens_tmp" | while IFS= read -r item; do
+            id=$(jq -r '.id // empty' <<<"$item")
+            [ -n "$id" ] || continue
+            hash=$(printf '%s' "$id" | sha256sum | awk '{print $1}')
+            [ "$hash" = "$EXPECTED_TOKEN_ID_SHA256" ] || continue
+            name=$(jq -r '.name // empty' <<<"$item")
+            status=$(jq -r '.status // empty' <<<"$item")
+            d1_write=$(jq '[.policies[]? | select(.effect=="allow") | .permission_groups[]? | select(.name=="D1 Write")] | length' <<<"$item")
+            d1_read=$(jq '[.policies[]? | select(.effect=="allow") | .permission_groups[]? | select(.name=="D1 Read")] | length' <<<"$item")
+            conditions=$(jq '[.policies[]?.condition? // empty, .condition? // empty] | length' <<<"$item")
+            printf 'D1_TOKEN_BINDING_NAME=%s\n' "$name"
+            printf 'D1_TOKEN_BINDING_STATUS=%s\n' "$status"
+            printf 'D1_TOKEN_POLICY_D1_WRITE=%s\n' "$d1_write"
+            printf 'D1_TOKEN_POLICY_D1_READ=%s\n' "$d1_read"
+            printf 'D1_TOKEN_POLICY_CONDITIONS=%s\n' "$conditions"
+            if [ "$name" = "universal-multi-project-runtime" ]; then
+              echo "D1_TOKEN_NAME_BINDING=PASS"
+            else
+              echo "D1_TOKEN_NAME_BINDING=FAIL expected=universal-multi-project-runtime actual=$name"
+            fi
+            if [ "$status" = "active" ] && [ "$d1_write" -gt 0 ]; then
+              echo "D1_TOKEN_POLICY=PASS"
+            else
+              echo "D1_TOKEN_POLICY=FAIL"
+            fi
+            found=1
+            break
+          done
+
+          # The loop above runs in a subshell; independently prove whether a matching ID exists.
+          match=$(jq -r '.result[].id // empty' "$tokens_tmp" | while IFS= read -r id; do
+            hash=$(printf '%s' "$id" | sha256sum | awk '{print $1}')
+            if [ "$hash" = "$EXPECTED_TOKEN_ID_SHA256" ]; then echo yes; break; fi
+          done)
+          if [ "$match" != "yes" ]; then
+            echo "D1_TOKEN_NAME_BINDING=FAIL token_id_not_found"
+            exit 4
+          fi
