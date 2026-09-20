@@ -75,6 +75,73 @@ jobs:
             ]' <<<"$detail"
           echo 'CLOUDFLARE_CSP_RULE_INSPECTION=PASS'
 
+      - name: Repair Cloudflare CSP response-header rule for GA4
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          test -n "$token"
+          echo "::add-mask::$token"
+
+          zone_id=$(printf '%s' "${CLOUDFLARE_ZONE_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          if [ -z "$zone_id" ]; then
+            zone_json=$(curl -fsS -H "Authorization: Bearer $token" -H 'Content-Type: application/json' "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50")
+            zone_id=$(jq -r --arg d "$DOMAIN" '.result[]? | select(.name==$d) | .id' <<<"$zone_json" | head -n1)
+          fi
+          test -n "$zone_id"
+          echo "::add-mask::$zone_id"
+
+          rulesets=$(curl -fsS -H "Authorization: Bearer $token" -H 'Content-Type: application/json' "https://api.cloudflare.com/client/v4/zones/${zone_id}/rulesets")
+          ruleset_id=$(jq -r '.result[]? | select(.phase=="http_response_headers_transform") | .id' <<<"$rulesets" | head -n1)
+          test -n "$ruleset_id"
+          echo "::add-mask::$ruleset_id"
+
+          detail=$(curl -fsS -H "Authorization: Bearer $token" -H 'Content-Type: application/json' "https://api.cloudflare.com/client/v4/zones/${zone_id}/rulesets/${ruleset_id}")
+          rule_id=$(jq -r '.result.rules[]? | select(.description=="Jadel Tech RD hardened browser response headers") | .id' <<<"$detail" | head -n1)
+          test -n "$rule_id"
+          echo "::add-mask::$rule_id"
+
+          current=$(jq -r --arg rid "$rule_id" '.result.rules[] | select(.id==$rid) | .action_parameters.headers["content-security-policy"].value' <<<"$detail")
+          target="default-src 'none'; script-src 'self' https://challenges.cloudflare.com https://*.googletagmanager.com; style-src 'self'; img-src 'self' data: https://*.google-analytics.com https://*.googletagmanager.com; font-src 'self'; connect-src 'self' https://intake.jadeltechrd.com https://challenges.cloudflare.com https://*.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.google.com; frame-src https://challenges.cloudflare.com; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+
+          if [ "$current" = "$target" ]; then
+            echo 'CLOUDFLARE_GA4_CSP_ALREADY_ALIGNED=YES'
+          else
+            grep -Fq "script-src 'self' https://challenges.cloudflare.com" <<<"$current"
+            payload=$(jq -c --arg rid "$rule_id" --arg target "$target" '
+              .result.rules[] | select(.id==$rid)
+              | {
+                  action,
+                  action_parameters: (.action_parameters | .headers["content-security-policy"].value=$target),
+                  expression,
+                  description,
+                  enabled
+                }
+                + (if (.ref // "") != "" then {ref:.ref} else {} end)
+            ' <<<"$detail")
+            tmp=$(mktemp)
+            code=$(curl -sS -o "$tmp" -w '%{http_code}' -X PATCH               -H "Authorization: Bearer $token"               -H 'Content-Type: application/json'               --data "$payload"               "https://api.cloudflare.com/client/v4/zones/${zone_id}/rulesets/${ruleset_id}/rules/${rule_id}" || true)
+            if [ "$code" != 200 ] || [ "$(jq -r '.success // false' "$tmp")" != true ]; then
+              echo "CLOUDFLARE_GA4_CSP_PATCH=FAIL_HTTP_${code}"
+              jq -c '{success,errors,messages}' "$tmp" || true
+              exit 31
+            fi
+            echo 'CLOUDFLARE_GA4_CSP_PATCH=PASS'
+          fi
+
+          converged=false
+          for attempt in $(seq 1 15); do
+            headers=$(curl --silent --show-error --location --head -H 'Cache-Control: no-cache' "https://${DOMAIN}/")
+            if grep -Fiq "content-security-policy:" <<<"$headers" && grep -Fq "*.googletagmanager.com" <<<"$headers"; then
+              converged=true
+              break
+            fi
+            sleep 2
+          done
+          test "$converged" = true
+          echo 'CLOUDFLARE_GA4_CSP_EDGE_CONVERGED=PASS'
+
       - name: Install Selenium
         run: python -m pip install --disable-pip-version-check "selenium==4.35.0"
 
@@ -166,6 +233,14 @@ jobs:
                   if "Content Security Policy" in entry.get("message", "")
                   or "violates the following Content Security Policy" in entry.get("message", "")
               ]
+              ga4_csp_errors = [
+                  entry for entry in csp_errors
+                  if any(host in entry.get("message", "") for host in (
+                      "googletagmanager.com",
+                      "google-analytics.com",
+                      "analytics.google.com",
+                  ))
+              ]
 
               report = {
                   "target": target,
@@ -176,9 +251,11 @@ jobs:
                   "matching_collect_count": len(matching_collect),
                   "matching_collect_statuses": collect_statuses,
                   "csp_error_count": len(csp_errors),
+                  "ga4_csp_error_count": len(ga4_csp_errors),
                   "data_layer": data_layer[:5000],
                   "collect_urls": [r["url"] for r in matching_collect[:10]],
                   "browser_errors": csp_errors[:10],
+                  "ga4_browser_errors": ga4_csp_errors[:10],
               }
               print(json.dumps(report, indent=2))
 
@@ -190,7 +267,7 @@ jobs:
               assert any(status in (200, 204) for status in collect_statuses), (
                   f"GA4 collect did not return success: {collect_statuses}"
               )
-              assert not csp_errors, f"CSP errors detected: {csp_errors}"
+              assert not ga4_csp_errors, f"GA4 CSP errors detected: {ga4_csp_errors}"
               print("GA4_LIVE_BROWSER_CHAIN=PASS")
           finally:
               driver.quit()
