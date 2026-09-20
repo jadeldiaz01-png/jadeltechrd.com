@@ -1,0 +1,96 @@
+name: Site SLO daily rollup
+
+on:
+  schedule:
+    - cron: "13 1 * * *"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/site-slo-daily-rollup.yml"
+      - "scripts/build-site-slo-daily-rollup.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: site-slo-daily-rollup
+  cancel-in-progress: false
+
+jobs:
+  rollup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Resolve complete UTC day
+        id: day
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=$(date -u -d "yesterday" +%F)
+          echo "target_date=$target" >> "$GITHUB_OUTPUT"
+          echo "SLO_DAILY_TARGET_DATE=$target"
+
+      - name: Collect scheduled raw probe artifacts
+        shell: bash
+        env:
+          TARGET_DATE: ${{ steps.day.outputs.target_date }}
+        run: |
+          set -euo pipefail
+          mkdir -p slo-probes
+          start="${TARGET_DATE}T00:00:00Z"
+          end="${TARGET_DATE}T23:59:59Z"
+
+          gh api --paginate -X GET \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/site-slo-evidence.yml/runs" \
+            -f per_page=100 \
+            -f event=schedule \
+            -f created="$start..$end" \
+            --jq '.workflow_runs[].id' > /tmp/slo-run-ids.txt
+
+          sort -u /tmp/slo-run-ids.txt -o /tmp/slo-run-ids.txt
+          count=$(grep -c . /tmp/slo-run-ids.txt || true)
+          echo "SLO_DAILY_DISCOVERED_RUNS=$count"
+
+          while IFS= read -r run_id; do
+            [ -n "$run_id" ] || continue
+            artifact_id=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts?per_page=100" \
+              --jq '.artifacts[] | select(.expired == false) | select(.name | startswith("site-slo-evidence-")) | .id' | head -n1)
+            [ -n "$artifact_id" ] || continue
+            zip="/tmp/slo-artifact-${artifact_id}.zip"
+            gh api -X GET "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > "$zip"
+            mkdir -p "slo-probes/$run_id"
+            unzip -q -o "$zip" -d "slo-probes/$run_id"
+          done < /tmp/slo-run-ids.txt
+
+      - name: Build deterministic daily rollup
+        env:
+          SLO_PROBE_DIR: slo-probes
+          SLO_TARGET_DATE: ${{ steps.day.outputs.target_date }}
+          SLO_OUTPUT: evidence/slo-daily-summary.json
+        run: node scripts/build-site-slo-daily-rollup.mjs
+
+      - name: Validate daily rollup schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '.schema_version == "1.0" and .control_id == "SITE_SLO_DAILY_ROLLUP" and (.scheduled_sample_count >= 0) and (.expected_slots == 144)' evidence/slo-daily-summary.json >/dev/null
+          echo "SLO_DAILY_ROLLUP_SCHEMA=PASS"
+
+      - name: Retain daily SLO rollup
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: site-slo-daily-${{ steps.day.outputs.target_date }}-${{ github.run_id }}
+          path: evidence/slo-daily-summary.json
+          retention-days: 45
+          if-no-files-found: error

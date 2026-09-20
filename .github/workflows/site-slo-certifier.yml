@@ -1,0 +1,194 @@
+name: Site SLO 30-day certifier
+
+on:
+  schedule:
+    - cron: "13 2 * * *"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/site-slo-certifier.yml"
+      - "scripts/certify-site-slo.mjs"
+      - "config/slo-policy.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  attestations: write
+  id-token: write
+
+concurrency:
+  group: site-slo-30d-certifier
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Resolve certification window
+        id: window
+        shell: bash
+        run: |
+          set -euo pipefail
+          end_date=$(date -u -d "yesterday" +%F)
+          query_start=$(date -u -d "$end_date - 40 days" +%F)
+          query_end="${end_date}T23:59:59Z"
+          echo "end_date=$end_date" >> "$GITHUB_OUTPUT"
+          echo "query_start=$query_start" >> "$GITHUB_OUTPUT"
+          echo "query_end=$query_end" >> "$GITHUB_OUTPUT"
+          echo "SLO_CERT_WINDOW_END=$end_date"
+
+      - name: Collect daily SLO rollups
+        env:
+          QUERY_START: ${{ steps.window.outputs.query_start }}
+          QUERY_END: ${{ steps.window.outputs.query_end }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p slo-daily
+          gh api --paginate -X GET \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/site-slo-daily-rollup.yml/runs" \
+            -f per_page=100 \
+            -f status=success \
+            -f created="${QUERY_START}T00:00:00Z..${QUERY_END}" \
+            --jq '.workflow_runs[].id' > /tmp/daily-run-ids.txt
+          sort -u /tmp/daily-run-ids.txt -o /tmp/daily-run-ids.txt
+
+          while IFS= read -r run_id; do
+            [ -n "$run_id" ] || continue
+            artifact_ids=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts?per_page=100" \
+              --jq '.artifacts[] | select(.expired == false) | select(.name | startswith("site-slo-daily-")) | .id')
+            for artifact_id in $artifact_ids; do
+              zip="/tmp/daily-${artifact_id}.zip"
+              gh api -X GET "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > "$zip"
+              mkdir -p "slo-daily/$run_id/$artifact_id"
+              unzip -q -o "$zip" -d "slo-daily/$run_id/$artifact_id"
+            done
+          done < /tmp/daily-run-ids.txt
+
+          count=$(find slo-daily -name slo-daily-summary.json -type f | wc -l)
+          echo "SLO_CERT_DAILY_ROLLUPS_FOUND=$count"
+
+      - name: Collect recent alert-delivery evidence
+        env:
+          QUERY_START: ${{ steps.window.outputs.query_start }}
+          QUERY_END: ${{ steps.window.outputs.query_end }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p slo-alert
+          gh api --paginate -X GET \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/slo-alert-path-test.yml/runs" \
+            -f per_page=100 \
+            -f status=success \
+            -f created="${QUERY_START}T00:00:00Z..${QUERY_END}" \
+            --jq '.workflow_runs[].id' > /tmp/alert-run-ids.txt
+          sort -u /tmp/alert-run-ids.txt -o /tmp/alert-run-ids.txt
+
+          while IFS= read -r run_id; do
+            [ -n "$run_id" ] || continue
+            artifact_id=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts?per_page=100" \
+              --jq '.artifacts[] | select(.expired == false) | select(.name | startswith("slo-alert-path-evidence-")) | .id' | head -n1)
+            [ -n "$artifact_id" ] || continue
+            zip="/tmp/alert-${artifact_id}.zip"
+            gh api -X GET "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > "$zip"
+            mkdir -p "slo-alert/$run_id"
+            unzip -q -o "$zip" -d "slo-alert/$run_id"
+          done < /tmp/alert-run-ids.txt
+
+      - name: Certify 30-day SLO and error budget
+        id: certify
+        env:
+          SLO_DAILY_DIR: slo-daily
+          SLO_ALERT_DIR: slo-alert
+          SLO_POLICY: config/slo-policy.json
+          SLO_OUTPUT: evidence/slo-30d-certification.json
+          SLO_WINDOW_END_DATE: ${{ steps.window.outputs.end_date }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/certify-site-slo.mjs
+          status=$(jq -r '.status' evidence/slo-30d-certification.json)
+          burn=$(jq -r '.burn_rate.alert_active' evidence/slo-30d-certification.json)
+          ready=$(jq -r '.certification_ready' evidence/slo-30d-certification.json)
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "burn_alert_active=$burn" >> "$GITHUB_OUTPUT"
+          echo "certification_ready=$ready" >> "$GITHUB_OUTPUT"
+
+      - name: Notify active error-budget burn
+        if: ${{ steps.certify.outputs.burn_alert_active == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="[SLO] Error-budget burn-rate alert"
+          body=$(printf "Automated multi-window burn-rate alert.\n\n- workflow run: %s\n- source SHA: %s\n- evidence: slo-30d-certification.json\n" "$GITHUB_RUN_ID" "$GITHUB_SHA")
+          issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+          if [ -z "$issue" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          else
+            gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body "$body"
+          fi
+          echo "SLO_BURN_RATE_ALERT_ISSUE=PASS"
+
+      - name: Notify certification readiness
+        if: ${{ steps.certify.outputs.certification_ready == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="[SLO] 30-day certification ready"
+          body=$(printf "The deterministic SLO certifier reports PASS. Human promotion review is still required.\n\n- workflow run: %s\n- source SHA: %s\n" "$GITHUB_RUN_ID" "$GITHUB_SHA")
+          issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+          if [ -z "$issue" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          else
+            gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body "$body"
+          fi
+          echo "SLO_CERTIFICATION_READY_ISSUE=PASS"
+
+      - name: Attest 30-day certification evidence
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: evidence/slo-30d-certification.json
+
+      - name: Verify certification attestation
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle='${{ steps.attest.outputs.bundle-path }}'
+          test -s "$bundle"
+          gh attestation verify evidence/slo-30d-certification.json \
+            -R "$GITHUB_REPOSITORY" \
+            --bundle "$bundle" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/site-slo-certifier.yml" \
+            --source-digest "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF" \
+            --format json > evidence/attestation-verification.json
+          jq -e 'length > 0' evidence/attestation-verification.json >/dev/null
+          echo "SLO_30D_ATTESTATION_VERIFY=PASS"
+
+      - name: Retain certification evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: site-slo-30d-certification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          retention-days: 45
+          if-no-files-found: error
+
+      - name: Mark active burn as operational failure
+        if: ${{ steps.certify.outputs.burn_alert_active == 'true' }}
+        shell: bash
+        run: |
+          echo "SLO_ACTIVE_BURN_RATE=FAIL" >&2
+          exit 1

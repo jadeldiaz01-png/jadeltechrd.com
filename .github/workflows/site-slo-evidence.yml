@@ -2,30 +2,34 @@ name: Site SLO evidence
 
 on:
   schedule:
-    - cron: "17 * * * *"
+    - cron: "7,17,27,37,47,57 * * * *"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/site-slo-evidence.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
   issues: write
 
 concurrency:
-  group: site-slo-evidence
+  group: site-slo-evidence-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   synthetic-slo:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 6
     env:
       SITE: https://jadeltechrd.com/
       INTAKE: https://intake.jadeltechrd.com/health
       SITE_LATENCY_OBJECTIVE_MS: "1500"
       INTAKE_LATENCY_OBJECTIVE_MS: "1500"
+      PROBE_INTERVAL_SECONDS: "600"
 
     steps:
-      - name: Probe public site and intake
+      - name: Probe first-attempt public SLI
         id: probe
         shell: bash
         run: |
@@ -38,11 +42,12 @@ jobs:
             local body="/tmp/${name}.body"
             local metrics="/tmp/${name}.metrics"
             local rc=0
+            : > "$body"
+            : > "$metrics"
 
             curl --silent --show-error --location \
               --connect-timeout 10 --max-time 30 \
-              --retry 2 --retry-delay 1 --retry-connrefused \
-              --write-out '%{http_code} %{time_total} %{remote_ip}\\n' \
+              --write-out '%{http_code} %{time_total} %{remote_ip}\n' \
               --output "$body" "$url" > "$metrics" || rc=$?
 
             read -r code seconds remote_ip < "$metrics" || true
@@ -51,9 +56,30 @@ jobs:
             remote_ip="${remote_ip:-unknown}"
             ms=$(python - "$seconds" <<'PY'
           import sys
-          print(round(float(sys.argv[1]) * 1000))
+          try:
+              print(round(float(sys.argv[1]) * 1000))
+          except Exception:
+              print(99000)
           PY
             )
+
+            transport_ok=false
+            [ "$rc" -eq 0 ] && transport_ok=true
+            semantic_ok=false
+            if [ "$name" = "public-site" ]; then
+              if [ "$code" = "200" ] && grep -Fq "Jadel Tech RD" "$body"; then
+                semantic_ok=true
+              fi
+            elif [ "$name" = "commercial-intake" ]; then
+              if [ "$code" = "200" ] && jq -e '.status == "ok" and .write_mode == "fail-closed"' "$body" >/dev/null 2>&1; then
+                semantic_ok=true
+              fi
+            fi
+
+            good=false
+            if [ "$transport_ok" = "true" ] && [ "$code" = "200" ] && [ "$semantic_ok" = "true" ]; then
+              good=true
+            fi
 
             jq -n \
               --arg probe "$name" \
@@ -62,49 +88,44 @@ jobs:
               --arg remote_ip "$remote_ip" \
               --argjson curl_exit "$rc" \
               --argjson latency_ms "$ms" \
-              '{probe:$probe,url:$url,http_code:$http_code,curl_exit:$curl_exit,latency_ms:$latency_ms,remote_ip:$remote_ip}' \
+              --argjson transport_ok "$transport_ok" \
+              --argjson semantic_ok "$semantic_ok" \
+              --argjson good "$good" \
+              '{probe:$probe,url:$url,http_code:$http_code,curl_exit:$curl_exit,latency_ms:$latency_ms,transport_ok:$transport_ok,semantic_ok:$semantic_ok,good:$good}' \
               > "evidence/${name}.json"
           }
 
           probe public-site "$SITE"
           probe commercial-intake "$INTAKE"
 
-          site_code=$(jq -r '.http_code' evidence/public-site.json)
-          intake_code=$(jq -r '.http_code' evidence/commercial-intake.json)
+          site_good=$(jq -r '.good' evidence/public-site.json)
+          intake_good=$(jq -r '.good' evidence/commercial-intake.json)
           site_ms=$(jq -r '.latency_ms' evidence/public-site.json)
           intake_ms=$(jq -r '.latency_ms' evidence/commercial-intake.json)
-
-          test "$site_code" = "200"
-          test "$intake_code" = "200"
-          jq -e '.status == "ok" and .write_mode == "fail-closed"' /tmp/commercial-intake.body >/dev/null
-          grep -Fq 'Jadel Tech RD' /tmp/public-site.body
+          observed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
           jq -n \
             --arg source_sha "$GITHUB_SHA" \
             --arg run_id "$GITHUB_RUN_ID" \
-            --arg observed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg observed_at "$observed_at" \
+            --arg event_name "$GITHUB_EVENT_NAME" \
+            --arg measurement_model "first_attempt_no_retry" \
+            --arg otel_metric "http.client.request.duration" \
+            --argjson probe_interval_seconds "$PROBE_INTERVAL_SECONDS" \
             --slurpfile site evidence/public-site.json \
             --slurpfile intake evidence/commercial-intake.json \
             --argjson site_latency_objective_ms "$SITE_LATENCY_OBJECTIVE_MS" \
             --argjson intake_latency_objective_ms "$INTAKE_LATENCY_OBJECTIVE_MS" \
-            '{schema_version:"1.0",source_sha:$source_sha,workflow_run_id:$run_id,observed_at:$observed_at,probes:{public_site:$site[0],commercial_intake:$intake[0]},objectives:{public_site_latency_ms:$site_latency_objective_ms,commercial_intake_latency_ms:$intake_latency_objective_ms}}' > evidence/slo-probe.json
+            '{schema_version:"2.0",source_sha:$source_sha,workflow_run_id:$run_id,workflow_run_attempt:$run_attempt,observed_at:$observed_at,event_name:$event_name,measurement_model:$measurement_model,probe_interval_seconds:$probe_interval_seconds,otel_semantic_metric:$otel_metric,probes:{public_site:$site[0],commercial_intake:$intake[0]},objectives:{public_site_latency_ms:$site_latency_objective_ms,commercial_intake_latency_ms:$intake_latency_objective_ms}}' > evidence/slo-probe.json
 
-          echo "SLO_SITE_HTTP=PASS latency_ms=$site_ms"
-          echo "SLO_INTAKE_HTTP=PASS latency_ms=$intake_ms"
+          echo "site_good=$site_good" >> "$GITHUB_OUTPUT"
+          echo "intake_good=$intake_good" >> "$GITHUB_OUTPUT"
+          echo "SLO_SITE_SAMPLE good=$site_good latency_ms=$site_ms"
+          echo "SLO_INTAKE_SAMPLE good=$intake_good latency_ms=$intake_ms"
+          echo "SLO_FIRST_ATTEMPT_NO_RETRY=PASS"
 
-          if [ "$site_ms" -gt "$SITE_LATENCY_OBJECTIVE_MS" ]; then
-            echo "SLO_SITE_LATENCY=FAIL latency_ms=$site_ms" >&2
-            exit 1
-          fi
-          if [ "$intake_ms" -gt "$INTAKE_LATENCY_OBJECTIVE_MS" ]; then
-            echo "SLO_INTAKE_LATENCY=FAIL latency_ms=$intake_ms" >&2
-            exit 1
-          fi
-
-          echo "SLO_SITE_LATENCY=PASS"
-          echo "SLO_INTAKE_LATENCY=PASS"
-
-      - name: Retain SLO probe evidence
+      - name: Retain raw SLO probe evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -112,6 +133,13 @@ jobs:
           path: evidence/
           retention-days: 35
           if-no-files-found: error
+
+      - name: Fail on availability or semantic SLI failure
+        if: ${{ steps.probe.outputs.site_good != 'true' || steps.probe.outputs.intake_good != 'true' }}
+        shell: bash
+        run: |
+          echo "SLO_SYNTHETIC_AVAILABILITY_OR_SEMANTIC_FAILURE=YES" >&2
+          exit 1
 
       - name: Alert on failed probe
         if: failure()
@@ -122,17 +150,7 @@ jobs:
           set -euo pipefail
           title="[SLO] Public site / intake synthetic alert"
           marker="<!-- jadel-slo-alert -->"
-          body=$(cat <<EOF
-          $marker
-          Automated SLO alert from workflow run $GITHUB_RUN_ID.
-
-          - revision: `$GITHUB_SHA`
-          - event: `$GITHUB_EVENT_NAME`
-          - evidence: Actions run `$GITHUB_RUN_ID`
-
-          This issue is an operational signal, not a production-readiness claim.
-          EOF
-          )
+          body=$(printf "%s\nAutomated first-attempt SLO failure from workflow run %s.\n\n- revision: %s\n- event: %s\n- measurement: first_attempt_no_retry\n- evidence: Actions run %s\n\nThis issue is an operational signal, not a production-readiness claim.\n" "$marker" "$GITHUB_RUN_ID" "$GITHUB_SHA" "$GITHUB_EVENT_NAME" "$GITHUB_RUN_ID")
 
           issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
             --search "$title in:title" --json number --jq '.[0].number // empty')
