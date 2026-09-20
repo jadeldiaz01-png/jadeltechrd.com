@@ -1,10 +1,10 @@
 {
   "schema_version": "2026.2",
   "manifest_id": "jadeltechrd-institutional-production-manifest",
-  "generated_at": "2026-09-19T21:45:00Z",
+  "generated_at": "2026-09-20T01:31:30Z",
   "owner": "Jadel Tech RD",
   "repository": "jadeldiaz01-png/jadeltechrd.com",
-  "baseline_sha": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+  "baseline_sha": "cf190d28282958ff4f04f74e0325109df5c7b62e",
   "decision": {
     "institutional_production_authorized": false,
     "execution_enabled_by_default": false,
@@ -58,7 +58,7 @@
       "OWASP MCP Top 10 and Secure MCP Server Development guidance"
     ],
     "identity_and_tokens": [
-      "NIST IR 8587 token and assertion protection",
+      "NIST IR 8587 final (2026-09-15) token and assertion protection",
       "short-lived workload identity preferred over static cloud credentials",
       "GitHub OIDC immutable subject claims using owner_id and repo_id where supported"
     ],
@@ -147,33 +147,33 @@
     }
   },
   "current_evidence_snapshot": {
-    "subject_sha": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
-    "observed_date": "2026-09-19",
+    "subject_sha": "cf190d28282958ff4f04f74e0325109df5c7b62e",
+    "observed_date": "2026-09-20",
     "evidence": [
       {
         "control_id": "PAGES_DOMAIN_READINESS",
         "status": "PASS",
         "source": "GitHub Actions",
         "observed_at": "2026-09-19T16:04:28Z",
-        "subject_sha_or_runtime_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
+        "subject_sha_or_runtime_revision": "runtime:domain:jadeltechrd.com@cloudflare-edge",
         "evidence_locator": "actions/run/35453781584",
         "facts": [
           "ROOT_PAGES_WORKFLOW_BUILD=PASS",
           "GITHUB_PAGES_DOMAIN_TXT=PASS",
           "CLOUDFLARE_EDGE_DNS=PASS",
-          "PUBLIC_GOVERNED_INTAKE_BUNDLE=PASS",
-          "public immutable app is app.47d72e20c2d9ae6d48ba46cb7b2795c6272928a4.js"
+          "PUBLIC_GOVERNED_INTAKE_BUNDLE=PASS"
         ],
-        "topology_note": "For this Actions plus Cloudflare topology, Pages API cname=null and https_enforced=false are informational signals; public TLS is owned by Cloudflare and domain verification is evidenced by TXT plus live edge checks."
+        "topology_note": "Domain/DNS/TLS ownership is runtime-bound rather than source-SHA-bound. GitHub Actions publishes the origin; Cloudflare remains the public edge authority."
       },
       {
         "control_id": "GOVERNED_INTAKE_LIVE_CONTRACT",
         "status": "PASS",
         "source": "GitHub Actions",
-        "observed_at": "2026-09-19T20:58:14Z",
-        "subject_sha_or_runtime_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
-        "evidence_locator": "actions/run/35468993129",
+        "observed_at": "2026-09-20T01:30:46Z",
+        "subject_sha_or_runtime_revision": "cf190d28282958ff4f04f74e0325109df5c7b62e",
+        "evidence_locator": "actions/run/35481579425 job/106000245198",
         "facts": [
+          "PUBLIC_IMMUTABLE_APP=/app.cf190d28282958ff4f04f74e0325109df5c7b62e.js",
           "PUBLIC_INTAKE_ASSETS=PASS",
           "PUBLIC_SINGLE_OWNER_SOURCE=PASS",
           "API_CORS_TURNSTILE_CONTRACT=PASS",
@@ -183,25 +183,12 @@
         ]
       },
       {
-        "control_id": "COMMERCIAL_SITE_LIVE_SMOKE",
-        "status": "PASS",
-        "source": "GitHub Actions rerun",
-        "observed_at": "2026-09-19T20:50:18Z",
-        "subject_sha_or_runtime_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
-        "evidence_locator": "actions/run/35468609893 job/105971757480",
-        "facts": [
-          "HTTP and TLS verification passed",
-          "legal discovery passed",
-          "rendered Chrome experience passed"
-        ]
-      },
-      {
         "control_id": "LIVE_ADD_AGENT_REGRESSION",
         "status": "PASS",
         "source": "GitHub Actions",
-        "observed_at": "2026-09-15T21:05:35Z",
-        "subject_sha_or_runtime_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
-        "evidence_locator": "actions/run/35023571934",
+        "observed_at": "2026-09-20T01:30:46Z",
+        "subject_sha_or_runtime_revision": "cf190d28282958ff4f04f74e0325109df5c7b62e",
+        "evidence_locator": "actions/run/35481579443 job/106000245218",
         "facts": [
           "LIVE_MAX_8_ADD_CONTROLS=PASS",
           "LIVE_REMAINING_ADD_CONTROLS_DISABLED=PASS",
@@ -214,13 +201,29 @@
         "control_id": "SECURITY_BASELINE",
         "status": "PASS",
         "source": "GitHub Actions",
-        "observed_at": "2026-09-15T21:05:12Z",
-        "subject_sha_or_runtime_revision": "47d72e20c2d9ae6d48ba46cb7b2795c6272928a4",
-        "evidence_locator": "actions/run/35023533970",
+        "observed_at": "2026-09-20T01:30:15Z",
+        "subject_sha_or_runtime_revision": "cf190d28282958ff4f04f74e0325109df5c7b62e",
+        "evidence_locator": "actions/run/35481552955 job/106000177803",
         "facts": [
           "SOURCE_SECURITY=PASS",
           "IMMUTABLE_ACTIONS=PASS",
           "CSP_BROWSER_SMOKE=PASS"
+        ]
+      },
+      {
+        "control_id": "SUPPLY_CHAIN_PROMOTION",
+        "status": "PASS",
+        "source": "GitHub Actions + Sigstore",
+        "observed_at": "2026-09-20T01:30:15Z",
+        "subject_sha_or_runtime_revision": "cf190d28282958ff4f04f74e0325109df5c7b62e",
+        "evidence_locator": "actions/run/35481552952 job/106000178150 artifact/10595394537",
+        "facts": [
+          "CYCLONEDX_SERIAL_VALID=PASS",
+          "DEPLOYMENT_EVIDENCE_BUNDLE=PASS",
+          "CYCLONEDX_1_7_SBOM=PASS",
+          "DEPLOYMENT_PROVENANCE_VERIFY=PASS",
+          "DEPLOYMENT_SBOM_ATTESTATION_VERIFY=PASS",
+          "promotion evidence artifact digest sha256:2dd541430d0df713950af7f6e429b54c729b083ff3dc3f55265b6af7e8a4b073"
         ]
       }
     ],
@@ -240,12 +243,12 @@
         "immutable exact-SHA public bundle current",
         "public TLS and HTTP smoke current",
         "security baseline green",
-        "browser regression green"
+        "browser regression green",
+        "CycloneDX SBOM and signed provenance generated and cryptographically verified before deploy"
       ],
       "remaining_mandatory_evidence": [
-        "supply-chain provenance and attestation verification for promoted deploy artifact",
-        "current restore/rollback exercise evidence",
-        "formal error-budget window and alert delivery evidence"
+        "current restore/rollback exercise evidence on dedicated D1 recovery target",
+        "measured SLO observation window and verified alert-delivery evidence"
       ]
     },
     "commercial_intake": {
@@ -364,7 +367,8 @@
     "token_controls": [
       "audience issuer subject and expiry verification",
       "short TTL",
-      "key rotation",
+      "automated key rotation with validity proportional to system and transaction sensitivity",
+      "secure signing-key storage and secure key use",
       "replay resistance",
       "least privilege",
       "redaction from logs",
@@ -392,7 +396,17 @@
       "alternate_stable": "SPDX 3.0.1",
       "non_normative_tracking": "SPDX 3.1-RC1"
     },
-    "rule": "Attestation generation alone is not a security gate; verification against repository, workflow, subject and policy is mandatory."
+    "rule": "Attestation generation alone is not a security gate; verification against repository, workflow, subject and policy is mandatory.",
+    "observed_public_site_release": {
+      "subject_sha": "cf190d28282958ff4f04f74e0325109df5c7b62e",
+      "workflow_run_id": 35481552952,
+      "evidence_artifact_id": 10595394537,
+      "evidence_artifact_sha256": "2dd541430d0df713950af7f6e429b54c729b083ff3dc3f55265b6af7e8a4b073",
+      "cyclonedx": "1.7",
+      "provenance_verified": true,
+      "sbom_attestation_verified": true,
+      "note": "Signed provenance and pre-deploy verification are real evidence. No SLSA level higher than independently demonstrated controls is claimed."
+    }
   },
   "data_and_knowledge_governance": {
     "classification": [
@@ -418,6 +432,18 @@
     "d1_recovery": {
       "time_travel_capability_required": true,
       "scheduled_restore_drill_required": true,
+      "destructive_restore_target_policy": "dedicated *-recovery-drill database only; production database is forbidden",
+      "read_only_workflow": ".github/workflows/d1-recovery-drill-readiness.yml",
+      "destructive_certification_workflow": ".github/workflows/d1-recovery-drill-execute.yml",
+      "evidence_requirements": [
+        "pre-mutation recovery bookmark",
+        "controlled mutation",
+        "restore response with previous_bookmark undo point",
+        "post-restore data correctness",
+        "measured RTO",
+        "recovery-point age/RPO evidence",
+        "attested evidence bundle"
+      ],
       "longer_term_export_to_object_storage_when_retention_exceeds_native_window": true
     }
   },
@@ -456,6 +482,13 @@
         "content mismatch",
         "policy failure"
       ]
+    },
+    "slo_measurement": {
+      "workflow": ".github/workflows/site-slo-evidence.yml",
+      "cadence": "hourly",
+      "evidence_retention_days": 35,
+      "alert_channel": "GitHub issue on failed synthetic or explicit alert-path test",
+      "maturation_rule": "A configured workflow is not a PASS for the 30-day SLO window; measured history and alert delivery evidence are required."
     }
   },
   "qa_and_adversarial_evaluation": {
