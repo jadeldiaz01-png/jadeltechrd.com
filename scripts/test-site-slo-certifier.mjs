@@ -118,6 +118,30 @@ runCase('error-budget',({dailyDir,start})=>{
   fs.writeFileSync(file,JSON.stringify(d));
 },'NOT_YET_CERTIFIED');
 
+runCase('historical-spike-cleared',({dailyDir,start})=>{
+  const date=dateAdd(start,29);
+  const file=path.join(dailyDir,date,'slo-daily-summary.json');
+  const d=JSON.parse(fs.readFileSync(file,'utf8'));
+  const sample=d.samples[138];
+  sample.public_site.good=false;
+  sample.public_site.transport_ok=false;
+  sample.public_site.semantic_ok=false;
+  sample.public_site.http_code='503';
+  fs.writeFileSync(file,JSON.stringify(d));
+},'PASS');
+
+runCase('active-fast-burn',({dailyDir,start})=>{
+  const date=dateAdd(start,29);
+  const file=path.join(dailyDir,date,'slo-daily-summary.json');
+  const d=JSON.parse(fs.readFileSync(file,'utf8'));
+  const sample=d.samples[143];
+  sample.public_site.good=false;
+  sample.public_site.transport_ok=false;
+  sample.public_site.semantic_ok=false;
+  sample.public_site.http_code='503';
+  fs.writeFileSync(file,JSON.stringify(d));
+},'NOT_YET_CERTIFIED');
+
 runCase('stale-alert',({alertDir})=>{
   const file=path.join(alertDir,'slo-alert-path-evidence.json');
   const a=JSON.parse(fs.readFileSync(file,'utf8'));
