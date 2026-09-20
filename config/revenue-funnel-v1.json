@@ -73,7 +73,7 @@
   ],
   "analytics": {
     "provider": "GA4",
-    "activation_state": "CONTROLLED_VALIDATION_ACTIVE",
+    "activation_state": "TRANSPORT_VERIFIED_PENDING_GA_UI",
     "measurement_id": "G-K60SQ2ZHL9",
     "browser_events": [
       "offer_view",
