@@ -3,6 +3,23 @@ name: Deploy public site to GitHub Pages
 on:
   push:
     branches: [main]
+    paths:
+      - "index.html"
+      - "app.js"
+      - "styles.css"
+      - "solicitar-proyecto.html"
+      - "project-request.css"
+      - "project-request.js"
+      - "agent-readiness.html"
+      - "agent-readiness.js"
+      - "approval-console.html"
+      - "approval-console.js"
+      - "robots.txt"
+      - "sitemap.xml"
+      - ".nojekyll"
+      - "config/agent-readiness-data.js"
+      - "config/agent-production-manifest.json"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -36,11 +53,25 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf _site
-          mkdir -p _site
-          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name _site ! -name evidence ! -name CNAME -exec cp -a {} _site/ \;
+          mkdir -p _site/config
+
+          install -m 0644 index.html _site/index.html
+          install -m 0644 styles.css _site/styles.css
+          install -m 0644 solicitar-proyecto.html _site/solicitar-proyecto.html
+          install -m 0644 project-request.css _site/project-request.css
+          install -m 0644 project-request.js _site/project-request.js
+          install -m 0644 agent-readiness.html _site/agent-readiness.html
+          install -m 0644 agent-readiness.js _site/agent-readiness.js
+          install -m 0644 approval-console.html _site/approval-console.html
+          install -m 0644 approval-console.js _site/approval-console.js
+          install -m 0644 robots.txt _site/robots.txt
+          install -m 0644 sitemap.xml _site/sitemap.xml
+          install -m 0644 .nojekyll _site/.nojekyll
+          install -m 0644 config/agent-readiness-data.js _site/config/agent-readiness-data.js
+          install -m 0644 config/agent-production-manifest.json _site/config/agent-production-manifest.json
 
           immutable_app="app.${GITHUB_SHA}.js"
-          cp app.js "_site/${immutable_app}"
+          install -m 0644 app.js "_site/${immutable_app}"
           IMMUTABLE_APP="$immutable_app" python - <<'PY'
           import os
           from pathlib import Path
@@ -56,6 +87,37 @@ jobs:
 
           grep -Fq "<script src=\"/${immutable_app}\" defer></script>" _site/index.html
           test -s "_site/${immutable_app}"
+
+          expected=$(mktemp)
+          actual=$(mktemp)
+          cat >"$expected" <<EOF
+          .nojekyll
+          agent-readiness.html
+          agent-readiness.js
+          approval-console.html
+          approval-console.js
+          ${immutable_app}
+          config/agent-production-manifest.json
+          config/agent-readiness-data.js
+          index.html
+          project-request.css
+          project-request.js
+          robots.txt
+          sitemap.xml
+          solicitar-proyecto.html
+          styles.css
+          EOF
+          find _site -type f -printf '%P\n' | sort >"$actual"
+          sort -o "$expected" "$expected"
+          diff -u "$expected" "$actual"
+          test ! -e _site/docs
+          test ! -e _site/infra
+          test ! -e _site/ops
+          test ! -e _site/policy
+          test ! -e _site/scripts
+          test ! -e _site/security
+          test ! -e _site/commercial-runtime
+          echo "PUBLIC_ASSET_ALLOWLIST=PASS"
           echo "IMMUTABLE_APP_ASSET=${immutable_app}"
 
       - name: Build deterministic deployment evidence and CycloneDX SBOM

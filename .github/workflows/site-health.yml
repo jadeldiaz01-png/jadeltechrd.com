@@ -104,12 +104,74 @@ jobs:
           curl --fail --silent --show-error --location \
             --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 \
             --output "$home" "https://${DOMAIN}/"
+          app_path=$(grep -oE 'src="/app\.[0-9a-f]{40}\.js"' "$home" | head -n1 | cut -d'"' -f2)
+          test -n "$app_path"
           curl --fail --silent --show-error --location \
             --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 \
-            --output "$app" "https://${DOMAIN}/app.js"
+            --output "$app" "https://${DOMAIN}${app_path}"
           grep -Fq 'Jadel Tech RD' "$home"
           grep -Fq 'data-deletion' "$app"
           rm -f "$home" "$app"
+          echo "PUBLIC_IMMUTABLE_APP=${app_path}"
           echo 'HOME_CONTENT=PASS'
           echo 'DATA_DELETION_IMPLEMENTATION=PASS'
           echo 'PUBLIC_ACCESS_READY=YES'
+
+
+  alert-on-health-failure:
+    permissions:
+      contents: read
+      issues: write
+    needs: verify-public-access
+    if: ${{ always() && needs.verify-public-access.result == 'failure' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Deliver deduplicated SLO alert
+        shell: bash
+        run: |
+          set -euo pipefail
+          title='[SLO] Public site health failure'
+          run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/issues?state=open&per_page=100" \
+            --jq '.[] | select(.title == "[SLO] Public site health failure") | .number' | head -n1 || true)
+          if [ -n "$existing" ]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$existing/comments" \
+              -f body="Repeated health failure. Run: $run_url" >/dev/null
+            number="$existing"
+          else
+            number=$(gh api --method POST "repos/$GITHUB_REPOSITORY/issues" \
+              -f title="$title" \
+              -f body="Automated fail-closed health alert. Investigate DNS, TLS, immutable asset and legal-route checks. Run: $run_url" \
+              --jq '.number')
+          fi
+          test -n "$number"
+          echo "SLO_ALERT_DELIVERY=PASS issue=$number"
+
+  alert-transport-drill:
+    permissions:
+      contents: read
+      issues: write
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Prove alert transport without leaving an open incident
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="[SLO-DRILL] Alert transport ${GITHUB_RUN_ID}"
+          number=$(gh api --method POST "repos/$GITHUB_REPOSITORY/issues" \
+            -f title="$title" \
+            -f body="Synthetic alert-delivery drill for site-health workflow revision $GITHUB_SHA." \
+            --jq '.number')
+          test -n "$number"
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/$number" \
+            -f state=closed -f state_reason=completed >/dev/null
+          state=$(gh api "repos/$GITHUB_REPOSITORY/issues/$number" --jq '.state')
+          test "$state" = closed
+          echo "SLO_ALERT_TRANSPORT_DRILL=PASS issue=$number"

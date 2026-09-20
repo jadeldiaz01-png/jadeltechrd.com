@@ -1,0 +1,200 @@
+name: D1 isolated restore RPO RTO drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type RESTORE_DEDICATED_RECOVERY_DRILL. This performs a destructive restore ONLY on the isolated recovery D1."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: d1-isolated-restore-drill
+  cancel-in-progress: false
+
+jobs:
+  restore-drill:
+    environment: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DRILL_DATABASE_NAME: jadel-commercial-runtime-recovery-drill
+      WRANGLER_VERSION: "4.135.0"
+    steps:
+      - name: Enforce human authorization and non-production identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "RESTORE_DEDICATED_RECOVERY_DRILL"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test "$DRILL_DATABASE_NAME" = "jadel-commercial-runtime-recovery-drill"
+          test "$DRILL_DATABASE_NAME" != "jadel-commercial-runtime"
+          case "$DRILL_DATABASE_NAME" in
+            *-recovery-drill) ;;
+            *) echo "D1 restore target must end in -recovery-drill" >&2; exit 1 ;;
+          esac
+          echo 'D1_RESTORE_HUMAN_GATE=PASS'
+          echo 'D1_RESTORE_TARGET_ISOLATION=PASS'
+
+      - name: Verify exact D1 identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 list --json > evidence/d1-list.json
+          count=$(jq --arg name "$DRILL_DATABASE_NAME" '[.[] | select(.name == $name)] | length' evidence/d1-list.json)
+          test "$count" -eq 1
+          id=$(jq -r --arg name "$DRILL_DATABASE_NAME" '.[] | select(.name == $name) | (.uuid // .id // .database_id // empty)' evidence/d1-list.json | head -n1)
+          test -n "$id"
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 info "$DRILL_DATABASE_NAME" --json > evidence/d1-info.json
+          version=$(jq -r '.. | .version? // empty' evidence/d1-info.json | head -n1)
+          test "$version" = "production"
+          printf '%s\n' "$id" > evidence/drill-database-id.txt
+          echo 'D1_EXACT_RECOVERY_IDENTITY=PASS'
+
+      - name: Seed deterministic baseline and capture recovery point
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker="drill-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          baseline_epoch=$(date +%s)
+          printf '%s\n' "$marker" > evidence/marker-id.txt
+          printf '%s\n' "$baseline_epoch" > evidence/baseline-epoch.txt
+
+          sql="CREATE TABLE IF NOT EXISTS __jadel_recovery_drill (id TEXT PRIMARY KEY, value TEXT NOT NULL, observed_at TEXT NOT NULL); DELETE FROM __jadel_recovery_drill; INSERT INTO __jadel_recovery_drill(id,value,observed_at) VALUES('$marker','BASELINE',datetime('now'));"
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 execute "$DRILL_DATABASE_NAME" --remote --yes --json --command "$sql" > evidence/seed.json
+
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 execute "$DRILL_DATABASE_NAME" --remote --yes --json \
+            --command "SELECT id,value,observed_at FROM __jadel_recovery_drill WHERE id='$marker';" > evidence/baseline-query.json
+          jq -e --arg id "$marker" '.. | objects | select(.id? == $id and .value? == "BASELINE")' evidence/baseline-query.json >/dev/null
+
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 time-travel info "$DRILL_DATABASE_NAME" --json > evidence/baseline-bookmark.json
+          bookmark=$(jq -r '.. | .bookmark? // empty' evidence/baseline-bookmark.json | head -n1)
+          test -n "$bookmark"
+          printf '%s\n' "$bookmark" > evidence/baseline-bookmark.txt
+          echo 'D1_BASELINE_AND_BOOKMARK=PASS'
+
+      - name: Mutate isolated marker and prove divergence
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker=$(cat evidence/marker-id.txt)
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 execute "$DRILL_DATABASE_NAME" --remote --yes --json \
+            --command "UPDATE __jadel_recovery_drill SET value='MUTATED', observed_at=datetime('now') WHERE id='$marker';" > evidence/mutation.json
+          npx --yes "wrangler@$WRANGLER_VERSION" d1 execute "$DRILL_DATABASE_NAME" --remote --yes --json \
+            --command "SELECT id,value,observed_at FROM __jadel_recovery_drill WHERE id='$marker';" > evidence/mutated-query.json
+          jq -e --arg id "$marker" '.. | objects | select(.id? == $id and .value? == "MUTATED")' evidence/mutated-query.json >/dev/null
+          echo 'D1_CONTROLLED_MUTATION=PASS'
+
+      - name: Restore isolated D1 and measure RPO RTO
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker=$(cat evidence/marker-id.txt)
+          bookmark=$(cat evidence/baseline-bookmark.txt)
+          baseline_epoch=$(cat evidence/baseline-epoch.txt)
+          restore_start_epoch=$(date +%s)
+          restore_start_ms=$(date +%s%3N)
+          rpo_seconds=$(( restore_start_epoch - baseline_epoch ))
+
+          printf 'y\n' | npx --yes "wrangler@$WRANGLER_VERSION" d1 time-travel restore "$DRILL_DATABASE_NAME" \
+            --bookmark="$bookmark" --json > evidence/restore.json
+
+          restored=no
+          for attempt in $(seq 1 60); do
+            npx --yes "wrangler@$WRANGLER_VERSION" d1 execute "$DRILL_DATABASE_NAME" --remote --yes --json \
+              --command "SELECT id,value,observed_at FROM __jadel_recovery_drill WHERE id='$marker';" > evidence/post-restore-query.json
+            if jq -e --arg id "$marker" '.. | objects | select(.id? == $id and .value? == "BASELINE")' evidence/post-restore-query.json >/dev/null; then
+              restored=yes
+              break
+            fi
+            sleep 2
+          done
+          test "$restored" = yes
+          ! jq -e --arg id "$marker" '.. | objects | select(.id? == $id and .value? == "MUTATED")' evidence/post-restore-query.json >/dev/null
+
+          restore_end_ms=$(date +%s%3N)
+          rto_ms=$(( restore_end_ms - restore_start_ms ))
+          undo_bookmark=$(jq -r --arg target "$bookmark" '[.. | .bookmark? // empty | select(. != $target)] | .[0] // empty' evidence/restore.json)
+          test -n "$undo_bookmark"
+
+          jq -n \
+            --arg database "$DRILL_DATABASE_NAME" \
+            --arg database_id "$(cat evidence/drill-database-id.txt)" \
+            --arg subject_sha "$GITHUB_SHA" \
+            --arg workflow "$GITHUB_WORKFLOW" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg baseline_bookmark "$bookmark" \
+            --arg undo_bookmark "$undo_bookmark" \
+            --argjson selected_recovery_point_age_seconds "$rpo_seconds" \
+            --argjson measured_rto_ms "$rto_ms" \
+            '{
+              status:"PASS",
+              database:$database,
+              database_id:$database_id,
+              subject_sha:$subject_sha,
+              workflow:$workflow,
+              run_id:$run_id,
+              baseline_bookmark:$baseline_bookmark,
+              undo_bookmark:$undo_bookmark,
+              selected_recovery_point_age_seconds:$selected_recovery_point_age_seconds,
+              measured_rto_ms:$measured_rto_ms,
+              production_database_touched:false
+            }' > evidence/recovery-summary.json
+
+          jq -e '.status == "PASS" and .production_database_touched == false and .measured_rto_ms >= 0 and .selected_recovery_point_age_seconds >= 0' evidence/recovery-summary.json >/dev/null
+          echo "D1_RESTORE_DRILL=PASS"
+          echo "D1_RPO_SECONDS=$rpo_seconds"
+          echo "D1_RTO_MS=$rto_ms"
+
+      - name: Build tamper-evident recovery evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          find evidence -maxdepth 1 -type f ! -name SHA256SUMS ! -name d1-recovery-evidence.tar -print0 | sort -z | xargs -0 sha256sum > evidence/SHA256SUMS
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -cf d1-recovery-evidence.tar evidence
+          sha256sum d1-recovery-evidence.tar | tee evidence/EVIDENCE_TAR_SHA256
+          echo 'D1_RECOVERY_EVIDENCE_BUNDLE=PASS'
+
+      - name: Attest recovery evidence
+        id: recovery_attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: d1-recovery-evidence.tar
+
+      - name: Verify recovery evidence attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle='${{ steps.recovery_attest.outputs.bundle-path }}'
+          test -s "$bundle"
+          gh attestation verify d1-recovery-evidence.tar \
+            -R "$GITHUB_REPOSITORY" \
+            --bundle "$bundle" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/d1-recovery-drill.yml" \
+            --source-digest "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF" \
+            --format json | tee evidence/attestation-verification.json
+          jq -e 'length > 0' evidence/attestation-verification.json >/dev/null
+          echo 'D1_RECOVERY_ATTESTATION_VERIFY=PASS'
+
+      - name: Retain certified recovery evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: d1-recovery-certified-${{ github.run_id }}
+          path: |
+            evidence/
+            d1-recovery-evidence.tar
+          retention-days: 90
+          if-no-files-found: error
