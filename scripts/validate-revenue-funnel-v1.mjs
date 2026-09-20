@@ -12,8 +12,10 @@ for (const offer of cfg.offers) {
   if (!fs.existsSync(offer.landing_path.slice(1))) fail("missing landing " + offer.landing_path);
   if (!(offer.setup_price_usd > 0)) fail("setup price");
 }
-if (cfg.analytics.activation_state !== "MEASUREMENT_ID_REQUIRED") fail("analytics must remain gated");
-if (cfg.analytics.measurement_id !== null) fail("do not invent GA4 measurement id");
+const allowedAnalyticsStates = new Set(["MEASUREMENT_ID_REQUIRED","MEASUREMENT_ID_CONFIRMED_PENDING_VALIDATION","ACTIVE"]);
+if (!allowedAnalyticsStates.has(cfg.analytics.activation_state)) fail("invalid analytics activation state");
+if (cfg.analytics.activation_state === "MEASUREMENT_ID_REQUIRED" && cfg.analytics.measurement_id !== null) fail("measurement id must be null when required");
+if (cfg.analytics.activation_state !== "MEASUREMENT_ID_REQUIRED" && !/^G-[A-Z0-9]+$/.test(String(cfg.analytics.measurement_id || ""))) fail("verified GA4 measurement id required");
 const requiredGa = ["generate_lead","qualify_lead","disqualify_lead","working_lead","close_convert_lead","close_unconvert_lead"];
 const declared = new Set([...cfg.analytics.browser_events, ...cfg.analytics.server_or_crm_events]);
 for (const event of requiredGa) if (!declared.has(event)) fail("missing GA4 lead event " + event);
