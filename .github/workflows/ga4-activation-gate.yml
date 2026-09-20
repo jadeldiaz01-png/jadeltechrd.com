@@ -1,0 +1,39 @@
+name: GA4 activation gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "config/ga4-activation-gate.json"
+      - "config/revenue-funnel-v1.json"
+      - "ga4-config.js"
+      - "ga4-loader.js"
+      - "revenue-funnel.js"
+      - "solicitar-proyecto.html"
+      - "whatsapp-ia-empresas-rd.html"
+      - "automatizacion-procesos-ia-rd.html"
+      - "agente-ventas-ia-rd.html"
+      - "scripts/validate-ga4-activation-gate.mjs"
+      - ".github/workflows/ga4-activation-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate GA4 activation contract
+        run: |
+          set -euo pipefail
+          node --check ga4-config.js
+          node --check ga4-loader.js
+          node --check revenue-funnel.js
+          node scripts/validate-ga4-activation-gate.mjs
+          echo "GA4_ACTIVATION_CONTRACT=PASS"
