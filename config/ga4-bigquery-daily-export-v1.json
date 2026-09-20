@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0.0",
+  "name": "GA4 BigQuery Daily Export Readiness",
+  "status": "BLOCKED_EXTERNAL_LINK",
+  "effective_date": "2026-09-20",
+  "ga4": {
+    "property_id": "555066228",
+    "stream_id": "15812262707",
+    "measurement_id": "G-K60SQ2ZHL9",
+    "realtime_verified": true,
+    "debugview_verified": false
+  },
+  "bigquery": {
+    "gcp_project_id": null,
+    "dataset_expected": "analytics_555066228",
+    "dataset_location": null,
+    "daily_export": true,
+    "streaming_export": false,
+    "fresh_daily_export": false,
+    "sandbox_acceptable_for_initial_validation": true,
+    "service_account_expected": "firebase-measurement@system.gserviceaccount.com",
+    "required_project_role_for_google_service_account": "roles/bigquery.user",
+    "required_dataset_role_for_google_service_account": "roles/bigquery.dataOwner"
+  },
+  "security": {
+    "static_service_account_json_allowed": false,
+    "github_oidc_workload_identity_target": true,
+    "repo_secret_required_for_linking": false,
+    "paid_acquisition_authorized": false,
+    "max_unapproved_ad_spend_usd": 0
+  },
+  "activation_requirements": [
+    "DebugView evidence captured once with consent granted and debug mode enabled only for the test device",
+    "GA4 property user has Editor-or-higher access",
+    "Google Cloud project selected or created",
+    "BigQuery API enabled in the selected project",
+    "linking identity has sufficient project IAM permissions",
+    "GA4 BigQuery link created for Property 555066228",
+    "Web Stream 15812262707 included",
+    "Daily export enabled",
+    "Streaming export disabled",
+    "dataset analytics_555066228 observed",
+    "firebase-measurement@system.gserviceaccount.com verified with roles/bigquery.user at project level and bigquery.dataOwner on export dataset",
+    "first events_YYYYMMDD table observed before marking export active"
+  ],
+  "post_link_observability": {
+    "enabled": false,
+    "expected_tables": [
+      "events_YYYYMMDD"
+    ],
+    "forbidden_until_cost_approval": [
+      "events_intraday_YYYYMMDD",
+      "streaming export"
+    ],
+    "sql_templates": [
+      "analytics/bigquery/00_event_volume_daily.sql.tmpl",
+      "analytics/bigquery/01_funnel_daily.sql.tmpl",
+      "analytics/bigquery/02_event_contract_drift.sql.tmpl",
+      "analytics/bigquery/03_source_medium_quality.sql.tmpl"
+    ]
+  }
+}
