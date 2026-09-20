@@ -121,3 +121,32 @@ Normalize cost/usage where practical with FOCUS 1.4 and track unit economics suc
 A public site being live does not authorize the commercial runtime, agent fleet, social publication, connectors, financial side effects, or trading.
 
 The institutional production decision may become true only when every applicable domain is independently authorized on current exact-revision evidence and a human production approval is recorded.
+
+
+## Evidence refresh — 2026-09-20
+
+Certified public release baseline: `cf190d28282958ff4f04f74e0325109df5c7b62e`.
+
+Current evidence:
+
+- Pages deployment run `35481552952`: PASS.
+- CycloneDX 1.7, signed provenance and pre-deploy attestation verification: PASS.
+- Promotion artifact `10595394537`, digest `sha256:2dd541430d0df713950af7f6e429b54c729b083ff3dc3f55265b6af7e8a4b073`.
+- Security baseline run `35481552955`: PASS.
+- Governed intake live contract run `35481579425`: PASS.
+- Live Android max-8/single-owner regression run `35481579443`: PASS.
+
+The Pages workflow is now scoped to the actual release surface. Governance-only changes no longer create a new public release SHA.
+
+### Remaining public-site gates
+
+`PRODUCTION_DOMAIN_GATE` remains fail-closed because:
+
+1. `RESTORE_ROLLBACK_DRILL=NOT_YET_CERTIFIED` until the dedicated `*-recovery-drill` D1 database is provisioned and the approval-gated Stage B workflow records data correctness, undo bookmark, RPO/RTO and an attested evidence bundle.
+2. `SLO_ERROR_BUDGET_ALERTING=NOT_YET_CERTIFIED` until measured observation history and alert-delivery evidence exist. The hourly measurement workflow is `.github/workflows/site-slo-evidence.yml`.
+
+Implementation is not evidence. Neither of these gates becomes PASS merely because the workflow exists.
+
+### Independent domains
+
+Commercial intake authorization, agent-service authorization, social publication, external connectors and quant/live-capital authorization remain independent. A public-site PASS cannot promote those domains.
