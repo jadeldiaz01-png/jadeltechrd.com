@@ -5,7 +5,10 @@ const dailyDir = process.env.SLO_DAILY_DIR || 'slo-daily';
 const alertDir = process.env.SLO_ALERT_DIR || 'slo-alert';
 const policyPath = process.env.SLO_POLICY || 'config/slo-policy.json';
 const outputPath = process.env.SLO_OUTPUT || 'evidence/slo-30d-certification.json';
-const windowEndDate = process.env.SLO_WINDOW_END_DATE || new Date(Date.now() - 86400000).toISOString().slice(0,10);
+const certificationNow = process.env.SLO_CERTIFICATION_NOW || new Date().toISOString();
+const certificationNowMs = Date.parse(certificationNow);
+if (!Number.isFinite(certificationNowMs)) throw new Error('SLO_CERTIFICATION_NOW is invalid');
+const windowEndDate = process.env.SLO_WINDOW_END_DATE || new Date(certificationNowMs - 86400000).toISOString().slice(0,10);
 
 const policy = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
 const cert = policy.public_domain_certification;
@@ -168,7 +171,7 @@ for (const file of walk(alertDir,'slo-alert-path-evidence.json')) {
 let alertAgeDays=null;
 let alertDeliveryPass=false;
 if (latestAlert?.status==='PASS' && latestAlert?.channel==='github_issue') {
-  alertAgeDays=(windowEndExclusiveMs-Date.parse(latestAlert.observed_at))/86400000;
+  alertAgeDays=(certificationNowMs-Date.parse(latestAlert.observed_at))/86400000;
   alertDeliveryPass=Number.isFinite(alertAgeDays) && alertAgeDays>=0 && alertAgeDays<=cert.alert_delivery.test_freshness_days;
 }
 
@@ -182,7 +185,7 @@ const result={
   schema_version:'1.0',
   control_id:'SLO_ERROR_BUDGET_ALERTING',
   status:ready?'PASS':'NOT_YET_CERTIFIED',
-  generated_at:new Date().toISOString(),
+  generated_at:new Date(certificationNowMs).toISOString(),
   window:{start_date:windowStartDate,end_date:windowEndDate,days,expected_slots:expectedSlots},
   evidence_coverage:{
     observed_slots:samples.length,

@@ -70,7 +70,7 @@ function buildFixture(root, mutate) {
     status:'PASS',
     channel:'github_issue',
     workflow_run_id:'123456',
-    observed_at:`${windowEnd}T12:00:00Z`,
+    observed_at:'2026-09-20T01:00:00Z',
     round_trip:{create:true,read:true,comment:true,close:true},
     outage_declared:false
   };
@@ -86,7 +86,7 @@ function runCase(name, mutate, expectedStatus) {
     const output=path.join(root,'result.json');
     const proc=spawnSync(process.execPath,[certifier],{
       cwd:repoRoot,
-      env:{...process.env,SLO_DAILY_DIR:dailyDir,SLO_ALERT_DIR:alertDir,SLO_POLICY:policy,SLO_OUTPUT:output,SLO_WINDOW_END_DATE:windowEnd},
+      env:{...process.env,SLO_DAILY_DIR:dailyDir,SLO_ALERT_DIR:alertDir,SLO_POLICY:policy,SLO_OUTPUT:output,SLO_WINDOW_END_DATE:windowEnd,SLO_CERTIFICATION_NOW:'2026-09-20T04:00:00Z'},
       encoding:'utf8'
     });
     if(proc.status!==0) throw new Error(`${name}: certifier process failed\n${proc.stdout}\n${proc.stderr}`);
