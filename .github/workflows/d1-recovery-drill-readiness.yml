@@ -20,7 +20,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       DRILL_DATABASE_NAME: ${{ vars.D1_RECOVERY_DRILL_DATABASE_NAME }}
       DRILL_DATABASE_ID: ${{ vars.D1_RECOVERY_DRILL_DATABASE_ID }}
-      WRANGLER_VERSION: "4.33.1"
+      WRANGLER_VERSION: "4.135.0"
     steps:
       - name: Enforce non-production recovery target
         shell: bash
