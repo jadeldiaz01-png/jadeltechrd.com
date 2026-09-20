@@ -200,6 +200,7 @@ form?.addEventListener("submit", async (event) => {
     completed = true;
     clearIdempotencyKey();
     const projectId = body.project_id || "registrado";
+    window.RevenueAnalytics?.track("generate_lead", { lead_source: "project_request" });
     setStatus(`Solicitud recibida. ID de seguimiento: ${projectId}. Estado: ${body.state || "VALIDATED"}.`, "success");
     form.querySelectorAll("input,textarea,button").forEach((node) => { node.disabled = true; });
     turnstileStatus.textContent = body.replayed ? "Reintento reconciliado sin duplicar la solicitud." : "Verificación completada.";

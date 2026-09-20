@@ -1,0 +1,213 @@
+{
+  "schema_version": "1.0.0",
+  "name": "Revenue Funnel v1",
+  "status": "IMPLEMENTATION_CANDIDATE",
+  "effective_date": "2026-09-20",
+  "source_baseline_sha": "26564e74095e3eac61396480d70ee4c7d356743c",
+  "principles": {
+    "no_fabricated_proof": true,
+    "no_autonomous_ad_spend": true,
+    "max_unapproved_ad_spend_usd": 0,
+    "no_pii_in_browser_analytics": true,
+    "human_approval_required_for_paid_acquisition": true,
+    "financial_and_trading_domains_independent": true
+  },
+  "offers": [
+    {
+      "id": "whatsapp_support",
+      "name": "Agente IA para WhatsApp, Soporte y Tickets",
+      "service_id": "support",
+      "landing_path": "/whatsapp-ia-empresas-rd.html",
+      "setup_price_usd": 900,
+      "monthly_price_usd": 149,
+      "primary_problem": "mensajes y solicitudes que requieren respuesta, clasificación y escalación humana",
+      "primary_outcomes": [
+        "respuesta consistente",
+        "clasificación y handoff humano",
+        "trazabilidad operativa"
+      ],
+      "seo_intent": [
+        "chatbot whatsapp inteligencia artificial republica dominicana",
+        "automatizacion whatsapp empresas republica dominicana",
+        "agente ia whatsapp empresas"
+      ]
+    },
+    {
+      "id": "automation_blueprint",
+      "name": "Automatización de Procesos y Agentic Blueprint",
+      "service_id": "architecture",
+      "landing_path": "/automatizacion-procesos-ia-rd.html",
+      "setup_price_usd": 250,
+      "monthly_price_usd": null,
+      "primary_problem": "procesos manuales repetitivos sin arquitectura, métricas ni controles claros",
+      "primary_outcomes": [
+        "mapa del proceso",
+        "arquitectura objetivo",
+        "backlog priorizado y plan de integración"
+      ],
+      "seo_intent": [
+        "automatizacion procesos ia republica dominicana",
+        "automatizacion empresarial inteligencia artificial republica dominicana",
+        "consultoria agentes ia republica dominicana"
+      ]
+    },
+    {
+      "id": "sales_lead_intelligence",
+      "name": "Sales & Lead Intelligence",
+      "service_id": "sales",
+      "landing_path": "/agente-ventas-ia-rd.html",
+      "setup_price_usd": 1500,
+      "monthly_price_usd": 299,
+      "primary_problem": "leads sin calificación, seguimiento o priorización consistente",
+      "primary_outcomes": [
+        "lead research y scoring",
+        "brief comercial",
+        "seguimiento supervisado y medible"
+      ],
+      "seo_intent": [
+        "agente ia ventas republica dominicana",
+        "automatizacion leads republica dominicana",
+        "inteligencia ventas ia empresas"
+      ]
+    }
+  ],
+  "analytics": {
+    "provider": "GA4",
+    "activation_state": "CONTROLLED_VALIDATION_ACTIVE",
+    "measurement_id": "G-K60SQ2ZHL9",
+    "browser_events": [
+      "offer_view",
+      "offer_cta_click",
+      "intake_start",
+      "generate_lead"
+    ],
+    "server_or_crm_events": [
+      "working_lead",
+      "qualify_lead",
+      "disqualify_lead",
+      "close_convert_lead",
+      "close_unconvert_lead"
+    ],
+    "prohibited_browser_parameters": [
+      "name",
+      "email",
+      "phone",
+      "company_free_text",
+      "notes",
+      "message_body",
+      "payment_identifier"
+    ],
+    "attribution_parameters": [
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_content",
+      "utm_term",
+      "offer_id",
+      "service_id"
+    ]
+  },
+  "kpis": [
+    {
+      "id": "landing_to_lead_rate",
+      "formula": "generate_lead / eligible_landing_sessions"
+    },
+    {
+      "id": "lead_qualification_rate",
+      "formula": "qualify_lead / generate_lead"
+    },
+    {
+      "id": "qualified_to_customer_rate",
+      "formula": "close_convert_lead / qualify_lead"
+    },
+    {
+      "id": "cost_per_lead",
+      "formula": "paid_media_spend / generate_lead"
+    },
+    {
+      "id": "cost_per_qualified_lead",
+      "formula": "paid_media_spend / qualify_lead"
+    },
+    {
+      "id": "customer_acquisition_cost",
+      "formula": "attributable_sales_and_marketing_cost / close_convert_lead"
+    },
+    {
+      "id": "new_mrr",
+      "formula": "sum(monthly_recurring_revenue_from_new_customers)"
+    },
+    {
+      "id": "gross_margin_payback_months",
+      "formula": "customer_acquisition_cost / monthly_gross_margin_per_customer"
+    }
+  ],
+  "dashboard": {
+    "time_windows_days": [
+      7,
+      30,
+      90
+    ],
+    "required_breakdowns": [
+      "offer_id",
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "landing_path"
+    ],
+    "cards": [
+      "eligible_landing_sessions",
+      "generate_lead",
+      "qualify_lead",
+      "close_convert_lead",
+      "landing_to_lead_rate",
+      "lead_qualification_rate",
+      "qualified_to_customer_rate",
+      "cost_per_lead",
+      "cost_per_qualified_lead",
+      "customer_acquisition_cost",
+      "new_mrr",
+      "gross_margin_payback_months"
+    ]
+  },
+  "acquisition_gates": [
+    {
+      "id": "G0_MEASUREMENT_INTEGRITY",
+      "state": "BLOCKED",
+      "requirements": [
+        "GA4 measurement ID configured through reviewed change",
+        "browser event QA passes without PII",
+        "generate_lead observed only after successful intake response",
+        "offline lead-stage sync contract tested"
+      ]
+    },
+    {
+      "id": "G1_ORGANIC_AND_OUTREACH",
+      "state": "ALLOWED_SUPERVISED",
+      "requirements": [
+        "landing pages deployed",
+        "Search Console sitemap submitted and indexed-state monitored",
+        "UTM taxonomy enforced"
+      ]
+    },
+    {
+      "id": "G2_PAID_PILOT",
+      "state": "HUMAN_GATED",
+      "requirements": [
+        "G0 passes",
+        "explicit human-approved budget and CAC ceiling",
+        "no autonomous spend",
+        "qualified-lead feedback available"
+      ]
+    },
+    {
+      "id": "G3_SCALE",
+      "state": "BLOCKED_PENDING_EVIDENCE",
+      "requirements": [
+        "positive gross-margin economics after variable costs",
+        "CAC within human-approved ceiling",
+        "no active data-quality incident",
+        "for Google Ads downstream optimization, selected conversion action has at least 15 conversions in the last 30 days"
+      ]
+    }
+  ]
+}

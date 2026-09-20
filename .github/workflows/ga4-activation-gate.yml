@@ -1,0 +1,56 @@
+name: GA4 activation gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "config/ga4-activation-gate.json"
+      - "config/revenue-funnel-v1.json"
+      - "ga4-config.js"
+      - "ga4-loader.js"
+      - "analytics-consent.js"
+      - "analytics-consent.css"
+      - "index.html"
+      - "revenue-funnel.js"
+      - "solicitar-proyecto.html"
+      - "whatsapp-ia-empresas-rd.html"
+      - "automatizacion-procesos-ia-rd.html"
+      - "agente-ventas-ia-rd.html"
+      - "scripts/validate-ga4-activation-gate.mjs"
+      - ".github/workflows/ga4-activation-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate GA4 activation contract
+        run: |
+          set -euo pipefail
+          node --check ga4-config.js
+          node --check ga4-loader.js
+          node --check analytics-consent.js
+          node --check revenue-funnel.js
+          node scripts/validate-ga4-activation-gate.mjs
+          python3 -m http.server 8766 >/tmp/ga4-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill $server_pid 2>/dev/null || true' EXIT
+          sleep 1
+          browser=''
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if command -v "$candidate" >/dev/null 2>&1; then browser="$candidate"; break; fi
+          done
+          test -n "$browser"
+          "$browser" --headless=new --no-sandbox --disable-gpu --virtual-time-budget=1800 --dump-dom http://127.0.0.1:8766/ >/tmp/ga4-dom.html
+          grep -Fq 'Analítica opcional' /tmp/ga4-dom.html
+          grep -Fq 'Aceptar analítica' /tmp/ga4-dom.html
+          echo "GA4_CONSENT_UI_SMOKE=PASS"
+          echo "GA4_ACTIVATION_CONTRACT=PASS"
