@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.0.0",
+  "name": "Analytics Control Plane v1",
+  "status": "ACTIVE_WITH_GATED_EXPANSION",
+  "effective_date": "2026-09-20",
+  "property": {
+    "property_id": "555066228",
+    "stream_id": "15812262707",
+    "measurement_id": "G-K60SQ2ZHL9",
+    "site": "https://jadeltechrd.com/"
+  },
+  "evidence": {
+    "browser_transport_verified": true,
+    "gtag_js_http_status": 200,
+    "ga4_collect_http_status": 204,
+    "realtime_verified": true,
+    "realtime_evidence": "User-provided GA4 Realtime screenshot on 2026-09-20 showing 1 active user in the last 30 minutes",
+    "debugview_verified": false,
+    "windsor_read_connection_verified": true
+  },
+  "architecture": {
+    "browser_layer": {
+      "purpose": "consented acquisition and behavior telemetry",
+      "consent_required": true,
+      "pii_allowed": false,
+      "ads_storage": "denied",
+      "ad_user_data": "denied",
+      "ad_personalization": "denied"
+    },
+    "first_party_commercial_ledger": {
+      "purpose": "authoritative lead and revenue lifecycle",
+      "authoritative_for": [
+        "working_lead",
+        "qualify_lead",
+        "disqualify_lead",
+        "close_convert_lead",
+        "close_unconvert_lead",
+        "payment_state"
+      ],
+      "browser_is_authoritative": false
+    },
+    "measurement_protocol": {
+      "enabled": false,
+      "activation_gate": "SERVER_SECRET_AND_PRIVACY_REVIEW_REQUIRED",
+      "api_secret_location": "server-side secret manager only",
+      "api_secret_name_target": "GA4_MEASUREMENT_PROTOCOL_API_SECRET",
+      "client_id_and_session_id_linkage_required_for_session_attribution": true,
+      "secret_must_never_be_exposed_to_browser": true
+    },
+    "bigquery_export": {
+      "enabled": false,
+      "daily_export_target": true,
+      "streaming_export_target": false,
+      "expected_dataset": "analytics_555066228",
+      "gcp_project_id": null,
+      "activation_gate": "GOOGLE_CLOUD_PROJECT_AND_GA4_EDITOR_ACCESS_REQUIRED",
+      "cost_guard": "daily export first; streaming requires explicit cost approval"
+    },
+    "windsor": {
+      "mode": "read_only_observability",
+      "property_selector_id": "555066228",
+      "authoritative_storage": false
+    }
+  },
+  "event_contract": {
+    "browser": [
+      "page_view",
+      "offer_view",
+      "offer_cta_click",
+      "intake_start",
+      "generate_lead"
+    ],
+    "server_only": [
+      "working_lead",
+      "qualify_lead",
+      "disqualify_lead",
+      "close_convert_lead",
+      "close_unconvert_lead"
+    ],
+    "browser_parameter_allowlist": [
+      "offer_id",
+      "service_id",
+      "landing_path",
+      "cta_id",
+      "lead_source",
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_content",
+      "utm_term"
+    ],
+    "browser_parameter_denylist": [
+      "name",
+      "email",
+      "phone",
+      "company",
+      "notes",
+      "message",
+      "payment_identifier",
+      "turnstile_token",
+      "idempotency_key",
+      "api_secret"
+    ]
+  },
+  "data_quality": {
+    "identity_invariants": {
+      "property_id_must_equal": "555066228",
+      "stream_id_must_equal": "15812262707",
+      "measurement_id_must_equal": "G-K60SQ2ZHL9",
+      "property_id_must_not_equal_stream_id": true
+    },
+    "edge_invariants": {
+      "csp_must_allow_ga4": true,
+      "csp_must_not_allow_ads_hosts": true,
+      "gtag_js_must_be_http_200": true
+    },
+    "synthetic_collection": {
+      "enabled": false,
+      "reason": "avoid polluting production analytics until GA4 developer-traffic filter is configured",
+      "activation_gate": "DEVELOPER_TRAFFIC_FILTER_ACTIVE"
+    }
+  },
+  "governance": {
+    "google_ads_linked": false,
+    "paid_acquisition_authorized": false,
+    "max_unapproved_ad_spend_usd": 0,
+    "bigquery_streaming_cost_authorized": false,
+    "measurement_protocol_secret_present_in_repo": false,
+    "human_approval_required_for_new_external_data_destinations": true
+  }
+}
