@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jadeltechrd.com/config/institutional-production-manifest-2026.schema.json",
+  "title": "Jadel Tech RD Institutional Production Manifest 2026",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "baseline_sha",
+    "decision",
+    "authority_model",
+    "architecture",
+    "standards_2026",
+    "governance",
+    "evidence_contract",
+    "current_evidence_snapshot",
+    "domain_authorization",
+    "agentic_and_mcp_security",
+    "identity_and_secret_security",
+    "software_supply_chain",
+    "data_and_knowledge_governance",
+    "reliability_and_operations",
+    "qa_and_adversarial_evaluation",
+    "finops",
+    "promotion_policy"
+  ],
+  "properties": {
+    "schema_version": {"const": "2026.2"},
+    "manifest_id": {"const": "jadeltechrd-institutional-production-manifest"},
+    "baseline_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "decision": {
+      "type": "object",
+      "required": [
+        "institutional_production_authorized",
+        "execution_enabled_by_default",
+        "fail_closed",
+        "live_financial_capital_authorized",
+        "autonomous_external_publication_authorized"
+      ],
+      "properties": {
+        "institutional_production_authorized": {"type": "boolean"},
+        "execution_enabled_by_default": {"const": false},
+        "fail_closed": {"const": true},
+        "live_financial_capital_authorized": {"type": "boolean"},
+        "autonomous_external_publication_authorized": {"type": "boolean"}
+      }
+    },
+    "evidence_contract": {
+      "type": "object",
+      "required": ["required_fields", "accepted_statuses", "freshness"],
+      "properties": {
+        "accepted_statuses": {
+          "type": "array",
+          "contains": {"const": "PASS"}
+        }
+      }
+    },
+    "current_evidence_snapshot": {
+      "type": "object",
+      "required": ["subject_sha", "observed_date", "evidence"],
+      "properties": {
+        "subject_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "evidence": {
+          "type": "array",
+          "minItems": 5,
+          "items": {
+            "type": "object",
+            "required": [
+              "control_id",
+              "status",
+              "source",
+              "observed_at",
+              "subject_sha_or_runtime_revision",
+              "evidence_locator"
+            ]
+          }
+        }
+      }
+    },
+    "domain_authorization": {
+      "type": "object",
+      "required": [
+        "public_site",
+        "commercial_intake",
+        "agent_fleet",
+        "external_connectors_and_publication",
+        "quant_and_trading",
+        "social_media_intelligence"
+      ]
+    }
+  }
+}
