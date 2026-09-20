@@ -19,7 +19,7 @@
     "measurement_id": "G-K60SQ2ZHL9",
     "measurement_id_source": "User-provided GA4 installation instructions screenshot, 2026-09-20",
     "editor_access_confirmed": false,
-    "realtime_verified": false,
+    "realtime_verified": true,
     "debugview_verified": false,
     "windsor_read_connection_confirmed": true,
     "stream_id_source": "User-provided GA4 Web Stream Details screenshot, 2026-09-20",
@@ -34,7 +34,9 @@
     "transport_event_verified": "page_view",
     "transport_verified_at": "2026-09-20T19:22:45Z",
     "transport_evidence": "GitHub Actions run 35532073101; clean headless Chrome; consent=granted; tid=G-K60SQ2ZHL9; g/collect HTTP 204",
-    "debug_transport_verified": true
+    "debug_transport_verified": true,
+    "realtime_verified_at": "2026-09-20T19:33:04Z",
+    "realtime_evidence": "User-provided GA4 Realtime screenshot showing 1 active user in the last 30 minutes"
   },
   "privacy": {
     "default_analytics_storage": "denied",
