@@ -73,8 +73,8 @@
   ],
   "analytics": {
     "provider": "GA4",
-    "activation_state": "MEASUREMENT_ID_REQUIRED",
-    "measurement_id": null,
+    "activation_state": "MEASUREMENT_ID_CONFIRMED_PENDING_VALIDATION",
+    "measurement_id": "G-K60SQ2ZHL9",
     "browser_events": [
       "offer_view",
       "offer_cta_click",
@@ -142,7 +142,11 @@
     }
   ],
   "dashboard": {
-    "time_windows_days": [7, 30, 90],
+    "time_windows_days": [
+      7,
+      30,
+      90
+    ],
     "required_breakdowns": [
       "offer_id",
       "utm_source",
