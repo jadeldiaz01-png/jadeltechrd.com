@@ -130,5 +130,17 @@
     "bigquery_streaming_cost_authorized": false,
     "measurement_protocol_secret_present_in_repo": false,
     "human_approval_required_for_new_external_data_destinations": true
+  },
+  "revenue_intelligence_extension": {
+    "manifest": "config/revenue-intelligence-control-plane-2026.json",
+    "model_registry": "config/revenue-model-registry-2026.json",
+    "agent_spec": "config/revenue-agent-spec-2026.json",
+    "activation_state": "IMPLEMENTATION_CANDIDATE",
+    "commercial_system_of_record": "Cloudflare D1",
+    "ga4_role": "BEHAVIORAL_ANALYTICS_ONLY",
+    "bigquery_ml_role": "GATED_RESEARCH_AND_ANALYTICS",
+    "production_authorized": false,
+    "autonomous_external_side_effects_authorized": false,
+    "max_unapproved_ad_spend_usd": 0
   }
 }
