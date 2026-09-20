@@ -1,0 +1,120 @@
+{
+  "schema_version": "2026.1",
+  "agent_id": "revenue-control-agent",
+  "name": "Jadel Revenue Control Agent",
+  "activation_state": "NOT_ACTIVATED_PENDING_EVALS_AND_RUNTIME_POLICY",
+  "purpose": "Continuously analyze aggregate revenue evidence, model outputs and operational health, then produce bounded internal recommendations.",
+  "provider_pattern": {
+    "primary": "OpenAI Responses/Agents API",
+    "gateway_candidate": "Cloudflare AI Gateway",
+    "model_id": "RUNTIME_CONFIG_REQUIRED",
+    "secret_location": "SERVER_SIDE_SECRET_MANAGER_ONLY"
+  },
+  "authority": {
+    "mode": "ADVISORY_ONLY",
+    "external_side_effects": false,
+    "paid_media_spend": false,
+    "publication": false,
+    "customer_outreach": false,
+    "payment_or_refund": false,
+    "credential_changes": false,
+    "production_promotion": false,
+    "live_trading_or_capital": false
+  },
+  "tools": [
+    {
+      "id": "read_revenue_aggregate",
+      "class": "READ_ONLY",
+      "source": "commercial-runtime admin aggregate"
+    },
+    {
+      "id": "read_ga4_aggregate",
+      "class": "READ_ONLY",
+      "source": "analytics control plane after access is verified"
+    },
+    {
+      "id": "read_model_registry",
+      "class": "READ_ONLY",
+      "source": "config/revenue-model-registry-2026.json"
+    },
+    {
+      "id": "read_evidence",
+      "class": "READ_ONLY",
+      "source": "signed/retained CI and runtime evidence"
+    },
+    {
+      "id": "analyze_creative_asset",
+      "class": "READ_ONLY_MULTIMODAL",
+      "source": "approved asset plus rights metadata"
+    }
+  ],
+  "forbidden_tools": [
+    "send_email",
+    "publish_social",
+    "create_or_change_ad_campaign",
+    "change_ad_budget",
+    "charge_payment",
+    "issue_refund",
+    "change_credentials",
+    "deploy_production",
+    "allocate_trading_capital",
+    "place_trade"
+  ],
+  "runtime_budgets": {
+    "max_iterations": 6,
+    "max_tool_calls": 12,
+    "max_parallel_tool_calls": 4,
+    "max_wall_seconds": 45,
+    "monthly_cost_ceiling_usd": "ENVIRONMENT_POLICY_REQUIRED",
+    "per_run_cost_ceiling_usd": "ENVIRONMENT_POLICY_REQUIRED"
+  },
+  "context_and_memory": {
+    "persistent_memory_enabled": false,
+    "pii_allowed": false,
+    "secrets_allowed": false,
+    "raw_customer_messages_allowed": false,
+    "retrieved_external_content_trust": "UNTRUSTED_DATA",
+    "durable_state": "Only normalized aggregate facts, model/eval IDs and evidence locators after policy review."
+  },
+  "structured_output": {
+    "required": true,
+    "schema": "jadel.revenue.recommendation.v1",
+    "reject_unknown_fields": true,
+    "authorization_field_hardcoded": "NO_EXTERNAL_SIDE_EFFECTS"
+  },
+  "evals_required": [
+    "prompt_injection",
+    "indirect_prompt_injection",
+    "tool_poisoning",
+    "memory_poisoning",
+    "secret_exfiltration",
+    "pii_leakage",
+    "hallucinated_revenue",
+    "unsupported_roi_claim",
+    "excessive_agency",
+    "unbounded_loop",
+    "wrong_tool_selection",
+    "malformed_tool_output",
+    "stale_data",
+    "conflicting_sources",
+    "cost_budget_exceeded",
+    "multimodal_visual_injection"
+  ],
+  "promotion": {
+    "stages": [
+      "OFFLINE",
+      "SHADOW",
+      "SUPERVISED_PILOT",
+      "PRODUCTION_CANDIDATE"
+    ],
+    "current": "OFFLINE",
+    "requires": [
+      "eval_suite_pass",
+      "cost_budget_configured",
+      "gateway_or_equivalent_rate_limits",
+      "trace_observability",
+      "policy_engine_available",
+      "human_production_approval"
+    ]
+  }
+}
