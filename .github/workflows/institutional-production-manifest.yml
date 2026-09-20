@@ -126,6 +126,9 @@ jobs:
           grep -Fq 'name: d1-recovery-drill' .github/workflows/provision-d1-recovery-drill.yml
           grep -Fq 'CLOUDFLARE_D1_API_TOKEN' .github/workflows/provision-d1-recovery-drill.yml
           grep -Fq '/user/tokens/verify' .github/workflows/provision-d1-recovery-drill.yml
+          grep -Fq '/tokens/verify' .github/workflows/provision-d1-recovery-drill.yml
+          grep -Fq 'cfat_' .github/workflows/provision-d1-recovery-drill.yml
+          grep -Fq 'cfut_' .github/workflows/provision-d1-recovery-drill.yml
           grep -Fq 'CLOUDFLARE_D1_TOKEN_VERIFY=PASS' .github/workflows/provision-d1-recovery-drill.yml
           grep -Fq 'D1_RECOVERY_DRILL_ENV_READY' .github/workflows/provision-d1-recovery-drill.yml
           grep -Fq 'jadel-commercial-runtime-recovery-drill' .github/workflows/provision-d1-recovery-drill.yml
