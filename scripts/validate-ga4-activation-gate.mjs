@@ -78,6 +78,19 @@ if (state === "CONTROLLED_VALIDATION_ACTIVE") {
   process.exit(0);
 }
 
+if (state === "TRANSPORT_VERIFIED_PENDING_GA_UI") {
+  if (!enabled || !debugOff) fail("transport-verified state requires enabled=true and debugMode=false");
+  if (gate.google_analytics.transport_verified !== true) fail("GA4 transport evidence required");
+  if (gate.google_analytics.gtag_js_http_status !== 200) fail("gtag.js HTTP 200 evidence required");
+  if (gate.google_analytics.collect_http_status !== 204) fail("GA4 collect HTTP 204 evidence required");
+  if (gate.google_analytics.transport_event_verified !== "page_view") fail("page_view transport evidence required");
+  if (gate.validation.cloudflare_csp_rule_corrected !== true) fail("Cloudflare CSP correction evidence required");
+  if (funnel.analytics.activation_state !== state) fail("funnel transport state mismatch");
+  if (!loader.includes("if (cfg.debugMode === true) configParams.debug_mode = true")) fail("debug_mode must be omitted when disabled");
+  console.log("GA4_ACTIVATION_GATE=PASS_TRANSPORT_VERIFIED_PENDING_GA_UI");
+  process.exit(0);
+}
+
 if (state === "ACTIVE") {
   if (!enabled || !debugOff) fail("ACTIVE requires enabled=true and debugMode=false");
   if (gate.google_analytics.realtime_verified !== true || gate.google_analytics.debugview_verified !== true) fail("Realtime/DebugView evidence required");

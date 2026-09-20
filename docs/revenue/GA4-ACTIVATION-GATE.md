@@ -1,6 +1,6 @@
 # GA4 Activation Gate — Jadel Tech RD
 
-Status: **MEASUREMENT_ID_CONFIRMED_PENDING_VALIDATION**
+Status: **TRANSPORT_VERIFIED_PENDING_GA_UI**
 
 This gate prepares GA4 without fabricating a property, stream, Measurement ID or verification result.
 
@@ -81,3 +81,18 @@ The gate remains blocked until:
 ## Production separation
 
 This work does not alter the Sep-21 → Oct-20 public SLO evidence policy and does not authorize agents, external publishing, trading, financial capital or ad spend.
+
+
+## Live transport evidence
+
+On 2026-09-20, a clean headless Chrome session from GitHub Actions opened the public production site, granted analytics consent and verified the browser-to-Google transport chain:
+
+- Google tag request: HTTP 200
+- Measurement ID: `G-K60SQ2ZHL9`
+- GA4 `g/collect` request: HTTP 204
+- Event: `page_view`
+- Consent: granted for analytics; advertising storage/user-data/personalization remained denied
+- Cloudflare response-header CSP was the blocking root cause and was corrected in the existing rule **Jadel Tech RD hardened browser response headers**
+- Realtime and DebugView UI confirmation remain pending; they are not inferred from transport evidence.
+
+After transport verification, production configuration exits debug mode. The loader omits the `debug_mode` parameter entirely when disabled, as required by Google Analytics.
