@@ -12,7 +12,7 @@ for (const offer of cfg.offers) {
   if (!fs.existsSync(offer.landing_path.slice(1))) fail("missing landing " + offer.landing_path);
   if (!(offer.setup_price_usd > 0)) fail("setup price");
 }
-const allowedAnalyticsStates = new Set(["MEASUREMENT_ID_REQUIRED","MEASUREMENT_ID_CONFIRMED_PENDING_VALIDATION","CONTROLLED_VALIDATION_ACTIVE","ACTIVE"]);
+const allowedAnalyticsStates = new Set(["MEASUREMENT_ID_REQUIRED","MEASUREMENT_ID_CONFIRMED_PENDING_VALIDATION","CONTROLLED_VALIDATION_ACTIVE","TRANSPORT_VERIFIED_PENDING_GA_UI","ACTIVE"]);
 if (!allowedAnalyticsStates.has(cfg.analytics.activation_state)) fail("invalid analytics activation state");
 if (cfg.analytics.activation_state === "MEASUREMENT_ID_REQUIRED" && cfg.analytics.measurement_id !== null) fail("measurement id must be null when required");
 if (cfg.analytics.activation_state !== "MEASUREMENT_ID_REQUIRED" && !/^G-[A-Z0-9]+$/.test(String(cfg.analytics.measurement_id || ""))) fail("verified GA4 measurement id required");
