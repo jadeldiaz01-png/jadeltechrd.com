@@ -1,0 +1,103 @@
+name: SLO alert delivery test
+
+on:
+  schedule:
+    - cron: "23 3 * * 0"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/slo-alert-path-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  attestations: write
+  id-token: write
+
+concurrency:
+  group: slo-alert-path-test
+  cancel-in-progress: false
+
+jobs:
+  alert-path:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Create and verify alert issue
+        id: issue
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          title="[SLO][TEST] Alert delivery ${GITHUB_RUN_ID}"
+          marker="<!-- jadel-slo-alert-test-${GITHUB_RUN_ID} -->"
+          body=$(printf "%s\nControlled alert-delivery test. No outage is being declared.\n\n- source SHA: %s\n- workflow run: %s\n- channel: GitHub Issues\n" "$marker" "$GITHUB_SHA" "$GITHUB_RUN_ID")
+          url=$(gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body")
+          issue_number="${url##*/}"
+          test -n "$issue_number"
+
+          observed=$(gh issue view "$issue_number" --repo "$GITHUB_REPOSITORY" --json state,title,body)
+          test "$(jq -r '.state' <<<"$observed")" = "OPEN"
+          test "$(jq -r '.title' <<<"$observed")" = "$title"
+          jq -er --arg marker "$marker" '.body | contains($marker)' <<<"$observed" >/dev/null
+          gh issue comment "$issue_number" --repo "$GITHUB_REPOSITORY" --body "SLO_ALERT_TEST_ACK run=$GITHUB_RUN_ID"
+          gh issue close "$issue_number" --repo "$GITHUB_REPOSITORY" --comment "Controlled alert-delivery test completed successfully."
+          closed=$(gh issue view "$issue_number" --repo "$GITHUB_REPOSITORY" --json state)
+          test "$(jq -r '.state' <<<"$closed")" = "CLOSED"
+
+          echo "issue_number=$issue_number" >> "$GITHUB_OUTPUT"
+          echo "SLO_ALERT_CREATE_READ_COMMENT_CLOSE=PASS"
+
+      - name: Build alert-delivery evidence
+        env:
+          ISSUE_NUMBER: ${{ steps.issue.outputs.issue_number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg control_id "SLO_ALERT_DELIVERY" \
+            --arg status "PASS" \
+            --arg channel "github_issue" \
+            --arg source_sha "$GITHUB_SHA" \
+            --arg workflow_run_id "$GITHUB_RUN_ID" \
+            --arg issue_number "$ISSUE_NUMBER" \
+            --arg observed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{schema_version:"1.0",control_id:$control_id,status:$status,channel:$channel,source_sha:$source_sha,workflow_run_id:$workflow_run_id,issue_number:$issue_number,observed_at:$observed_at,round_trip:{create:true,read:true,comment:true,close:true},outage_declared:false}' > evidence/slo-alert-path-evidence.json
+          jq -e '.status=="PASS" and .round_trip.create and .round_trip.read and .round_trip.comment and .round_trip.close and (.outage_declared==false)' evidence/slo-alert-path-evidence.json >/dev/null
+          echo "SLO_ALERT_DELIVERY_GITHUB_ISSUE=PASS"
+
+      - name: Attest alert-delivery evidence
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: evidence/slo-alert-path-evidence.json
+
+      - name: Verify alert-delivery attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle='${{ steps.attest.outputs.bundle-path }}'
+          test -s "$bundle"
+          gh attestation verify evidence/slo-alert-path-evidence.json \
+            -R "$GITHUB_REPOSITORY" \
+            --bundle "$bundle" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/slo-alert-path-test.yml" \
+            --source-digest "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF" \
+            --format json > evidence/attestation-verification.json
+          jq -e 'length > 0' evidence/attestation-verification.json >/dev/null
+          echo "SLO_ALERT_ATTESTATION_VERIFY=PASS"
+
+      - name: Retain alert-delivery evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: slo-alert-path-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          retention-days: 45
+          if-no-files-found: error
