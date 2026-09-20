@@ -1,0 +1,74 @@
+name: Verify D1 recovery environment variables
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/verify-d1-recovery-environment.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-environment:
+    environment:
+      name: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      D1_RECOVERY_DRILL_ENV_READY: ${{ vars.D1_RECOVERY_DRILL_ENV_READY }}
+      DRILL_DATABASE_NAME: ${{ vars.D1_RECOVERY_DRILL_DATABASE_NAME }}
+      DRILL_DATABASE_ID: ${{ vars.D1_RECOVERY_DRILL_DATABASE_ID }}
+      ALLOW_D1_RECOVERY_DRILL: ${{ vars.ALLOW_D1_RECOVERY_DRILL }}
+      EXPECTED_DATABASE_NAME: jadel-commercial-runtime-recovery-drill
+      EXPECTED_DATABASE_ID: a23852a8-7cf0-409a-a9cc-6eb317c55a11
+
+    steps:
+      - name: Verify environment variables stay fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$D1_RECOVERY_DRILL_ENV_READY" = "true"
+          test "$DRILL_DATABASE_NAME" = "$EXPECTED_DATABASE_NAME"
+          test "$DRILL_DATABASE_ID" = "$EXPECTED_DATABASE_ID"
+          test "$ALLOW_D1_RECOVERY_DRILL" = "false"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_D1_API_TOKEN_RAW"
+          echo "D1_RECOVERY_DRILL_ENV_READY=PASS"
+          echo "D1_RECOVERY_DRILL_DATABASE_NAME=PASS"
+          echo "D1_RECOVERY_DRILL_DATABASE_ID=PASS"
+          echo "ALLOW_D1_RECOVERY_DRILL_FALSE=PASS"
+
+      - name: Normalize Cloudflare token
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_D1_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then
+            token="${token:1:${#token}-2}"
+          elif [[ "$token" == \'*\' && "$token" == *\' ]]; then
+            token="${token:1:${#token}-2}"
+          fi
+          test -n "$token"
+          echo "::add-mask::$token"
+          echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
+          printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+
+      - name: Verify Cloudflare D1 identity read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}'             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$DRILL_DATABASE_ID" || true)
+          test "$code" = "200"
+          test "$(jq -r '.success // false' "$tmp")" = "true"
+          test "$(jq -r '.result.uuid // empty' "$tmp")" = "$EXPECTED_DATABASE_ID"
+          test "$(jq -r '.result.name // empty' "$tmp")" = "$EXPECTED_DATABASE_NAME"
+          test "$(jq -r '.result.version // empty' "$tmp")" = "production"
+          echo "D1_ENVIRONMENT_IDENTITY_READONLY=PASS"
+          echo "D1_VERSION=production"
+          echo "STAGE_B_EXECUTED=NO"
