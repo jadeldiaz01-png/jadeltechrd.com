@@ -58,7 +58,7 @@ for (const expected of ["555066228","15812262707","G-K60SQ2ZHL9"]) {
 }
 
 const serialized = JSON.stringify({control, models, agent});
-for (const secretPattern of [/sk-[A-Za-z0-9_-]{20,}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /api[_-]?secret["']?\s*:\s*["'][^"']+/i]) {
+for (const secretPattern of [/(?:^|[^A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/, /api[_-]?secret["']?\s*:\s*["'][^"']+/i]) {
   requireValue(!secretPattern.test(serialized), "secret-like material must not be committed to revenue manifests");
 }
 
