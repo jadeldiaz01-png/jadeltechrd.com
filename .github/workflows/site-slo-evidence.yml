@@ -1,0 +1,152 @@
+name: Site SLO evidence
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      alert_test:
+        description: "Set true only to verify the GitHub issue alert delivery path without declaring an outage."
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+concurrency:
+  group: site-slo-evidence
+  cancel-in-progress: false
+
+jobs:
+  synthetic-slo:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      SITE: https://jadeltechrd.com/
+      INTAKE: https://intake.jadeltechrd.com/health
+      SITE_LATENCY_OBJECTIVE_MS: "1500"
+      INTAKE_LATENCY_OBJECTIVE_MS: "1500"
+
+    steps:
+      - name: Probe public site and intake
+        id: probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+
+          probe() {
+            local name="$1"
+            local url="$2"
+            local body="/tmp/${name}.body"
+            local metrics="/tmp/${name}.metrics"
+            local rc=0
+
+            curl --silent --show-error --location \
+              --connect-timeout 10 --max-time 30 \
+              --retry 2 --retry-delay 1 --retry-connrefused \
+              --write-out '%{http_code} %{time_total} %{remote_ip}\\n' \
+              --output "$body" "$url" > "$metrics" || rc=$?
+
+            read -r code seconds remote_ip < "$metrics" || true
+            code="${code:-000}"
+            seconds="${seconds:-99}"
+            remote_ip="${remote_ip:-unknown}"
+            ms=$(python - "$seconds" <<'PY'
+import sys
+print(round(float(sys.argv[1]) * 1000))
+PY
+            )
+
+            jq -n \
+              --arg probe "$name" \
+              --arg url "$url" \
+              --arg http_code "$code" \
+              --arg remote_ip "$remote_ip" \
+              --argjson curl_exit "$rc" \
+              --argjson latency_ms "$ms" \
+              '{probe:$probe,url:$url,http_code:$http_code,curl_exit:$curl_exit,latency_ms:$latency_ms,remote_ip:$remote_ip}' \
+              > "evidence/${name}.json"
+          }
+
+          probe public-site "$SITE"
+          probe commercial-intake "$INTAKE"
+
+          site_code=$(jq -r '.http_code' evidence/public-site.json)
+          intake_code=$(jq -r '.http_code' evidence/commercial-intake.json)
+          site_ms=$(jq -r '.latency_ms' evidence/public-site.json)
+          intake_ms=$(jq -r '.latency_ms' evidence/commercial-intake.json)
+
+          test "$site_code" = "200"
+          test "$intake_code" = "200"
+          jq -e '.status == "ok" and .write_mode == "fail-closed"' /tmp/commercial-intake.body >/dev/null
+          grep -Fq 'Jadel Tech RD' /tmp/public-site.body
+
+          jq -n \
+            --arg source_sha "$GITHUB_SHA" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg observed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --slurpfile site evidence/public-site.json \
+            --slurpfile intake evidence/commercial-intake.json \
+            --argjson site_latency_objective_ms "$SITE_LATENCY_OBJECTIVE_MS" \
+            --argjson intake_latency_objective_ms "$INTAKE_LATENCY_OBJECTIVE_MS" \
+            '{schema_version:"1.0",source_sha:$source_sha,workflow_run_id:$run_id,observed_at:$observed_at,probes:{public_site:$site[0],commercial_intake:$intake[0]},objectives:{public_site_latency_ms:$site_latency_objective_ms,commercial_intake_latency_ms:$intake_latency_objective_ms}}' > evidence/slo-probe.json
+
+          echo "SLO_SITE_HTTP=PASS latency_ms=$site_ms"
+          echo "SLO_INTAKE_HTTP=PASS latency_ms=$intake_ms"
+
+          if [ "$site_ms" -gt "$SITE_LATENCY_OBJECTIVE_MS" ]; then
+            echo "SLO_SITE_LATENCY=FAIL latency_ms=$site_ms" >&2
+            exit 1
+          fi
+          if [ "$intake_ms" -gt "$INTAKE_LATENCY_OBJECTIVE_MS" ]; then
+            echo "SLO_INTAKE_LATENCY=FAIL latency_ms=$intake_ms" >&2
+            exit 1
+          fi
+
+          echo "SLO_SITE_LATENCY=PASS"
+          echo "SLO_INTAKE_LATENCY=PASS"
+
+      - name: Retain SLO probe evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: site-slo-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          retention-days: 35
+          if-no-files-found: error
+
+      - name: Alert on failed probe or alert-path test
+        if: ${{ failure() || inputs.alert_test == true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="[SLO] Public site / intake synthetic alert"
+          marker="<!-- jadel-slo-alert -->"
+          body=$(cat <<EOF
+          $marker
+          Automated SLO alert from workflow run $GITHUB_RUN_ID.
+
+          - revision: `$GITHUB_SHA`
+          - event: `$GITHUB_EVENT_NAME`
+          - alert-path-test: `${{ inputs.alert_test || false }}`
+          - evidence: Actions run `$GITHUB_RUN_ID`
+
+          This issue is an operational signal, not a production-readiness claim.
+          EOF
+          )
+
+          issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "$title in:title" --json number --jq '.[0].number // empty')
+
+          if [ -z "$issue" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          else
+            gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body "$body"
+          fi
+          echo "SLO_ALERT_DELIVERY_GITHUB_ISSUE=PASS"
