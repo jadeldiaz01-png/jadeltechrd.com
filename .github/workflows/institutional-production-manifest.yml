@@ -178,7 +178,10 @@ jobs:
           grep -Fq 'SLO_ERROR_BUDGET_ALERTING' scripts/certify-site-slo.mjs
           grep -Fq 'minimum_coverage_ratio' scripts/certify-site-slo.mjs
           grep -Fq 'maximum_gap_minutes' scripts/certify-site-slo.mjs
-          grep -Fq 'burn_rate_windows' scripts/certify-site-slo.mjs
+          grep -Fq 'multiwindow_burn_rate_rules' scripts/certify-site-slo.mjs
+          grep -Fq 'long_window' scripts/certify-site-slo.mjs
+          grep -Fq 'short_window' scripts/certify-site-slo.mjs
+          grep -Fq 'multiwindow_multi_burn_rate' config/slo-policy.json
           grep -Fq 'site-slo-daily-rollup.yml/runs' .github/workflows/site-slo-certifier.yml
           grep -Fq 'slo-alert-path-test.yml/runs' .github/workflows/site-slo-certifier.yml
           grep -Fq 'SLO_30D_ATTESTATION_VERIFY=PASS' .github/workflows/site-slo-certifier.yml

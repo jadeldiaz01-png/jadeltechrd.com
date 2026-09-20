@@ -302,7 +302,7 @@
         "CycloneDX SBOM and signed provenance generated and cryptographically verified before deploy"
       ],
       "remaining_mandatory_evidence": [
-        "measured SLO observation window and verified alert-delivery evidence"
+        "complete eligible 30-day scheduled first-attempt SLO/error-budget certification window; alert-delivery proof is already independently PASS"
       ]
     },
     "commercial_intake": {
@@ -576,7 +576,17 @@
         "certifier_run_id": 35488501229,
         "certifier_artifact_id": 10598047338,
         "certifier_artifact_sha256": "265ed350d335c4ff0675d2261989018f4a46246a420134d2979b084461ea7aea"
-      }
+      },
+      "burn_rate_model": "multiwindow_multi_burn_rate",
+      "burn_rate_rules": [
+        "page: 1h + 10m at 14.4x",
+        "page: 6h + 30m at 6x",
+        "ticket: 24h + 2h at 3x",
+        "ticket: 72h + 6h at 1x"
+      ],
+      "alert_delivery_status": "PASS",
+      "alert_delivery_evidence_run_id": 35488352208,
+      "production_blocker": "elapsed eligible 30-day scheduled measurement time only; no backfill or inferred historical samples allowed"
     }
   },
   "qa_and_adversarial_evaluation": {
