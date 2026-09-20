@@ -82,3 +82,30 @@ Cloudflare documents Time Travel as always-on for D1 production storage and expl
 Current stable Wrangler pin validated for this control-plane update: `4.135.0` (released 2026-09-18). The Time Travel API, rather than interactive CLI restore, is the authority used for the destructive restore response and undo-bookmark evidence.
 
 Longer-than-native retention should use scheduled D1 export to R2/controlled object storage with integrity hashes and tested import/recovery. Native Time Travel retention remains plan-dependent.
+
+
+## Provisioning + Stage A automation
+
+Workflow: `.github/workflows/provision-d1-recovery-drill.yml`.
+
+Target database name is fixed to `jadel-commercial-runtime-recovery-drill`.
+
+On merge to `main`, the workflow:
+
+1. verifies the Cloudflare account/token secrets are present without printing them;
+2. lists D1 databases by the exact recovery-drill name;
+3. reuses exactly one existing match or creates the database when none exists;
+4. fails closed if more than one exact match is returned;
+5. verifies the returned D1 UUID, exact name and `version=production`;
+6. calls the official Time Travel bookmark endpoint;
+7. records only a SHA-256 of the bookmark in the summary evidence;
+8. marks `production_database_touched=false` and `restore_executed=false`;
+9. creates an attested Stage A evidence bundle and verifies the attestation against the exact repository/workflow/SHA/ref.
+
+The provisioning workflow intentionally contains no Time Travel restore endpoint and no D1 delete operation.
+
+### GitHub protected environment boundary
+
+The destructive Stage B workflow references the environment `d1-recovery-drill`, but a protected GitHub environment must be created/updated by an identity with repository `Administration: write`. The ordinary workflow `GITHUB_TOKEN` cannot self-grant that administrative authority, and the current ChatGPT GitHub connector does not expose environment-administration writes.
+
+Therefore the environment protection rule remains a deliberate human/admin boundary. Stage B additionally requires `ALLOW_D1_RECOVERY_DRILL=true`, the exact recovery database name/id, and explicit destructive confirmation, so it remains fail-closed even before environment administration is completed.
