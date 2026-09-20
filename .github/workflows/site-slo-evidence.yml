@@ -4,12 +4,6 @@ on:
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
-    inputs:
-      alert_test:
-        description: "Set true only to verify the GitHub issue alert delivery path without declaring an outage."
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -119,8 +113,8 @@ PY
           retention-days: 35
           if-no-files-found: error
 
-      - name: Alert on failed probe or alert-path test
-        if: ${{ failure() || inputs.alert_test == true }}
+      - name: Alert on failed probe
+        if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -134,7 +128,6 @@ PY
 
           - revision: `$GITHUB_SHA`
           - event: `$GITHUB_EVENT_NAME`
-          - alert-path-test: `${{ inputs.alert_test || false }}`
           - evidence: Actions run `$GITHUB_RUN_ID`
 
           This issue is an operational signal, not a production-readiness claim.
