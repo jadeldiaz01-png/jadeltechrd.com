@@ -12,7 +12,6 @@ on:
       - ".github/workflows/pages.yml"
       - ".github/workflows/d1-recovery-drill-readiness.yml"
       - ".github/workflows/d1-recovery-drill-execute.yml"
-      - ".github/workflows/d1-stage-b-authorized-once.yml"
       - ".github/workflows/provision-d1-recovery-drill.yml"
       - ".github/workflows/site-slo-evidence.yml"
       - "docs/PRODUCTION-READINESS-2026.md"
@@ -28,7 +27,6 @@ on:
       - ".github/workflows/pages.yml"
       - ".github/workflows/d1-recovery-drill-readiness.yml"
       - ".github/workflows/d1-recovery-drill-execute.yml"
-      - ".github/workflows/d1-stage-b-authorized-once.yml"
       - ".github/workflows/site-slo-evidence.yml"
   workflow_dispatch:
 
@@ -111,7 +109,6 @@ jobs:
             .github/workflows/pages.yml \
             .github/workflows/d1-recovery-drill-readiness.yml \
             .github/workflows/d1-recovery-drill-execute.yml \
-            .github/workflows/d1-stage-b-authorized-once.yml \
             .github/workflows/provision-d1-recovery-drill.yml \
             .github/workflows/site-slo-evidence.yml
 
@@ -154,15 +151,6 @@ jobs:
           grep -Fq 'previous_bookmark' .github/workflows/d1-recovery-drill-execute.yml
           grep -Fq 'RESTORE_ROLLBACK_DRILL=PASS' .github/workflows/d1-recovery-drill-execute.yml
           grep -Fq 'gh attestation verify' .github/workflows/d1-recovery-drill-execute.yml
-          grep -Fq 'EXPECTED_DATABASE_ID: a23852a8-7cf0-409a-a9cc-6eb317c55a11' .github/workflows/d1-stage-b-authorized-once.yml
-          grep -Fq 'PERSISTENT_ALLOW_D1_RECOVERY_DRILL' .github/workflows/d1-stage-b-authorized-once.yml
-          grep -Fq 'EPHEMERAL_ALLOW_D1_RECOVERY_DRILL=true' .github/workflows/d1-stage-b-authorized-once.yml
-          grep -Fq '/time_travel/restore?bookmark=' .github/workflows/d1-stage-b-authorized-once.yml
-          grep -Fq 'previous_bookmark' .github/workflows/d1-stage-b-authorized-once.yml
-          grep -Fq 'D1_EMERGENCY_RESTORE_ATTEMPTED=YES' .github/workflows/d1-stage-b-authorized-once.yml
-          grep -Fq 'RESTORE_ROLLBACK_DRILL=PASS' .github/workflows/d1-stage-b-authorized-once.yml
-          grep -Fq 'D1_STAGE_B_ATTESTATION_VERIFY=PASS' .github/workflows/d1-stage-b-authorized-once.yml
-          grep -Fq 'PERSISTENT_ALLOW_AFTER=false' .github/workflows/d1-stage-b-authorized-once.yml
           grep -Fq 'cron: "17 * * * *"' .github/workflows/site-slo-evidence.yml
           grep -Fq 'issues: write' .github/workflows/site-slo-evidence.yml
           grep -Fq 'SLO_SITE_HTTP=PASS' .github/workflows/site-slo-evidence.yml
