@@ -1,0 +1,141 @@
+name: GA4 live browser diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/ga4-live-browser-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Install Selenium
+        run: python -m pip install --disable-pip-version-check "selenium==4.35.0"
+
+      - name: Run live GA4 browser chain
+        env:
+          TARGET_URL: "https://jadeltechrd.com/?utm_source=github_actions&utm_medium=diagnostic&utm_campaign=ga4_activation_validation"
+          EXPECTED_MEASUREMENT_ID: "G-K60SQ2ZHL9"
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import time
+          from urllib.parse import unquote
+          from selenium import webdriver
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.support.ui import WebDriverWait
+          from selenium.webdriver.support import expected_conditions as EC
+
+          target = os.environ["TARGET_URL"]
+          measurement = os.environ["EXPECTED_MEASUREMENT_ID"]
+
+          options = webdriver.ChromeOptions()
+          options.add_argument("--headless=new")
+          options.add_argument("--no-sandbox")
+          options.add_argument("--disable-dev-shm-usage")
+          options.add_argument("--window-size=1400,1000")
+          options.set_capability("goog:loggingPrefs", {"performance": "ALL", "browser": "ALL"})
+
+          driver = webdriver.Chrome(options=options)
+          try:
+              driver.get(target)
+              WebDriverWait(driver, 15).until(
+                  EC.element_to_be_clickable((By.CSS_SELECTOR, '[data-consent="granted"]'))
+              ).click()
+
+              WebDriverWait(driver, 15).until(
+                  lambda d: d.execute_script(
+                      "return !!document.querySelector('script[src*="googletagmanager.com/gtag/js"]')"
+                  )
+              )
+              time.sleep(8)
+
+              consent = driver.execute_script(
+                  "return localStorage.getItem('jadel.analytics_consent.v1')"
+              )
+              config = driver.execute_script("return window.JADEL_GA4_CONFIG || null")
+              ga4_state = driver.execute_script("return window.JadelGA4?.state || null")
+              data_layer = driver.execute_script(
+                  "return JSON.stringify(window.dataLayer || [])"
+              )
+
+              perf = driver.get_log("performance")
+              browser_logs = driver.get_log("browser")
+
+              requests = []
+              responses = {}
+              for row in perf:
+                  msg = json.loads(row["message"])["message"]
+                  method = msg.get("method")
+                  params = msg.get("params", {})
+                  if method == "Network.requestWillBeSent":
+                      req = params.get("request", {})
+                      url = req.get("url", "")
+                      rid = params.get("requestId")
+                      if "googletagmanager.com/gtag/js" in url or "/g/collect" in url:
+                          requests.append({"requestId": rid, "url": url})
+                  elif method == "Network.responseReceived":
+                      resp = params.get("response", {})
+                      url = resp.get("url", "")
+                      if "googletagmanager.com/gtag/js" in url or "/g/collect" in url:
+                          responses[params.get("requestId")] = {
+                              "url": url,
+                              "status": resp.get("status")
+                          }
+
+              tag_requests = [r for r in requests if "googletagmanager.com/gtag/js" in r["url"]]
+              collect_requests = [r for r in requests if "/g/collect" in r["url"]]
+              matching_collect = [
+                  r for r in collect_requests
+                  if f"tid={measurement}" in unquote(r["url"])
+              ]
+              collect_statuses = [
+                  responses.get(r["requestId"], {}).get("status")
+                  for r in matching_collect
+              ]
+
+              csp_errors = [
+                  entry for entry in browser_logs
+                  if "Content Security Policy" in entry.get("message", "")
+                  or "violates the following Content Security Policy" in entry.get("message", "")
+              ]
+
+              report = {
+                  "target": target,
+                  "consent": consent,
+                  "config": config,
+                  "JadelGA4_state": ga4_state,
+                  "gtag_request_count": len(tag_requests),
+                  "matching_collect_count": len(matching_collect),
+                  "matching_collect_statuses": collect_statuses,
+                  "csp_error_count": len(csp_errors),
+                  "data_layer": data_layer[:5000],
+                  "collect_urls": [r["url"] for r in matching_collect[:10]],
+                  "browser_errors": csp_errors[:10],
+              }
+              print(json.dumps(report, indent=2))
+
+              assert consent == "granted", "analytics consent was not granted"
+              assert config and config.get("enabled") is True, "GA4 runtime config is disabled"
+              assert config.get("measurementId") == measurement, "measurement ID mismatch"
+              assert len(tag_requests) >= 1, "gtag.js did not load"
+              assert len(matching_collect) >= 1, "no GA4 g/collect request for expected measurement ID"
+              assert any(status in (200, 204) for status in collect_statuses), (
+                  f"GA4 collect did not return success: {collect_statuses}"
+              )
+              assert not csp_errors, f"CSP errors detected: {csp_errors}"
+              print("GA4_LIVE_BROWSER_CHAIN=PASS")
+          finally:
+              driver.quit()
+          PY
