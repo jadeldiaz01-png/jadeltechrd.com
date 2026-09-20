@@ -102,18 +102,25 @@ jobs:
           test -n "$rule_id"
           echo "::add-mask::$rule_id"
 
-          current=$(jq -r --arg rid "$rule_id" '.result.rules[] | select(.id==$rid) | .action_parameters.headers["content-security-policy"].value' <<<"$detail")
+          header_key=$(jq -r --arg rid "$rule_id" '
+            .result.rules[] | select(.id==$rid)
+            | .action_parameters.headers
+            | keys[]
+            | select((ascii_downcase)=="content-security-policy")
+          ' <<<"$detail" | head -n1)
+          test -n "$header_key"
+          current=$(jq -r --arg rid "$rule_id" --arg hk "$header_key" '.result.rules[] | select(.id==$rid) | .action_parameters.headers[$hk].value' <<<"$detail")
           target="default-src 'none'; script-src 'self' https://challenges.cloudflare.com https://*.googletagmanager.com; style-src 'self'; img-src 'self' data: https://*.google-analytics.com https://*.googletagmanager.com; font-src 'self'; connect-src 'self' https://intake.jadeltechrd.com https://challenges.cloudflare.com https://*.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.google.com; frame-src https://challenges.cloudflare.com; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
 
           if [ "$current" = "$target" ]; then
             echo 'CLOUDFLARE_GA4_CSP_ALREADY_ALIGNED=YES'
           else
             grep -Fq "script-src 'self' https://challenges.cloudflare.com" <<<"$current"
-            payload=$(jq -c --arg rid "$rule_id" --arg target "$target" '
+            payload=$(jq -c --arg rid "$rule_id" --arg hk "$header_key" --arg target "$target" '
               .result.rules[] | select(.id==$rid)
               | {
                   action,
-                  action_parameters: (.action_parameters | .headers["content-security-policy"].value=$target),
+                  action_parameters: (.action_parameters | .headers[$hk].value=$target),
                   expression,
                   description,
                   enabled
