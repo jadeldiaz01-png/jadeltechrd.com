@@ -1,0 +1,43 @@
+name: Revenue Funnel v1 gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "config/revenue-funnel-v1.json"
+      - "docs/revenue/REVENUE-FUNNEL-V1.md"
+      - "revenue-funnel.js"
+      - "revenue-funnel.css"
+      - "whatsapp-ia-empresas-rd.html"
+      - "automatizacion-procesos-ia-rd.html"
+      - "agente-ventas-ia-rd.html"
+      - "solicitar-proyecto.html"
+      - "project-request.js"
+      - "sitemap.xml"
+      - ".github/workflows/revenue-funnel-v1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate Revenue Funnel contract
+        run: |
+          set -euo pipefail
+          node --check revenue-funnel.js
+          node --check project-request.js
+          node scripts/validate-revenue-funnel-v1.mjs
+          for page in whatsapp-ia-empresas-rd.html automatizacion-procesos-ia-rd.html agente-ventas-ia-rd.html; do
+            grep -Fq 'Content-Security-Policy' "$page"
+            grep -Fq 'rel="canonical"' "$page"
+            grep -Fq 'data-revenue-event="offer_cta_click"' "$page"
+          done
+          echo "REVENUE_FUNNEL_GATE=PASS"
