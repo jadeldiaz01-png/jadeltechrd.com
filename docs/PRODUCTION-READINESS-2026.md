@@ -161,3 +161,43 @@ Evidence: run `35487635556`, job `106016824689`, artifact `10598422044`, digest 
 The persistent environment authorization flag remained `ALLOW_D1_RECOVERY_DRILL=false` before and after execution. The temporary one-shot workflow is removed after use.
 
 `PRODUCTION_DOMAIN_GATE` remains fail-closed because `SLO_ERROR_BUDGET_ALERTING` still requires its measured observation window and alert-delivery evidence. Independent agent, connector, social and quant/trading authorizations remain unchanged.
+
+
+## SLO/error-budget certification bootstrap — 2026-09-20
+
+The final public-domain technical gate is now operationally instrumented.
+
+Real bootstrap evidence:
+
+- first-attempt public synthetic run `35488352198`, job `106018729362`: PASS;
+  - public site first-attempt latency: `227 ms`;
+  - commercial intake health first-attempt latency: `152 ms`;
+  - no retry was substituted for the measured SLI;
+  - artifact `10597703848`, digest `sha256:33699fa579d12b081e8f0592ee94ccf8989d28d8921e1751bc9a290305efdcc6`.
+- alert-delivery run `35488352208`, job `106018729600`: PASS;
+  - controlled GitHub Issue create/read/comment/close round trip: PASS;
+  - alert evidence attestation verification: PASS;
+  - artifact `10598088523`, digest `sha256:0d7ef02832631fc915cf3a30fda8aa766fcf15975a57e273e742a25298206e80`.
+- corrected 30-day certifier run `35488501229`, job `106019132700`:
+  - daily rollups discovered: `1`;
+  - alert delivery: `PASS`;
+  - eligible historical scheduled slots: `0 / 4320`;
+  - status: `NOT_YET_CERTIFIED`;
+  - final certification evidence attestation: PASS;
+  - artifact `10598047338`, digest `sha256:265ed350d335c4ff0675d2261989018f4a46246a420134d2979b084461ea7aea`.
+
+The bootstrap probe was triggered by a source push and is intentionally excluded from the certification coverage numerator. Only scheduled first-attempt probes may count toward the 30-day window.
+
+The alert-delivery sub-control is therefore already proven. The remaining blocker is elapsed, eligible measurement time. That time is not backfilled, inferred from traffic analytics or fabricated from pre-policy history.
+
+With the 10-minute schedule active during Sep-20, the first possible fully observed UTC calendar day is Sep-21. If coverage and all SLO/error-budget controls remain satisfactory, the earliest 30-complete-day window is Sep-21 through Oct-20, adjudicated by the certifier scheduled for 2026-10-21 02:13 UTC.
+
+Until that evidence exists:
+
+`SLO_ERROR_BUDGET_ALERTING=NOT_YET_CERTIFIED`
+
+and therefore:
+
+`PRODUCTION_DOMAIN_GATE=FAIL`
+
+remain mandatory fail-closed states.
