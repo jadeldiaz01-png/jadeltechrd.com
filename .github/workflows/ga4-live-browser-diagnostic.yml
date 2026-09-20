@@ -56,7 +56,7 @@ jobs:
 
               WebDriverWait(driver, 15).until(
                   lambda d: d.execute_script(
-                      "return !!document.querySelector('script[src*="googletagmanager.com/gtag/js"]')"
+                      "return Array.from(document.scripts).some(s => s.src.includes('googletagmanager.com/gtag/js'))"
                   )
               )
               time.sleep(8)
