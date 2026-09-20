@@ -14,6 +14,12 @@ on:
       - ".github/workflows/d1-recovery-drill-execute.yml"
       - ".github/workflows/provision-d1-recovery-drill.yml"
       - ".github/workflows/site-slo-evidence.yml"
+      - ".github/workflows/site-slo-daily-rollup.yml"
+      - ".github/workflows/site-slo-certifier.yml"
+      - ".github/workflows/slo-alert-path-test.yml"
+      - "scripts/build-site-slo-daily-rollup.mjs"
+      - "scripts/certify-site-slo.mjs"
+      - "config/slo-policy.json"
       - "docs/PRODUCTION-READINESS-2026.md"
       - "docs/operations/D1-RECOVERY-DRILL-2026.md"
   push:
@@ -110,7 +116,10 @@ jobs:
             .github/workflows/d1-recovery-drill-readiness.yml \
             .github/workflows/d1-recovery-drill-execute.yml \
             .github/workflows/provision-d1-recovery-drill.yml \
-            .github/workflows/site-slo-evidence.yml
+            .github/workflows/site-slo-evidence.yml \
+            .github/workflows/site-slo-daily-rollup.yml \
+            .github/workflows/site-slo-certifier.yml \
+            .github/workflows/slo-alert-path-test.yml
 
       - name: Verify promotion and recovery workflows stay fail-closed
         shell: bash
@@ -151,9 +160,23 @@ jobs:
           grep -Fq 'previous_bookmark' .github/workflows/d1-recovery-drill-execute.yml
           grep -Fq 'RESTORE_ROLLBACK_DRILL=PASS' .github/workflows/d1-recovery-drill-execute.yml
           grep -Fq 'gh attestation verify' .github/workflows/d1-recovery-drill-execute.yml
-          grep -Fq 'cron: "17 * * * *"' .github/workflows/site-slo-evidence.yml
-          grep -Fq 'issues: write' .github/workflows/site-slo-evidence.yml
-          grep -Fq 'SLO_SITE_HTTP=PASS' .github/workflows/site-slo-evidence.yml
-          grep -Fq 'SLO_INTAKE_HTTP=PASS' .github/workflows/site-slo-evidence.yml
+          grep -Fq 'cron: "7,17,27,37,47,57 * * * *"' .github/workflows/site-slo-evidence.yml
+          grep -Fq 'first_attempt_no_retry' .github/workflows/site-slo-evidence.yml
+          ! grep -Fq -- '--retry' .github/workflows/site-slo-evidence.yml
+          grep -Fq 'SLO_FIRST_ATTEMPT_NO_RETRY=PASS' .github/workflows/site-slo-evidence.yml
           grep -Fq 'SLO_ALERT_DELIVERY_GITHUB_ISSUE=PASS' .github/workflows/site-slo-evidence.yml
+          grep -Fq 'SITE_SLO_DAILY_ROLLUP' scripts/build-site-slo-daily-rollup.mjs
+          grep -Fq 'site-slo-evidence.yml/runs' .github/workflows/site-slo-daily-rollup.yml
+          grep -Fq 'SLO_ERROR_BUDGET_ALERTING' scripts/certify-site-slo.mjs
+          grep -Fq 'minimum_coverage_ratio' scripts/certify-site-slo.mjs
+          grep -Fq 'maximum_gap_minutes' scripts/certify-site-slo.mjs
+          grep -Fq 'burn_rate_windows' scripts/certify-site-slo.mjs
+          grep -Fq 'site-slo-daily-rollup.yml/runs' .github/workflows/site-slo-certifier.yml
+          grep -Fq 'slo-alert-path-test.yml/runs' .github/workflows/site-slo-certifier.yml
+          grep -Fq 'SLO_30D_ATTESTATION_VERIFY=PASS' .github/workflows/site-slo-certifier.yml
+          grep -Fq 'SLO_ALERT_CREATE_READ_COMMENT_CLOSE=PASS' .github/workflows/slo-alert-path-test.yml
+          grep -Fq 'SLO_ALERT_ATTESTATION_VERIFY=PASS' .github/workflows/slo-alert-path-test.yml
+          grep -Fq 'measurement_window_days' config/slo-policy.json
+          grep -Fq 'expected_slots_per_window' config/slo-policy.json
+          grep -Fq 'maximum_gap_minutes' config/slo-policy.json
           echo 'PROMOTION_RECOVERY_FAIL_CLOSED=PASS'
