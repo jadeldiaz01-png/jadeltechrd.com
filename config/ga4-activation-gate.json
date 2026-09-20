@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0.0",
+  "name": "GA4 Activation Gate",
+  "state": "BLOCKED_ACCOUNT_CONNECTION",
+  "effective_date": "2026-09-20",
+  "site": {
+    "url": "https://jadeltechrd.com/",
+    "property_name_target": "Jadel Tech RD",
+    "web_stream_name_target": "jadeltechrd.com Web",
+    "reporting_timezone_target": "America/Santo_Domingo",
+    "reporting_currency_target": "USD"
+  },
+  "google_analytics": {
+    "account_confirmed": false,
+    "property_confirmed": false,
+    "property_id": null,
+    "web_stream_confirmed": false,
+    "stream_id": null,
+    "measurement_id": null,
+    "measurement_id_source": "GA4 Admin > Data streams > Web stream details",
+    "editor_access_confirmed": false,
+    "realtime_verified": false,
+    "debugview_verified": false
+  },
+  "privacy": {
+    "default_analytics_storage": "denied",
+    "default_ad_storage": "denied",
+    "default_ad_user_data": "denied",
+    "default_ad_personalization": "denied",
+    "load_google_tag_before_analytics_consent": false,
+    "consent_ui_verified": false,
+    "pii_in_browser_analytics_allowed": false,
+    "forbidden_parameters": [
+      "name",
+      "email",
+      "phone",
+      "company",
+      "notes",
+      "message",
+      "payment_identifier",
+      "turnstile_token",
+      "idempotency_key"
+    ]
+  },
+  "event_contract": {
+    "browser_allowlist": [
+      "page_view",
+      "offer_view",
+      "offer_cta_click",
+      "intake_start",
+      "generate_lead"
+    ],
+    "parameter_allowlist": [
+      "offer_id",
+      "service_id",
+      "landing_path",
+      "cta_id",
+      "lead_source",
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_content",
+      "utm_term"
+    ],
+    "server_or_crm_only": [
+      "working_lead",
+      "qualify_lead",
+      "disqualify_lead",
+      "close_convert_lead",
+      "close_unconvert_lead"
+    ]
+  },
+  "activation_requirements": [
+    "existing GA4 account/property checked before creating a duplicate",
+    "Editor-or-higher access confirmed",
+    "real web stream for https://jadeltechrd.com/ confirmed or created",
+    "real Measurement ID beginning G- recorded from GA4 stream details",
+    "consent UI reviewed and analytics remains denied until explicit grant",
+    "CSP updated only for minimum Google Analytics hosts required by tested tag",
+    "no PII or sensitive form values appear in event names, parameters, URLs or page titles",
+    "offer_view, offer_cta_click, intake_start and generate_lead pass DebugView/Realtime tests",
+    "generate_lead fires only after successful intake response",
+    "paid acquisition remains disabled and unapproved spend remains USD 0"
+  ],
+  "ads": {
+    "google_ads_linked": false,
+    "paid_acquisition_authorized": false,
+    "max_unapproved_spend_usd": 0,
+    "offline_conversion_transport": "Data Manager API when/if Google Ads is later authorized",
+    "offline_conversion_sync_enabled": false
+  }
+}
