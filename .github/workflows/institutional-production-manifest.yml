@@ -9,6 +9,7 @@ on:
       - "scripts/validate-institutional-production-manifest.mjs"
       - ".github/workflows/institutional-production-manifest.yml"
       - ".github/workflows/commercial-live-smoke.yml"
+      - ".github/workflows/site-health.yml"
       - ".github/workflows/pages.yml"
       - ".github/workflows/d1-recovery-drill-readiness.yml"
       - ".github/workflows/d1-recovery-drill-provision.yml"
@@ -108,6 +109,10 @@ jobs:
           grep -Fq 'actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6' .github/workflows/pages.yml
           grep -Fq 'gh attestation verify' .github/workflows/pages.yml
           grep -Fq 'CycloneDX' .github/workflows/pages.yml
+          grep -Fq 'PUBLIC_ASSET_ALLOWLIST=PASS' .github/workflows/pages.yml
+          grep -Fq 'PUBLIC_IMMUTABLE_APP=' .github/workflows/site-health.yml
+          grep -Fq 'SLO_ALERT_DELIVERY=PASS' .github/workflows/site-health.yml
+          grep -Fq 'SLO_ALERT_TRANSPORT_DRILL=PASS' .github/workflows/site-health.yml
           grep -Fq 'READ_ONLY_RECOVERY_CHECK' .github/workflows/d1-recovery-drill-readiness.yml
           grep -Fq 'test "$DRILL_DATABASE_NAME" != "jadel-commercial-runtime"' .github/workflows/d1-recovery-drill-readiness.yml
           ! grep -Eq 'd1[[:space:]]+time-travel[[:space:]]+restore' .github/workflows/d1-recovery-drill-readiness.yml
