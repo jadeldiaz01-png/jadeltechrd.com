@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "name": "GA4 BigQuery Daily Export Readiness",
-  "status": "READY_TO_LINK_PROJECT_CONFIRMED",
+  "status": "LINK_CREATED_PENDING_FIRST_EXPORT",
   "effective_date": "2026-09-20",
   "ga4": {
     "property_id": "555066228",
@@ -25,7 +25,13 @@
     "legacy_service_account_policy": "LEGACY_ONLY_DO_NOT_REQUIRE_FOR_NEW_LINK",
     "required_project_role_for_resource_identity": "roles/bigquery.user",
     "required_dataset_role_for_resource_identity": "roles/bigquery.dataOwner",
-    "project_id_source": "User-provided Google Cloud Console screenshot, 2026-09-20"
+    "project_id_source": "User-provided Google Cloud Console screenshot, 2026-09-20",
+    "project_number": "527094364974",
+    "link_created": true,
+    "link_created_at_evidence": "2026-09-20",
+    "link_evidence": "User-provided GA4 BigQuery Links screenshot showing project row jadeltechrd-analytics-prod and project number 527094364974",
+    "dataset_verified": false,
+    "first_daily_table_verified": false
   },
   "security": {
     "static_service_account_json_allowed": false,
