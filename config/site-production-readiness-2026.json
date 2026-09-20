@@ -1,7 +1,7 @@
 {
   "schema_version": "2026.1",
   "manifest_id": "jadeltechrd-site-production-readiness",
-  "generated_at": "2026-09-20T03:52:00Z",
+  "generated_at": "2026-09-20T04:05:00Z",
   "owner": "Jadel Tech RD",
   "repository": "jadeldiaz01-png/jadeltechrd.com",
   "baseline_sha": "cf190d28282958ff4f04f74e0325109df5c7b62e",
@@ -438,11 +438,20 @@
         "alert-delivery path tested"
       ],
       "implementation": {
-        "workflow": ".github/workflows/site-slo-evidence.yml",
-        "cadence": "hourly",
-        "retention_days": 35
+        "probe_workflow": ".github/workflows/site-slo-evidence.yml",
+        "probe_cadence": "every 10 minutes at minutes 7,17,27,37,47,57 UTC",
+        "measurement_model": "first_attempt_no_retry",
+        "daily_rollup_workflow": ".github/workflows/site-slo-daily-rollup.yml",
+        "certifier_workflow": ".github/workflows/site-slo-certifier.yml",
+        "alert_test_workflow": ".github/workflows/slo-alert-path-test.yml",
+        "policy": "config/slo-policy.json",
+        "measurement_window_days": 30,
+        "expected_slots": 4320,
+        "minimum_coverage_ratio": 0.95,
+        "maximum_gap_minutes": 30,
+        "evidence_retention_days": 45
       },
-      "note": "Workflow implementation is not equivalent to measured 30-day SLO evidence. This gate remains closed until observation and alert-delivery evidence exist."
+      "note": "Implementation is active but the gate remains NOT_YET_CERTIFIED until 30 complete UTC days contain sufficient scheduled first-attempt samples, SLO/error-budget and p95 latency objectives pass, multi-window burn evaluation is complete with no active burn alert, and a fresh attested alert-delivery round trip exists."
     }
   ],
   "security_controls": {
@@ -550,11 +559,21 @@
       ]
     },
     "measurement_implementation": {
-      "workflow": ".github/workflows/site-slo-evidence.yml",
-      "cadence": "hourly",
-      "evidence_retention_days": 35,
-      "alert_delivery": "GitHub issue on synthetic failure or explicit alert-path test",
-      "production_gate": "SLO_ERROR_BUDGET_ALERTING"
+      "probe_workflow": ".github/workflows/site-slo-evidence.yml",
+      "cadence": "10 minutes",
+      "raw_evidence_retention_days": 35,
+      "daily_rollup_workflow": ".github/workflows/site-slo-daily-rollup.yml",
+      "daily_rollup_retention_days": 45,
+      "certifier_workflow": ".github/workflows/site-slo-certifier.yml",
+      "alert_delivery_test": ".github/workflows/slo-alert-path-test.yml",
+      "alert_delivery": "GitHub issue for failed first-attempt synthetic; weekly create/read/comment/close alert-path proof",
+      "production_gate": "SLO_ERROR_BUDGET_ALERTING",
+      "anti_gaming": [
+        "only schedule-event first-attempt samples count toward certification",
+        "push and manual samples cannot inflate coverage",
+        "missing monitor observations fail coverage rather than count healthy",
+        "transport retries are excluded from the measured SLI"
+      ]
     }
   },
   "data_governance": {
