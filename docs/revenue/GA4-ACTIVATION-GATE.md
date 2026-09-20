@@ -18,6 +18,17 @@ If no suitable property exists and the connected account has Editor-or-higher ac
 
 The Measurement ID has now been confirmed from the GA4 installation instructions supplied by the account owner: `G-K60SQ2ZHL9`. The loader remains disabled until consent/CSP and Realtime/DebugView validation are complete.
 
+## Verified GA4 identifier hierarchy
+
+The identifiers are intentionally different because they refer to different GA4 resource levels:
+
+- Windsor GA4 property selector / GA4 Property ID: `555066228` (**Jadel Tech RD**)
+- Web Stream ID: `15812262707`
+- Measurement ID: `G-K60SQ2ZHL9`
+- Google Analytics Account ID: not independently verified yet
+
+Google models a web stream as `properties/{property_id}/dataStreams/{stream_id}`, so Property ID and Stream ID must not be treated as interchangeable. Windsor's GA4 connector uses the selected property's ID in its `accounts` selector; a live test accepted `555066228` and rejected `15812262707` as an unavailable account/property selector.
+
 ## Privacy-by-default
 
 `ga4-loader.js` does not load Google's remote tag until both conditions are true:

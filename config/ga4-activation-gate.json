@@ -13,7 +13,7 @@
   "google_analytics": {
     "account_confirmed": true,
     "property_confirmed": true,
-    "property_id": null,
+    "property_id": "555066228",
     "web_stream_confirmed": true,
     "stream_id": "15812262707",
     "measurement_id": "G-K60SQ2ZHL9",
@@ -22,7 +22,12 @@
     "realtime_verified": false,
     "debugview_verified": false,
     "windsor_read_connection_confirmed": true,
-    "stream_id_source": "User-provided GA4 Web Stream Details screenshot, 2026-09-20"
+    "stream_id_source": "User-provided GA4 Web Stream Details screenshot, 2026-09-20",
+    "property_id_source": "Windsor.ai googleanalytics4 configured property selector, verified live on 2026-09-20",
+    "analytics_account_id": null,
+    "analytics_account_id_source": "Not yet independently verified",
+    "windsor_property_selector_id": "555066228",
+    "id_hierarchy_verified": true
   },
   "privacy": {
     "default_analytics_storage": "denied",
