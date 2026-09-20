@@ -123,13 +123,20 @@ jobs:
           grep -Fq 'READ_ONLY_RECOVERY_CHECK' .github/workflows/d1-recovery-drill-readiness.yml
           grep -Fq 'test "$DRILL_DATABASE_NAME" != "jadel-commercial-runtime"' .github/workflows/d1-recovery-drill-readiness.yml
           ! grep -Eq 'd1[[:space:]]+time-travel[[:space:]]+restore' .github/workflows/d1-recovery-drill-readiness.yml
+          grep -Fq 'name: d1-recovery-drill' .github/workflows/provision-d1-recovery-drill.yml
+          grep -Fq 'CLOUDFLARE_D1_API_TOKEN' .github/workflows/provision-d1-recovery-drill.yml
+          grep -Fq 'D1_RECOVERY_DRILL_ENV_READY' .github/workflows/provision-d1-recovery-drill.yml
           grep -Fq 'jadel-commercial-runtime-recovery-drill' .github/workflows/provision-d1-recovery-drill.yml
           grep -Fq '/d1/database' .github/workflows/provision-d1-recovery-drill.yml
           grep -Fq '/time_travel/bookmark' .github/workflows/provision-d1-recovery-drill.yml
           grep -Fq 'D1_STAGE_A=PASS' .github/workflows/provision-d1-recovery-drill.yml
           grep -Fq 'D1_STAGE_A_ATTESTATION_VERIFY=PASS' .github/workflows/provision-d1-recovery-drill.yml
           ! grep -Eq '/time_travel/restore|DELETE.*d1/database' .github/workflows/provision-d1-recovery-drill.yml
+          grep -Fq 'CLOUDFLARE_D1_API_TOKEN' .github/workflows/d1-recovery-drill-readiness.yml
+          grep -Fq 'D1_RECOVERY_DRILL_ENV_READY' .github/workflows/d1-recovery-drill-readiness.yml
           grep -Fq 'DESTROY_RECOVERY_DRILL_ONLY' .github/workflows/d1-recovery-drill-execute.yml
+          grep -Fq 'CLOUDFLARE_D1_API_TOKEN' .github/workflows/d1-recovery-drill-execute.yml
+          grep -Fq 'D1_RECOVERY_DRILL_ENV_READY' .github/workflows/d1-recovery-drill-execute.yml
           grep -Fq 'environment:' .github/workflows/d1-recovery-drill-execute.yml
           grep -Fq 'name: d1-recovery-drill' .github/workflows/d1-recovery-drill-execute.yml
           grep -Fq 'ALLOW_D1_RECOVERY_DRILL' .github/workflows/d1-recovery-drill-execute.yml
