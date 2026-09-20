@@ -15,13 +15,14 @@
     "property_confirmed": true,
     "property_id": null,
     "web_stream_confirmed": true,
-    "stream_id": null,
+    "stream_id": "15812262707",
     "measurement_id": "G-K60SQ2ZHL9",
     "measurement_id_source": "User-provided GA4 installation instructions screenshot, 2026-09-20",
     "editor_access_confirmed": false,
     "realtime_verified": false,
     "debugview_verified": false,
-    "windsor_read_connection_confirmed": true
+    "windsor_read_connection_confirmed": true,
+    "stream_id_source": "User-provided GA4 Web Stream Details screenshot, 2026-09-20"
   },
   "privacy": {
     "default_analytics_storage": "denied",
@@ -42,7 +43,8 @@
       "turnstile_token",
       "idempotency_key"
     ],
-    "csp_validated": true
+    "csp_validated": true,
+    "csp_profile": "GA4_NO_ADS_CURRENT_GOOGLE_MINIMUM"
   },
   "event_contract": {
     "browser_allowlist": [
