@@ -117,3 +117,27 @@ The provisioning workflow intentionally contains no Time Travel restore endpoint
 All D1 recovery workflows are bound to the dedicated environment `d1-recovery-drill`. A protected GitHub environment must be created/updated by an identity with repository `Administration: write`; the ordinary workflow `GITHUB_TOKEN` cannot self-grant that authority, and the current ChatGPT GitHub connector does not expose environment-administration writes.
 
 This is a deliberate human/admin boundary. The workflows also require `D1_RECOVERY_DRILL_ENV_READY=true`; Stage B further requires `ALLOW_D1_RECOVERY_DRILL=true`, the exact recovery database name/id, environment approval and explicit destructive confirmation.
+
+
+## Certified Stage B evidence — 2026-09-20
+
+The destructive restore drill was executed only against the dedicated recovery target:
+
+- database: `jadel-commercial-runtime-recovery-drill`
+- database UUID: `a23852a8-7cf0-409a-a9cc-6eb317c55a11`
+- workflow run: `35487635556`
+- job: `106016824689`
+- source SHA: `075c5288f022e9f4ba3d938da465fcbaacc149af`
+- evidence artifact: `10598422044`
+- evidence digest: `sha256:e591b70d9b72322a2fbf81e290e5218ce44db3d1aa66953993a5c48e4898884b`
+- measured restore RTO: `1175 ms`
+- recovery-point age at restore: `1 s`
+- undo bookmark: captured
+- post-restore data correctness: PASS
+- Stage B evidence attestation verification: PASS
+- production database touched: false
+- persistent `ALLOW_D1_RECOVERY_DRILL`: false before and after the drill
+
+The one-shot authorization existed only inside the workflow job and was removed after certification. The one-shot workflow itself is removed in the cleanup change so it cannot be reused accidentally.
+
+`RESTORE_ROLLBACK_DRILL=PASS` is valid for the evidence freshness window defined by the site readiness manifest. It does not by itself authorize production; the SLO/error-budget gate and independent institutional domains remain separate.
