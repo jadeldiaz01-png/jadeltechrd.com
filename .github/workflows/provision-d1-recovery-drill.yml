@@ -19,15 +19,13 @@ concurrency:
 jobs:
   provision-and-stage-a:
     environment:
-      name: jadeltechrd
+      name: d1-recovery-drill
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     env:
-      DOMAIN: jadeltechrd.com
-      TOKEN_CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      TOKEN_CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-      TOKEN_CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
-      TOKEN_CF_TOKEN: ${{ secrets.CF_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      D1_RECOVERY_DRILL_ENV_READY: ${{ vars.D1_RECOVERY_DRILL_ENV_READY }}
       TARGET_DATABASE_NAME: jadel-commercial-runtime-recovery-drill
 
     steps:
@@ -37,117 +35,68 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Select D1-capable Cloudflare credential and provision target
+      - name: Verify protected recovery environment and provision target
         id: provision
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p evidence
 
-          selected_token=""
-          selected_account=""
-          selected_alias=""
-          selected_database_id=""
-          selected_action=""
+          test "$D1_RECOVERY_DRILL_ENV_READY" = "true"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          echo "::add-mask::$CLOUDFLARE_API_TOKEN"
+          echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
 
-          aliases=(CLOUDFLARE_API_TOKEN CF_API_TOKEN CLOUDFLARE_TOKEN CF_TOKEN)
+          list_tmp=$(mktemp)
+          list_code=$(curl -sS -o "$list_tmp" -w '%{http_code}' --get             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             --data-urlencode "name=$TARGET_DATABASE_NAME"             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database" || true)
 
-          for alias in "${aliases[@]}"; do
-            env_name="TOKEN_${alias}"
-            raw="${!env_name:-}"
-            [ -n "$raw" ] || continue
-
-            token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
-            if [[ "$token" == \"*\" && "$token" == *\" ]]; then
-              token="${token:1:${#token}-2}"
-            elif [[ "$token" == \'*\' && "$token" == *\' ]]; then
-              token="${token:1:${#token}-2}"
-            fi
-            [ -n "$token" ] || continue
-            echo "::add-mask::$token"
-
-            zone_tmp=$(mktemp)
-            zone_code=$(curl -sS -o "$zone_tmp" -w '%{http_code}'               -H "Authorization: Bearer $token"               "https://api.cloudflare.com/client/v4/zones?name=$DOMAIN&status=active&per_page=50" || true)
-
-            if [ "$zone_code" != "200" ]; then
-              echo "CLOUDFLARE_CANDIDATE alias=$alias zone_http=$zone_code d1_http=not_checked"
-              continue
-            fi
-
-            account_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .account.id // empty' "$zone_tmp" | head -n1)
-            if [ -z "$account_id" ]; then
-              echo "CLOUDFLARE_CANDIDATE alias=$alias zone_http=200 account_context=missing"
-              continue
-            fi
-            echo "::add-mask::$account_id"
-
-            list_tmp=$(mktemp)
-            list_code=$(curl -sS -o "$list_tmp" -w '%{http_code}' --get               -H "Authorization: Bearer $token"               --data-urlencode "name=$TARGET_DATABASE_NAME"               "https://api.cloudflare.com/client/v4/accounts/$account_id/d1/database" || true)
-
-            if [ "$list_code" != "200" ] || [ "$(jq -r '.success // false' "$list_tmp" 2>/dev/null || echo false)" != "true" ]; then
-              echo "CLOUDFLARE_CANDIDATE alias=$alias zone_http=200 d1_list_http=$list_code"
-              continue
-            fi
-
-            count=$(jq '.result | length' "$list_tmp")
-            if [ "$count" -gt 1 ]; then
-              echo "Multiple D1 databases unexpectedly matched the exact recovery-drill name." >&2
-              exit 1
-            fi
-
-            if [ "$count" -eq 1 ]; then
-              database_id=$(jq -r '.result[0].uuid // empty' "$list_tmp")
-              action=existing
-              cp "$list_tmp" evidence/database-list.json
-            else
-              request=$(jq -n --arg name "$TARGET_DATABASE_NAME" '{name:$name}')
-              create_tmp=$(mktemp)
-              create_code=$(curl -sS -o "$create_tmp" -w '%{http_code}'                 -X POST                 -H "Authorization: Bearer $token"                 -H "Content-Type: application/json"                 --data "$request"                 "https://api.cloudflare.com/client/v4/accounts/$account_id/d1/database" || true)
-
-              if [ "$create_code" != "200" ] || [ "$(jq -r '.success // false' "$create_tmp" 2>/dev/null || echo false)" != "true" ]; then
-                echo "CLOUDFLARE_CANDIDATE alias=$alias zone_http=200 d1_list_http=200 d1_create_http=$create_code"
-                continue
-              fi
-
-              database_id=$(jq -r '.result.uuid // empty' "$create_tmp")
-              action=created
-              cp "$list_tmp" evidence/database-list.json
-              cp "$create_tmp" evidence/database-create.json
-            fi
-
-            case "$database_id" in
-              ????????-????-????-????-????????????) ;;
-              *)
-                echo "Cloudflare did not return a UUID-shaped D1 database id." >&2
-                exit 1
-                ;;
-            esac
-
-            selected_token="$token"
-            selected_account="$account_id"
-            selected_alias="$alias"
-            selected_database_id="$database_id"
-            selected_action="$action"
-            break
-          done
-
-          if [ -z "$selected_token" ]; then
-            echo "D1_CAPABLE_CLOUDFLARE_TOKEN=NO" >&2
-            echo "Required Cloudflare permission: D1 Write for the account containing $DOMAIN." >&2
+          if [ "$list_code" != "200" ] || [ "$(jq -r '.success // false' "$list_tmp" 2>/dev/null || echo false)" != "true" ]; then
+            echo "D1_LIST_AUTHORIZATION=FAIL http=$list_code" >&2
+            echo "Required Cloudflare permission: Account > D1 Write for the selected account." >&2
             exit 7
           fi
 
-          echo "::add-mask::$selected_token"
-          echo "::add-mask::$selected_account"
-          printf 'CLOUDFLARE_API_TOKEN=%s\n' "$selected_token" >> "$GITHUB_ENV"
-          printf 'CLOUDFLARE_ACCOUNT_ID=%s\n' "$selected_account" >> "$GITHUB_ENV"
-          printf '%s\n' "$selected_database_id" > /tmp/d1-database-id.txt
-          printf '%s\n' "$selected_action" > /tmp/d1-provision-action.txt
+          cp "$list_tmp" evidence/database-list.json
+          count=$(jq '.result | length' "$list_tmp")
+          if [ "$count" -gt 1 ]; then
+            echo "Multiple D1 databases unexpectedly matched the exact recovery-drill name." >&2
+            exit 1
+          fi
 
-          echo "database_id=$selected_database_id" >> "$GITHUB_OUTPUT"
-          echo "provision_action=$selected_action" >> "$GITHUB_OUTPUT"
-          echo "D1_CAPABLE_CLOUDFLARE_TOKEN=PASS alias=$selected_alias"
-          echo "D1_RECOVERY_DATABASE_PROVISIONED=PASS action=$selected_action name=$TARGET_DATABASE_NAME"
+          if [ "$count" -eq 1 ]; then
+            database_id=$(jq -r '.result[0].uuid // empty' "$list_tmp")
+            action=existing
+          else
+            request=$(jq -n --arg name "$TARGET_DATABASE_NAME" '{name:$name}')
+            create_tmp=$(mktemp)
+            create_code=$(curl -sS -o "$create_tmp" -w '%{http_code}'               -X POST               -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"               -H "Content-Type: application/json"               --data "$request"               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database" || true)
+
+            if [ "$create_code" != "200" ] || [ "$(jq -r '.success // false' "$create_tmp" 2>/dev/null || echo false)" != "true" ]; then
+              echo "D1_CREATE_AUTHORIZATION=FAIL http=$create_code" >&2
+              echo "Required Cloudflare permission: Account > D1 Write for the selected account." >&2
+              exit 8
+            fi
+
+            cp "$create_tmp" evidence/database-create.json
+            database_id=$(jq -r '.result.uuid // empty' "$create_tmp")
+            action=created
+          fi
+
+          case "$database_id" in
+            ????????-????-????-????-????????????) ;;
+            *)
+              echo "Cloudflare did not return a UUID-shaped D1 database id." >&2
+              exit 1
+              ;;
+          esac
+
+          printf '%s\n' "$database_id" > /tmp/d1-database-id.txt
+          printf '%s\n' "$action" > /tmp/d1-provision-action.txt
+          echo "database_id=$database_id" >> "$GITHUB_OUTPUT"
+          echo "provision_action=$action" >> "$GITHUB_OUTPUT"
+          echo "D1_DEDICATED_ENVIRONMENT=PASS"
+          echo "D1_RECOVERY_DATABASE_PROVISIONED=PASS action=$action name=$TARGET_DATABASE_NAME"
 
       - name: Verify exact D1 identity and production backend
         shell: bash
