@@ -188,8 +188,7 @@ async function callStructuredResponse({ env, input, schema, schemaName, maxOutpu
   const headers = {
     "authorization": `Bearer ${env.AI_RUNTIME_TOKEN}`,
     "content-type": "application/json",
-    "cf-aig-gateway-id": String(env.AI_GATEWAY_ID),
-    "cf-aig-no-wholesale": "false"
+    "cf-aig-gateway-id": String(env.AI_GATEWAY_ID)
   };
   const body = {
     model: String(env.AI_MODEL),
