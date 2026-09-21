@@ -146,7 +146,7 @@ jobs:
           auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
           schema=$(curl --fail-with-body -sS -X POST "${auth[@]}"             "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${DATABASE_ID}/query"             --data '{"sql":"SELECT name FROM sqlite_master WHERE type=\"table\" ORDER BY name"}')
           test "$(jq -r '.success' <<<"$schema")" = true
-          for table in project_requests evidence_events dispatch_outbox payment_events payment_ledger approval_events lead_lifecycle_events revenue_intelligence_snapshots revenue_action_proposals; do
+          for table in project_requests evidence_events dispatch_outbox payment_events payment_ledger approval_events lead_lifecycle_events revenue_intelligence_snapshots revenue_action_proposals settlement_events ai_model_runs ai_recommendation_feedback; do
             jq -e --arg t "$table" '[.result[].results[]?.name] | index($t) != null' <<<"$schema" >/dev/null || {
               echo "D1_SCHEMA_${table}=MISSING" >&2
               exit 50
@@ -353,6 +353,15 @@ jobs:
           revenue_code=$(curl -sS -o /tmp/revenue.json -w '%{http_code}'             "https://${API_HOST}/api/v1/admin/revenue-intelligence")
           test "$revenue_code" = 401 || { echo "REVENUE_INTELLIGENCE_ROUTE_CANARY=FAIL_HTTP_${revenue_code}" >&2; cat /tmp/revenue.json >&2; exit 53; }
           echo 'REVENUE_INTELLIGENCE_ROUTE_CANARY=PASS'
+
+          for ai_path in /api/v1/admin/revenue-intelligence/analyze /api/v1/admin/multimodal-qc /api/v1/admin/model-runs; do
+            method=GET
+            [ "$ai_path" = "/api/v1/admin/revenue-intelligence/analyze" ] && method=POST
+            [ "$ai_path" = "/api/v1/admin/multimodal-qc" ] && method=POST
+            ai_code=$(curl -sS -o /tmp/ai-admin.json -w '%{http_code}' -X "$method" -H 'content-type: application/json' --data '{}' "https://${API_HOST}${ai_path}")
+            test "$ai_code" = 401 || { echo "AI_ADMIN_ROUTE_CANARY=FAIL path=${ai_path} http=${ai_code}" >&2; cat /tmp/ai-admin.json >&2; exit 53; }
+          done
+          echo 'AI_ADMIN_ROUTES_AUTH_GATE=PASS'
 
           paypal_code=$(curl -sS -o /tmp/paypal.json -w '%{http_code}'             -X POST -H 'content-type: application/json' --data '{}'             "https://${API_HOST}/api/v1/paypal/webhooks")
           if [ "$paypal_code" = 403 ]; then
