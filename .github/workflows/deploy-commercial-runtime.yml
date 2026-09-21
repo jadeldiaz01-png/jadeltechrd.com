@@ -20,17 +20,17 @@ env:
   WRANGLER_VERSION: 4.127.1
 
 jobs:
-  deploy:
+  prepare-production-d1:
     environment:
-      name: jadeltechrd
+      name: d1-recovery-drill
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
+    outputs:
+      account_id: ${{ steps.d1.outputs.account_id }}
+      database_id: ${{ steps.d1.outputs.database_id }}
     env:
-      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
-      PAYPAL_CLIENT_ID_RAW: ${{ secrets.PAYPAL_CLIENT_ID }}
-      PAYPAL_CLIENT_SECRET_RAW: ${{ secrets.PAYPAL_CLIENT_SECRET }}
-      PAYPAL_WEBHOOK_ID_RAW: ${{ secrets.PAYPAL_WEBHOOK_ID }}
-      ADMIN_API_TOKEN_RAW: ${{ secrets.ADMIN_API_TOKEN }}
+      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - name: Checkout immutable source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -42,17 +42,146 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Normalize Cloudflare credential
+      - name: Normalize and verify dedicated D1 credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_D1_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then token="${token:1:${#token}-2}"; fi
+          if [[ "$token" == \'*\' && "$token" == *\' ]]; then token="${token:1:${#token}-2}"; fi
+          account_id=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          test -n "$token" || { echo 'CLOUDFLARE_D1_TOKEN_PRESENT=NO' >&2; exit 2; }
+          test -n "$account_id" || { echo 'CLOUDFLARE_ACCOUNT_ID_PRESENT=NO' >&2; exit 2; }
+          case "$token" in
+            cfat_*) ;;
+            *) echo 'CLOUDFLARE_D1_TOKEN_FAMILY=FAIL expected=account_token' >&2; exit 2 ;;
+          esac
+          echo "::add-mask::$token"
+          echo "::add-mask::$account_id"
+          verify=$(curl --fail-with-body -sS -H "Authorization: Bearer $token"             "https://api.cloudflare.com/client/v4/accounts/$account_id/tokens/verify")
+          test "$(jq -r '.success' <<<"$verify")" = true
+          test "$(jq -r '.result.status' <<<"$verify")" = active
+          printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          printf 'CLOUDFLARE_ACCOUNT_ID=%s\n' "$account_id" >> "$GITHUB_ENV"
+          echo 'CLOUDFLARE_D1_TOKEN_VERIFY=PASS'
+
+      - name: Resolve existing production D1 fail-closed
+        id: d1
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          tmp=$(mktemp)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}"             "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database?name=${D1_NAME}&per_page=100" || true)
+          if [ "$code" != 200 ]; then
+            echo "D1_ACCESS=FAIL_HTTP_${code}" >&2
+            jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' "$tmp" >&2 || true
+            exit 10
+          fi
+          test "$(jq -r '.success' "$tmp")" = true
+          matches=$(jq -r --arg n "$D1_NAME" '[.result[] | select(.name==$n)] | length' "$tmp")
+          if [ "$matches" != 1 ]; then
+            echo "PRODUCTION_D1_IDENTITY=FAIL expected_exactly_one actual=${matches}" >&2
+            exit 20
+          fi
+          database_id=$(jq -r --arg n "$D1_NAME" '.result[] | select(.name==$n) | .uuid' "$tmp")
+          test -n "$database_id" && test "$database_id" != null
+          echo "::add-mask::$database_id"
+          echo "account_id=$CLOUDFLARE_ACCOUNT_ID" >> "$GITHUB_OUTPUT"
+          echo "database_id=$database_id" >> "$GITHUB_OUTPUT"
+          echo 'PRODUCTION_D1_IDENTITY=PASS'
+
+      - name: Generate D1 migration configuration
+        shell: bash
+        env:
+          DATABASE_ID: ${{ steps.d1.outputs.database_id }}
+        run: |
+          set -euo pipefail
+          jq -n --arg db "$DATABASE_ID" '{
+            "$schema":"./node_modules/wrangler/config-schema.json",
+            name:"jadel-commercial-runtime-d1-migrations",
+            compatibility_date:"2026-08-31",
+            d1_databases:[{
+              binding:"DB",
+              database_name:"jadel-commercial-runtime",
+              database_id:$db,
+              migrations_dir:"migrations"
+            }]
+          }' > commercial-runtime/wrangler.d1.jsonc
+          jq -e '.d1_databases[0].database_id | length > 10' commercial-runtime/wrangler.d1.jsonc >/dev/null
+          echo 'D1_MIGRATION_CONFIG=PASS'
+
+      - name: Install pinned Wrangler
+        shell: bash
+        working-directory: commercial-runtime
+        run: |
+          set -euo pipefail
+          npm install --no-save --ignore-scripts "wrangler@${WRANGLER_VERSION}"
+          actual=$(npx wrangler --version | tr -d '\r\n[:space:]')
+          test "$actual" = "$WRANGLER_VERSION" || { echo "WRANGLER_VERSION_MISMATCH expected=$WRANGLER_VERSION actual=$actual" >&2; exit 40; }
+          echo "WRANGLER_VERSION=PASS version=${actual}"
+
+      - name: Apply additive D1 migrations
+        shell: bash
+        working-directory: commercial-runtime
+        run: |
+          set -euo pipefail
+          npx wrangler d1 migrations apply "$D1_NAME" --remote --config wrangler.d1.jsonc
+          echo 'D1_MIGRATIONS=PASS'
+
+      - name: Verify production D1 schema
+        shell: bash
+        env:
+          DATABASE_ID: ${{ steps.d1.outputs.database_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          schema=$(curl --fail-with-body -sS -X POST "${auth[@]}"             "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${DATABASE_ID}/query"             --data '{"sql":"SELECT name FROM sqlite_master WHERE type=\"table\" ORDER BY name"}')
+          test "$(jq -r '.success' <<<"$schema")" = true
+          for table in project_requests evidence_events dispatch_outbox payment_events payment_ledger approval_events lead_lifecycle_events revenue_intelligence_snapshots revenue_action_proposals; do
+            jq -e --arg t "$table" '[.result[].results[]?.name] | index($t) != null' <<<"$schema" >/dev/null || {
+              echo "D1_SCHEMA_${table}=MISSING" >&2
+              exit 50
+            }
+          done
+          columns=$(curl --fail-with-body -sS -X POST "${auth[@]}"             "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${DATABASE_ID}/query"             --data '{"sql":"PRAGMA table_info(project_requests)"}')
+          jq -e '[.result[].results[]?.name] | index("request_fingerprint") != null' <<<"$columns" >/dev/null
+          echo 'D1_SCHEMA=PASS'
+
+  deploy-worker:
+    needs: prepare-production-d1
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+      PAYPAL_CLIENT_ID_RAW: ${{ secrets.PAYPAL_CLIENT_ID }}
+      PAYPAL_CLIENT_SECRET_RAW: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      PAYPAL_WEBHOOK_ID_RAW: ${{ secrets.PAYPAL_WEBHOOK_ID }}
+      ADMIN_API_TOKEN_RAW: ${{ secrets.ADMIN_API_TOKEN }}
+      D1_ACCOUNT_ID: ${{ needs.prepare-production-d1.outputs.account_id }}
+      D1_DATABASE_ID: ${{ needs.prepare-production-d1.outputs.database_id }}
+    steps:
+      - name: Checkout immutable source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Use Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Normalize Cloudflare Worker credential
         shell: bash
         run: |
           set -euo pipefail
           raw="${CLOUDFLARE_API_TOKEN_RAW:-}"
           token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
           if [[ "$token" == \"*\" && "$token" == *\" ]]; then token="${token:1:${#token}-2}"; fi
-          if [ -z "$token" ]; then
-            echo 'CLOUDFLARE_TOKEN_PRESENT=NO' >&2
-            exit 2
-          fi
+          test -n "$token" || { echo 'CLOUDFLARE_WORKER_TOKEN_PRESENT=NO' >&2; exit 2; }
           echo "::add-mask::$token"
           printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
 
@@ -80,7 +209,7 @@ jobs:
           normalize_optional_secret ADMIN_API_TOKEN "${ADMIN_API_TOKEN_RAW:-}"
           echo 'OPTIONAL_GITHUB_RUNTIME_SECRETS_NORMALIZED=PASS'
 
-      - name: Resolve account and verify required permissions
+      - name: Resolve account and verify Worker/Turnstile permissions
         id: cloudflare
         shell: bash
         run: |
@@ -92,9 +221,11 @@ jobs:
           account_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .account.id' <<<"$zones" | head -n1)
           test -n "$zone_id" && test "$zone_id" != null
           test -n "$account_id" && test "$account_id" != null
+          test "$account_id" = "$D1_ACCOUNT_ID" || { echo 'CLOUDFLARE_ACCOUNT_MISMATCH=FAIL' >&2; exit 9; }
+          echo "::add-mask::$account_id"
           echo "account_id=$account_id" >> "$GITHUB_OUTPUT"
           echo "zone_id=$zone_id" >> "$GITHUB_OUTPUT"
-          echo "CLOUDFLARE_ZONE_READ=PASS"
+          echo 'CLOUDFLARE_ACCOUNT_BINDING=PASS'
 
           check_api() {
             local name="$1" url="$2" tmp code
@@ -109,10 +240,9 @@ jobs:
             echo "${name}=PASS"
           }
 
-          check_api D1_ACCESS "https://api.cloudflare.com/client/v4/accounts/${account_id}/d1/database?per_page=1"
           check_api TURNSTILE_ACCESS "https://api.cloudflare.com/client/v4/accounts/${account_id}/challenges/widgets?per_page=1"
           check_api WORKERS_SCRIPTS_ACCESS "https://api.cloudflare.com/client/v4/accounts/${account_id}/workers/scripts"
-          echo "CLOUDFLARE_DEPLOY_PREFLIGHT=PASS"
+          echo 'CLOUDFLARE_WORKER_DEPLOY_PREFLIGHT=PASS'
 
       - name: Verify required Worker secrets exist or are supplied
         shell: bash
@@ -122,8 +252,7 @@ jobs:
           set -euo pipefail
           auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
           tmp=$(mktemp)
-          code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/secrets" || true)
-
+          code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}"             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/secrets" || true)
           if [ "$code" = 200 ]; then
             test "$(jq -r '.success' "$tmp")" = true
           elif [ "$code" = 404 ]; then
@@ -154,29 +283,6 @@ jobs:
           require_secret ADMIN_API_TOKEN "${HAS_ADMIN_API_TOKEN:-false}"
           echo 'WORKER_SECRET_PREFLIGHT=PASS'
 
-      - name: Reconcile D1 database without destructive actions
-        id: d1
-        shell: bash
-        env:
-          ACCOUNT_ID: ${{ steps.cloudflare.outputs.account_id }}
-        run: |
-          set -euo pipefail
-          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
-          listed=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/d1/database?name=${D1_NAME}&per_page=100")
-          matches=$(jq -r --arg n "$D1_NAME" '[.result[] | select(.name==$n)] | length' <<<"$listed")
-          if [ "$matches" -gt 1 ]; then echo 'D1_DUPLICATE_NAME=FAIL_CLOSED' >&2; exit 20; fi
-          if [ "$matches" -eq 1 ]; then
-            database_id=$(jq -r --arg n "$D1_NAME" '.result[] | select(.name==$n) | .uuid' <<<"$listed")
-            echo 'D1_DATABASE=REUSED'
-          else
-            created=$(curl --fail-with-body -sS -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/d1/database" --data "$(jq -nc --arg name "$D1_NAME" '{name:$name}')")
-            test "$(jq -r '.success' <<<"$created")" = true
-            database_id=$(jq -r '.result.uuid' <<<"$created")
-            echo 'D1_DATABASE=CREATED'
-          fi
-          test -n "$database_id" && test "$database_id" != null
-          echo "database_id=$database_id" >> "$GITHUB_OUTPUT"
-
       - name: Reconcile Turnstile widget
         id: turnstile
         shell: bash
@@ -189,12 +295,12 @@ jobs:
           matches=$(jq -r --arg n "$TURNSTILE_NAME" '[.result[] | select(.name==$n)] | length' <<<"$widgets")
           if [ "$matches" -gt 1 ]; then echo 'TURNSTILE_DUPLICATE_NAME=FAIL_CLOSED' >&2; exit 30; fi
           if [ "$matches" -eq 0 ]; then
-            widget=$(curl --fail-with-body -sS -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/challenges/widgets" --data "$(jq -nc --arg n "$TURNSTILE_NAME" --arg d "$DOMAIN" '{name:$n,domains:[$d],mode:"managed"}')")
+            widget=$(curl --fail-with-body -sS -X POST "${auth[@]}"               "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/challenges/widgets"               --data "$(jq -nc --arg n "$TURNSTILE_NAME" --arg d "$DOMAIN" '{name:$n,domains:[$d],mode:"managed"}')")
             test "$(jq -r '.success' <<<"$widget")" = true
             echo 'TURNSTILE_WIDGET=CREATED'
           else
             sitekey=$(jq -r --arg n "$TURNSTILE_NAME" '.result[] | select(.name==$n) | .sitekey' <<<"$widgets")
-            widget=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/challenges/widgets/${sitekey}")
+            widget=$(curl --fail-with-body -sS "${auth[@]}"               "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/challenges/widgets/${sitekey}")
             test "$(jq -r '.success' <<<"$widget")" = true
             test "$(jq -r '.result.mode' <<<"$widget")" = managed || { echo 'TURNSTILE_MODE_DRIFT=FAIL_CLOSED' >&2; exit 31; }
             jq -e --arg d "$DOMAIN" '.result.domains | index($d) != null' <<<"$widget" >/dev/null || { echo 'TURNSTILE_DOMAIN_DRIFT=FAIL_CLOSED' >&2; exit 32; }
@@ -212,7 +318,7 @@ jobs:
       - name: Generate deployment configuration
         shell: bash
         env:
-          DATABASE_ID: ${{ steps.d1.outputs.database_id }}
+          DATABASE_ID: ${{ needs.prepare-production-d1.outputs.database_id }}
           TURNSTILE_SITEKEY: ${{ steps.turnstile.outputs.sitekey }}
         run: |
           set -euo pipefail
@@ -244,16 +350,6 @@ jobs:
           test "$actual" = "$WRANGLER_VERSION" || { echo "WRANGLER_VERSION_MISMATCH expected=$WRANGLER_VERSION actual=$actual" >&2; exit 40; }
           echo "WRANGLER_VERSION=PASS version=${actual}"
 
-      - name: Apply D1 migrations
-        shell: bash
-        working-directory: commercial-runtime
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cloudflare.outputs.account_id }}
-        run: |
-          set -euo pipefail
-          npx wrangler d1 migrations apply "$D1_NAME" --remote --config wrangler.deploy.jsonc
-          echo 'D1_MIGRATIONS=PASS'
-
       - name: Deploy Worker and Workflow
         shell: bash
         working-directory: commercial-runtime
@@ -278,23 +374,10 @@ jobs:
           echo 'WORKER_EXISTING_SECRETS_PRESERVED=PASS'
           echo 'WORKER_WORKFLOW_DEPLOY=PASS'
 
-      - name: Verify D1 schema and public canary
+      - name: Verify public canary
         shell: bash
-        env:
-          ACCOUNT_ID: ${{ steps.cloudflare.outputs.account_id }}
-          DATABASE_ID: ${{ steps.d1.outputs.database_id }}
         run: |
           set -euo pipefail
-          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
-          schema=$(curl --fail-with-body -sS -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/d1/database/${DATABASE_ID}/query" --data '{"sql":"SELECT name FROM sqlite_master WHERE type=\"table\" ORDER BY name"}')
-          test "$(jq -r '.success' <<<"$schema")" = true
-          for table in project_requests evidence_events dispatch_outbox payment_events payment_ledger approval_events lead_lifecycle_events revenue_intelligence_snapshots revenue_action_proposals; do
-            jq -e --arg t "$table" '[.result[].results[]?.name] | index($t) != null' <<<"$schema" >/dev/null || { echo "D1_SCHEMA_${table}=MISSING" >&2; exit 50; }
-          done
-          columns=$(curl --fail-with-body -sS -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/d1/database/${DATABASE_ID}/query" --data '{"sql":"PRAGMA table_info(project_requests)"}')
-          jq -e '[.result[].results[]?.name] | index("request_fingerprint") != null' <<<"$columns" >/dev/null || { echo 'D1_SCHEMA_request_fingerprint=MISSING' >&2; exit 50; }
-          echo 'D1_SCHEMA=PASS'
-
           health_url="https://${API_HOST}/health"
           body=""
           for attempt in $(seq 1 18); do
@@ -310,16 +393,16 @@ jobs:
           echo 'LIVE_HEALTH_CANARY=PASS'
 
           headers=$(mktemp)
-          config=$(curl --fail-with-body -sS -D "$headers" -H 'Origin: https://jadeltechrd.com' "https://${API_HOST}/api/v1/public-config")
+          config=$(curl --fail-with-body -sS -D "$headers" -H 'Origin: https://jadeltechrd.com'             "https://${API_HOST}/api/v1/public-config")
           test "$(jq -r '.turnstile_action' <<<"$config")" = project_request
           test -n "$(jq -r '.turnstile_sitekey' <<<"$config")"
           grep -qi '^access-control-allow-origin: https://jadeltechrd.com' "$headers"
-          bad_code=$(curl -sS -o /tmp/bad-origin.json -w '%{http_code}' -H 'Origin: https://evil.example' "https://${API_HOST}/api/v1/public-config")
+          bad_code=$(curl -sS -o /tmp/bad-origin.json -w '%{http_code}'             -H 'Origin: https://evil.example' "https://${API_HOST}/api/v1/public-config")
           test "$bad_code" = 403
           echo 'PUBLIC_CONFIG_CORS=PASS'
 
           preflight_headers=$(mktemp)
-          preflight_code=$(curl -sS -o /dev/null -D "$preflight_headers" -w '%{http_code}' -X OPTIONS -H 'Origin: https://jadeltechrd.com' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type,idempotency-key' "https://${API_HOST}/api/v1/project-requests")
+          preflight_code=$(curl -sS -o /dev/null -D "$preflight_headers" -w '%{http_code}' -X OPTIONS             -H 'Origin: https://jadeltechrd.com'             -H 'Access-Control-Request-Method: POST'             -H 'Access-Control-Request-Headers: content-type,idempotency-key'             "https://${API_HOST}/api/v1/project-requests")
           test "$preflight_code" = 204
           grep -qi '^access-control-allow-origin: https://jadeltechrd.com' "$preflight_headers"
           echo 'PUBLIC_INTAKE_PREFLIGHT=PASS'
