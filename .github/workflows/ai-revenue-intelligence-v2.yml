@@ -4,35 +4,151 @@ on:
     branches: [main]
     paths:
       - 'config/ai-revenue-intelligence-v2.json'
-      - 'commercial-runtime/src/model-governance.mjs'
-      - 'commercial-runtime/test/model-governance.test.mjs'
+      - 'config/ai-knowledge-index-2026.json'
+      - 'commercial-runtime/**'
+      - 'analytics/bigquery/1*.sql.tmpl'
+      - 'scripts/build-revenue-knowledge-corpus.mjs'
+      - 'revenue-intelligence.html'
+      - 'revenue-command-center.html'
+      - 'revenue-command-center.js'
+      - 'revenue-ai.css'
+      - 'docs/ADR-005-ai-revenue-control-plane-2026.md'
+      - 'docs/revenue/AI-REVENUE-RESEARCH-SOURCES-2026.md'
       - '.github/workflows/ai-revenue-intelligence-v2.yml'
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   contract:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Validate manifest
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Setup Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Validate AI revenue manifest
         run: python - <<'PY'
           import json
           p=json.load(open("config/ai-revenue-intelligence-v2.json"))
           assert p["mode"]=="SHADOW_RECOMMEND_ONLY"
+          assert p["production_authorized"] is False
           assert p["external_side_effects_authorized"] is False
           assert p["financial_execution_authorized"] is False
           assert p["recognized_revenue_state"]=="SETTLED_CASH"
+          assert p["automatic_control"]["state"]=="IMPLEMENTED_DISABLED_BY_DEFAULT"
+          assert p["model_families"]["deep_learning"]["default"]=="OFF"
+          assert p["model_families"]["llm"]["authority"]=="ADVISORY_ONLY"
+          assert p["model_families"]["multimodal"]["authority"]=="HUMAN_PUBLICATION_REVIEW_REQUIRED"
           assert "HUMAN_PRODUCTION_APPROVAL" in p["promotion_gates"]
+          assert "RUNTIME_EVIDENCE_BOUND_TO_EXACT_SHA" in p["promotion_gates"]
           print("AI_REVENUE_MANIFEST=PASS")
           PY
-      - name: Run adversarial governance tests
-        run: node --test commercial-runtime/test/model-governance.test.mjs
-      - name: Reject secret literals
+
+      - name: Validate knowledge policy
+        run: python - <<'PY'
+          import json
+          p=json.load(open("config/ai-knowledge-index-2026.json"))
+          assert p["status"]=="IMPLEMENTED_NOT_INGESTED"
+          assert p["retrieval_filter"]=={"trust":"APPROVED","active":True}
+          assert p["ingestion"]["network_write_default"] is False
+          assert p["security"]["retrieved_text_is_instruction"] is False
+          assert p["security"]["pii_forbidden"] is True
+          print("KNOWLEDGE_POLICY=PASS")
+          PY
+
+      - name: Syntax-check AI runtime and browser console
         run: |
           set -euo pipefail
-          if grep -RIEq 'sk-[A-Za-z0-9_-]{20,}|-----BEGIN (RSA )?PRIVATE KEY-----' config/ai-revenue-intelligence-v2.json commercial-runtime/src/model-governance.mjs; then
+          node --check commercial-runtime/src/ai-revenue-agent.mjs
+          node --check commercial-runtime/src/knowledge-retrieval.mjs
+          node --check commercial-runtime/src/model-governance.mjs
+          node --check commercial-runtime/src/revenue-intelligence.mjs
+          node --check commercial-runtime/src/worker.mjs
+          node --check revenue-command-center.js
+          node --check scripts/build-revenue-knowledge-corpus.mjs
+
+      - name: Run adversarial and contract tests
+        run: node --test commercial-runtime/test/*.test.mjs
+
+      - name: Validate D1 evidence schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f /tmp/jadel-ai-revenue.db
+          for migration in commercial-runtime/migrations/*.sql; do
+            sqlite3 /tmp/jadel-ai-revenue.db < "$migration"
+          done
+          test "$(sqlite3 /tmp/jadel-ai-revenue.db 'PRAGMA integrity_check;')" = "ok"
+          for table in settlement_events ai_model_runs ai_recommendation_feedback; do
+            sqlite3 /tmp/jadel-ai-revenue.db ".schema $table" | grep -q "CREATE TABLE"
+          done
+          sqlite3 /tmp/jadel-ai-revenue.db ".schema settlement_events" | grep -q "evidence_sha256"
+          sqlite3 /tmp/jadel-ai-revenue.db ".schema ai_model_runs" | grep -q "source_sha"
+          echo 'AI_REVENUE_D1_SCHEMA=PASS'
+
+      - name: Build deterministic approved knowledge artifact
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          node scripts/build-revenue-knowledge-corpus.mjs
+          jq -e '.network_write_performed==false and (.vector_count > 0) and (.source_sha|length==40)' evidence/ai-knowledge-corpus.json >/dev/null
+          jq -e '[.records[].metadata.trust] | all(.=="APPROVED")' evidence/ai-knowledge-corpus.json >/dev/null
+          echo 'KNOWLEDGE_ARTIFACT=PASS'
+
+      - name: Validate ML and DL research contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "MODEL_TYPE='LOGISTIC_REG'" analytics/bigquery/11_lead_propensity_models.sql.tmpl
+          grep -Fq "MODEL_TYPE='BOOSTED_TREE_CLASSIFIER'" analytics/bigquery/11_lead_propensity_models.sql.tmpl
+          grep -Fq "ENABLE_GLOBAL_EXPLAIN=TRUE" analytics/bigquery/11_lead_propensity_models.sql.tmpl
+          grep -Fq "MODEL_TYPE='DNN_CLASSIFIER'" analytics/bigquery/13_dnn_research_candidate.sql.tmpl
+          grep -Fq 'DISABLED BY DEFAULT' analytics/bigquery/13_dnn_research_candidate.sql.tmpl
+          grep -Fq "MODEL_TYPE='ARIMA_PLUS'" analytics/bigquery/12_revenue_forecast_arima_plus.sql.tmpl
+          grep -Fq "settled_cash_usd" analytics/bigquery/12_revenue_forecast_arima_plus.sql.tmpl
+          grep -Fq "ML.GLOBAL_EXPLAIN" analytics/bigquery/14_model_explainability.sql.tmpl
+          echo 'AI_REVENUE_MODEL_CONTRACTS=PASS'
+
+      - name: Reject secret and browser-credential literals
+        shell: bash
+        run: |
+          set -euo pipefail
+          targets=(
+            config/ai-revenue-intelligence-v2.json
+            config/ai-knowledge-index-2026.json
+            commercial-runtime/src/ai-revenue-agent.mjs
+            commercial-runtime/src/knowledge-retrieval.mjs
+            revenue-command-center.js
+          )
+          if grep -RIEq 'sk-[A-Za-z0-9_-]{20,}|-----BEGIN (RSA )?PRIVATE KEY-----|cfat_[A-Za-z0-9_-]{20,}' "${targets[@]}"; then
             echo 'SECRET_SCAN=FAIL'; exit 50
           fi
+          ! grep -Eq 'localStorage|sessionStorage' revenue-command-center.js
           echo 'SECRET_SCAN=PASS'
+
+      - name: Assert no autonomous external authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '.external_side_effects_authorized==false and .paid_spend_authorized==false and .financial_execution_authorized==false' config/ai-revenue-intelligence-v2.json >/dev/null
+          grep -Fq 'NO_EXTERNAL_SIDE_EFFECTS' commercial-runtime/src/ai-revenue-agent.mjs
+          grep -Fq 'publication_authorized: false' commercial-runtime/src/ai-revenue-agent.mjs
+          echo 'AUTONOMY_BOUNDARY=PASS'
+
+      - name: Upload non-secret knowledge evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ai-revenue-knowledge-contract-${{ github.sha }}
+          path: evidence/ai-knowledge-corpus.json
+          if-no-files-found: error
+          retention-days: 30
