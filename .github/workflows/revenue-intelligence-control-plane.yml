@@ -1,0 +1,115 @@
+name: Revenue intelligence control plane
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'config/revenue-intelligence-control-plane-2026.json'
+      - 'config/revenue-model-registry-2026.json'
+      - 'config/revenue-agent-spec-2026.json'
+      - 'config/analytics-control-plane-v1.json'
+      - 'scripts/revenue-decision-engine.mjs'
+      - 'scripts/test-revenue-decision-engine.mjs'
+      - 'scripts/validate-revenue-intelligence-control-plane.mjs'
+      - 'analytics/bigquery/1*.sql.tmpl'
+      - 'commercial-runtime/**'
+      - 'docs/revenue/REVENUE-INTELLIGENCE-CONTROL-PLANE-2026.md'
+      - '.github/workflows/revenue-intelligence-control-plane.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'config/revenue-intelligence-control-plane-2026.json'
+      - 'config/revenue-model-registry-2026.json'
+      - 'config/revenue-agent-spec-2026.json'
+      - 'scripts/revenue-decision-engine.mjs'
+      - 'scripts/validate-revenue-intelligence-control-plane.mjs'
+      - 'analytics/bigquery/1*.sql.tmpl'
+      - 'commercial-runtime/**'
+      - '.github/workflows/revenue-intelligence-control-plane.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Setup Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Validate control-plane and model registries
+        run: node scripts/validate-revenue-intelligence-control-plane.mjs
+
+      - name: Test deterministic decision engine
+        run: node --test scripts/test-revenue-decision-engine.mjs commercial-runtime/test/revenue-intelligence.test.mjs commercial-runtime/test/revenue-admin.test.mjs
+
+      - name: Validate runtime syntax
+        run: |
+          node --check commercial-runtime/src/revenue-intelligence.mjs
+          node --check commercial-runtime/src/worker.mjs
+          node --check commercial-runtime/src/telemetry.mjs
+
+      - name: Validate SQL research contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in analytics/bigquery/10_revenue_feature_contract.sql.tmpl analytics/bigquery/11_lead_propensity_models.sql.tmpl analytics/bigquery/12_revenue_forecast_arima_plus.sql.tmpl analytics/bigquery/13_dnn_research_candidate.sql.tmpl; do
+            test -s "$file"
+            grep -Fq '__GCP_PROJECT_ID__' "$file"
+          done
+          grep -Fq "MODEL_TYPE='LOGISTIC_REG'" analytics/bigquery/11_lead_propensity_models.sql.tmpl
+          grep -Fq "MODEL_TYPE='BOOSTED_TREE_CLASSIFIER'" analytics/bigquery/11_lead_propensity_models.sql.tmpl
+          grep -Fq "MODEL_TYPE='ARIMA_PLUS'" analytics/bigquery/12_revenue_forecast_arima_plus.sql.tmpl
+          grep -Fq 'DISABLED BY DEFAULT' analytics/bigquery/13_dnn_research_candidate.sql.tmpl
+          grep -Fq "MODEL_TYPE='DNN_CLASSIFIER'" analytics/bigquery/13_dnn_research_candidate.sql.tmpl
+          ! grep -RIEq '(email|phone|raw_name|turnstile_token|api_secret)[[:space:]]*[,)]' analytics/bigquery/1*.sql.tmpl
+          echo 'REVENUE_INTELLIGENCE_SQL_CONTRACT=PASS'
+
+      - name: Validate D1 schema extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f /tmp/revenue-intelligence.db
+          for migration in commercial-runtime/migrations/*.sql; do
+            sqlite3 /tmp/revenue-intelligence.db < "$migration"
+          done
+          test "$(sqlite3 /tmp/revenue-intelligence.db 'PRAGMA integrity_check;')" = "ok"
+          for table in lead_lifecycle_events revenue_intelligence_snapshots revenue_action_proposals; do
+            sqlite3 /tmp/revenue-intelligence.db ".schema $table" | grep -q "CREATE TABLE"
+          done
+          echo 'REVENUE_INTELLIGENCE_D1_SCHEMA=PASS'
+
+      - name: Emit non-secret validation evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          jq -n             --arg sha "$GITHUB_SHA"             --arg ref "$GITHUB_REF"             --arg observed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"             '{
+              schema:"jadel.revenue_intelligence.validation.v1",
+              subject_sha:$sha,
+              ref:$ref,
+              observed_at:$observed_at,
+              status:"PASS",
+              authority:"RECOMMEND_ONLY",
+              production_authorized:false,
+              autonomous_external_side_effects_authorized:false,
+              max_unapproved_ad_spend_usd:0
+            }' > evidence/revenue-intelligence-validation.json
+          jq -e '.status=="PASS" and .production_authorized==false and .max_unapproved_ad_spend_usd==0' evidence/revenue-intelligence-validation.json >/dev/null
+
+      - name: Upload validation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: revenue-intelligence-validation-${{ github.sha }}
+          path: evidence/revenue-intelligence-validation.json
+          if-no-files-found: error
+          retention-days: 30

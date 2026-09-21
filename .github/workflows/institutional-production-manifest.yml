@@ -6,6 +6,9 @@ on:
       - "config/institutional-production-manifest-2026.json"
       - "config/institutional-production-manifest-2026.schema.json"
       - "config/site-production-readiness-2026.json"
+      - "config/revenue-intelligence-control-plane-2026.json"
+      - "config/revenue-model-registry-2026.json"
+      - "config/revenue-agent-spec-2026.json"
       - "scripts/validate-institutional-production-manifest.mjs"
       - ".github/workflows/institutional-production-manifest.yml"
       - ".github/workflows/commercial-live-smoke.yml"
@@ -29,6 +32,9 @@ on:
       - "config/institutional-production-manifest-2026.json"
       - "config/institutional-production-manifest-2026.schema.json"
       - "config/site-production-readiness-2026.json"
+      - "config/revenue-intelligence-control-plane-2026.json"
+      - "config/revenue-model-registry-2026.json"
+      - "config/revenue-agent-spec-2026.json"
       - "scripts/validate-institutional-production-manifest.mjs"
       - ".github/workflows/institutional-production-manifest.yml"
       - ".github/workflows/pages.yml"
@@ -71,6 +77,9 @@ jobs:
             config/site-production-readiness-2026.json \
             config/agent-production-manifest.json \
             config/agent-production-readiness.json \
+            config/revenue-intelligence-control-plane-2026.json \
+            config/revenue-model-registry-2026.json \
+            config/revenue-agent-spec-2026.json \
             config/slo-policy.json \
             security/api-security-manifest.json; do
             test -s "$path"
@@ -105,6 +114,9 @@ jobs:
           if (m.decision.live_financial_capital_authorized !== false) throw new Error('live capital must remain closed');
           if (m.domain_authorization.quant_and_trading.live_capital_authorized !== false) throw new Error('quant live capital must remain closed');
           if (m.decision.autonomous_external_publication_authorized !== false) throw new Error('autonomous publication must remain closed');
+          if (m.domain_authorization.revenue_intelligence.production_authorized !== false) throw new Error('revenue intelligence production must remain closed');
+          if (m.domain_authorization.revenue_intelligence.autonomous_external_actions_authorized !== false) throw new Error('revenue intelligence external autonomy must remain closed');
+          if (m.domain_authorization.revenue_intelligence.max_unapproved_ad_spend_usd !== 0) throw new Error('revenue intelligence unapproved ad spend must remain zero');
           console.log('INSTITUTIONAL_FAIL_CLOSED=PASS');
           NODE
 

@@ -38,6 +38,7 @@ jobs:
           node --check commercial-runtime/src/validation.mjs
           node --check commercial-runtime/src/worker.mjs
           node --check commercial-runtime/src/project-workflow.mjs
+          node --check commercial-runtime/src/revenue-intelligence.mjs
 
       - name: Run adversarial and contract tests
         run: node --test commercial-runtime/test/*.test.mjs
@@ -53,6 +54,9 @@ jobs:
           sqlite3 /tmp/jadel-commercial.db ".schema payment_events" | grep -q 'provider_event_id'
           sqlite3 /tmp/jadel-commercial.db ".schema payment_ledger" | grep -q 'ledger_state'
           sqlite3 /tmp/jadel-commercial.db ".schema approval_events" | grep -q 'approval_type'
+          sqlite3 /tmp/jadel-commercial.db ".schema lead_lifecycle_events" | grep -q 'stage'
+          sqlite3 /tmp/jadel-commercial.db ".schema revenue_intelligence_snapshots" | grep -q 'authority'
+          sqlite3 /tmp/jadel-commercial.db ".schema revenue_action_proposals" | grep -q 'requires_human'
 
       - name: Validate security manifest
         run: |

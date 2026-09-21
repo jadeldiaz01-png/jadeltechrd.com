@@ -1,4 +1,5 @@
 import { validateIdempotencyKey, validateProjectRequest } from "./validation.mjs";
+import { buildRuntimeRevenueView } from "./revenue-intelligence.mjs";
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_WEBHOOK_BYTES = 64 * 1024;
@@ -396,6 +397,25 @@ export async function handleAdminApprovals(request, env) {
   return json({ approval_id: approvalId, project_id: projectId, state: nextState, policy_status: nextPolicy });
 }
 
+export async function handleAdminRevenueIntelligence(request, env) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+  if (request.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  try {
+    const view = await buildRuntimeRevenueView(env.DB);
+    return json({
+      ...view,
+      generated_at: new Date().toISOString(),
+      authority: "RECOMMEND_ONLY",
+      production_authorized: false,
+    });
+  } catch (error) {
+    console.error("revenue_intelligence_read_failed", { error: String(error?.name || "Error") });
+    return json({ error: "REVENUE_INTELLIGENCE_UNAVAILABLE" }, 503);
+  }
+}
+
 async function dispatchOutbox(env) {
   if (!env.DB || !env.PROJECT_WORKFLOW) return;
   const pending = await env.DB.prepare(
@@ -449,6 +469,9 @@ export default {
     }
     if (url.pathname === "/api/v1/admin/approvals") {
       return handleAdminApprovals(request, env);
+    }
+    if (url.pathname === "/api/v1/admin/revenue-intelligence") {
+      return handleAdminRevenueIntelligence(request, env);
     }
     return json({ error: "NOT_FOUND" }, 404);
   },

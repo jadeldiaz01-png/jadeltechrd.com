@@ -21,7 +21,8 @@ if (manifest.decision?.execution_enabled_by_default !== false) errors.push('exec
 const domains = manifest.domain_authorization ?? {};
 const criticalDomainKeys = [
   'public_site','commercial_intake','agent_fleet',
-  'external_connectors_and_publication','quant_and_trading','social_media_intelligence'
+  'external_connectors_and_publication','quant_and_trading','social_media_intelligence',
+  'revenue_intelligence'
 ];
 for (const key of criticalDomainKeys) {
   if (!domains[key]) errors.push(`missing domain authorization: ${key}`);
@@ -35,6 +36,15 @@ if (manifest.decision?.live_financial_capital_authorized !== false) {
 }
 if (manifest.decision?.autonomous_external_publication_authorized !== false) {
   errors.push('autonomous_external_publication_authorized must remain false in the baseline manifest');
+}
+if (domains.revenue_intelligence?.production_authorized !== false) {
+  errors.push('revenue_intelligence.production_authorized must remain false until its dedicated evidence gates pass');
+}
+if (domains.revenue_intelligence?.autonomous_external_actions_authorized !== false) {
+  errors.push('revenue_intelligence autonomous external actions must remain false');
+}
+if (domains.revenue_intelligence?.max_unapproved_ad_spend_usd !== 0) {
+  errors.push('revenue_intelligence max_unapproved_ad_spend_usd must remain 0');
 }
 
 const accepted = new Set(manifest.evidence_contract?.accepted_statuses ?? []);

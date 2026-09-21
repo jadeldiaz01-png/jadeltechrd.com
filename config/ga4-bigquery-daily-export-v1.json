@@ -61,6 +61,13 @@
       "analytics/bigquery/01_funnel_daily.sql.tmpl",
       "analytics/bigquery/02_event_contract_drift.sql.tmpl",
       "analytics/bigquery/03_source_medium_quality.sql.tmpl"
-    ]
+    ],
+    "model_research_templates": [
+      "analytics/bigquery/10_revenue_feature_contract.sql.tmpl",
+      "analytics/bigquery/11_lead_propensity_models.sql.tmpl",
+      "analytics/bigquery/12_revenue_forecast_arima_plus.sql.tmpl",
+      "analytics/bigquery/13_dnn_research_candidate.sql.tmpl"
+    ],
+    "model_research_activation": "BLOCKED_UNTIL_DAILY_EXPORT_AND_LABELED_OUTCOME_EVIDENCE"
   }
 }

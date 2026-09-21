@@ -1,0 +1,309 @@
+{
+  "schema_version": "2026.1",
+  "manifest_id": "jadeltechrd-revenue-intelligence-control-plane",
+  "generated_at": "2026-09-20T23:38:00Z",
+  "owner": "Jadel Tech RD",
+  "status": "IMPLEMENTATION_CANDIDATE",
+  "decision": {
+    "production_authorized": false,
+    "execution_enabled_by_default": false,
+    "fail_closed": true,
+    "mode": "OBSERVE_RECOMMEND_SUPERVISE",
+    "autonomous_external_side_effects_authorized": false,
+    "autonomous_paid_media_spend_authorized": false,
+    "max_unapproved_ad_spend_usd": 0,
+    "autonomous_publication_authorized": false,
+    "live_financial_capital_authorized": false,
+    "reason": "The control plane may observe, score, forecast and propose actions. It may not independently spend money, publish externally, change credentials, settle payments, allocate trading capital or promote itself to production."
+  },
+  "authority_model": {
+    "system_of_record": {
+      "commercial_facts": "Cloudflare D1 commercial ledger",
+      "web_behavior": "GA4 analytics projection",
+      "raw_analytics_target": "BigQuery daily export once the product link is independently verified",
+      "model_registry": "config/revenue-model-registry-2026.json"
+    },
+    "rule": "Probabilistic model output is advisory evidence, never an authorization credential.",
+    "human_approval_required_for": [
+      "paid_media_spend",
+      "external_publication",
+      "outbound_customer_contact",
+      "payment_or_refund",
+      "credential_or_permission_change",
+      "production_promotion",
+      "destructive_action",
+      "live_trading_or_capital_allocation"
+    ]
+  },
+  "data_plane": {
+    "source_priority": [
+      {
+        "source": "commercial_d1",
+        "role": "authoritative_commercial_ledger",
+        "pii_class": "restricted",
+        "direct_model_training_allowed": false
+      },
+      {
+        "source": "ga4",
+        "role": "behavioral_analytics",
+        "pii_class": "no_pii_by_contract",
+        "direct_model_training_allowed": false
+      },
+      {
+        "source": "bigquery_ga4_daily",
+        "role": "reproducible_analytics_and_feature_materialization",
+        "state": "PENDING_EXTERNAL_LINK_EVIDENCE"
+      },
+      {
+        "source": "search_console",
+        "role": "organic_acquisition_signal",
+        "state": "READ_ONLY_CANDIDATE"
+      },
+      {
+        "source": "social_platform_signals",
+        "role": "trend_signal",
+        "state": "SUPERVISED_READ_ONLY"
+      }
+    ],
+    "lineage_required_fields": [
+      "source",
+      "event_time",
+      "ingestion_time",
+      "schema_version",
+      "transformation_revision",
+      "quality_state"
+    ],
+    "prohibited_feature_inputs": [
+      "raw_name",
+      "raw_email",
+      "raw_phone",
+      "free_text_notes",
+      "payment_credentials",
+      "authentication_tokens",
+      "turnstile_tokens",
+      "secrets"
+    ],
+    "retention_policy": "Minimize and retain only what is needed for an explicitly documented business, security, legal or evaluation purpose."
+  },
+  "model_stack": {
+    "deterministic_baseline": "rev-baseline-rules",
+    "lead_propensity": [
+      "lead-propensity-logreg",
+      "lead-propensity-boosted-tree"
+    ],
+    "deep_learning_candidate": "lead-propensity-dnn",
+    "forecasting": [
+      "revenue-forecast-arima-plus",
+      "revenue-forecast-timesfm-eval"
+    ],
+    "llm_advisory": "llm-revenue-analyst",
+    "multimodal_advisory": "multimodal-creative-qc",
+    "model_registry": "config/revenue-model-registry-2026.json"
+  },
+  "autonomy_ladder": [
+    {
+      "level": "L0",
+      "name": "OBSERVE",
+      "allowed": [
+        "read_aggregate_metrics",
+        "read_health",
+        "detect_schema_drift"
+      ],
+      "human_gate": false
+    },
+    {
+      "level": "L1",
+      "name": "RECOMMEND",
+      "allowed": [
+        "rank_internal_followups",
+        "propose_experiments",
+        "propose_content_or_funnel_changes"
+      ],
+      "human_gate": false
+    },
+    {
+      "level": "L2",
+      "name": "DRAFT",
+      "allowed": [
+        "draft_internal_briefs",
+        "draft_campaign_or_content_changes_without_publishing"
+      ],
+      "human_gate": false
+    },
+    {
+      "level": "L3",
+      "name": "LOW_RISK_INTERNAL",
+      "allowed": [
+        "persist_internal_evidence",
+        "refresh_read_only_materializations"
+      ],
+      "human_gate": "POLICY_REQUIRED"
+    },
+    {
+      "level": "L4",
+      "name": "EXTERNAL_SIDE_EFFECT",
+      "allowed": [],
+      "human_gate": true
+    },
+    {
+      "level": "L5",
+      "name": "FINANCIAL_OR_CAPITAL",
+      "allowed": [],
+      "human_gate": true,
+      "enabled": false
+    }
+  ],
+  "model_promotion": {
+    "stages": [
+      "RESEARCH",
+      "OFFLINE_EVALUATED",
+      "SHADOW",
+      "SUPERVISED_PILOT",
+      "PRODUCTION_CANDIDATE",
+      "PRODUCTION"
+    ],
+    "mandatory_evidence": [
+      "point_in_time_feature_lineage",
+      "temporal_holdout_or_walk_forward",
+      "no_target_leakage",
+      "baseline_comparison",
+      "calibration_where_probabilistic",
+      "segment_and_regime_analysis",
+      "robustness_and_missingness_tests",
+      "cost_and_latency_budget",
+      "drift_monitoring",
+      "rollback_path",
+      "independent_reproduction",
+      "human_promotion_approval"
+    ],
+    "deep_learning_extra_gates": [
+      "material_incremental_value_over_simpler_models",
+      "sufficient_labeled_sample_size_for_the_selected_architecture",
+      "regularization_and_early_stopping",
+      "training_reproducibility",
+      "compute_cost_justification"
+    ],
+    "llm_extra_gates": [
+      "prompt_injection_evaluation",
+      "tool_allowlist",
+      "structured_output_validation",
+      "grounding_and_citation_contract",
+      "hallucination_eval",
+      "token_and_cost_budget",
+      "no_critical_action_from_model_output_alone"
+    ],
+    "multimodal_extra_gates": [
+      "rights_and_provenance_review",
+      "unsafe_content_eval",
+      "visual_prompt_injection_eval",
+      "human_review_before_publication"
+    ]
+  },
+  "runtime_integration": {
+    "admin_endpoint": "GET /api/v1/admin/revenue-intelligence",
+    "endpoint_mode": "READ_ONLY_AGGREGATE",
+    "scheduled_external_actions": false,
+    "snapshot_and_proposal_tables": "SCHEMA_ONLY_UNTIL_EXPLICIT_ACTIVATION",
+    "public_dashboard": false,
+    "reason": "Commercial and model signals must not expose PII or create unaudited side effects."
+  },
+  "observability": {
+    "standard": "OpenTelemetry semantic conventions",
+    "required": [
+      "trace_id_or_correlation_id",
+      "model_or_rule_revision",
+      "latency_ms",
+      "outcome",
+      "cost_dimension",
+      "policy_decision"
+    ],
+    "never_log": [
+      "request_body_with_pii",
+      "authorization_headers",
+      "api_keys",
+      "turnstile_tokens",
+      "payment_credentials"
+    ]
+  },
+  "security": {
+    "controls": [
+      "default_deny_tools",
+      "least_privilege",
+      "schema_validation",
+      "egress_allowlist",
+      "prompt_injection_defense_in_depth",
+      "untrusted_content_separation",
+      "output_validation",
+      "rate_limits",
+      "recursion_and_token_budgets",
+      "secret_manager_only",
+      "replay_resistance",
+      "idempotency_for_side_effecting_workflows",
+      "human_approval_for_critical_actions"
+    ],
+    "threats": [
+      "prompt_injection",
+      "tool_poisoning",
+      "memory_poisoning",
+      "data_poisoning",
+      "sensitive_information_disclosure",
+      "excessive_agency",
+      "unbounded_consumption",
+      "model_substitution",
+      "cross_agent_privilege_escalation",
+      "confused_deputy"
+    ]
+  },
+  "finops": {
+    "unit_economics": [
+      "cost_per_valid_lead",
+      "cost_per_qualified_lead",
+      "cost_per_converted_customer",
+      "model_cost_per_correct_recommendation",
+      "observability_cost_per_1000_requests"
+    ],
+    "hard_guards": [
+      "no_unapproved_ad_spend",
+      "provider_rate_limits",
+      "token_budgets",
+      "monthly_model_cost_ceiling_before_llm_activation",
+      "streaming_bigquery_disabled_without_cost_approval"
+    ]
+  },
+  "evidence_gates": {
+    "implementation_complete_requires": [
+      "manifest_validation",
+      "runtime_unit_and_adversarial_tests",
+      "sql_template_validation",
+      "security_scan",
+      "reviewed_pull_request"
+    ],
+    "production_candidate_requires": [
+      "BigQuery GA4 link and first events_YYYYMMDD table independently observed",
+      "sufficient labeled lead lifecycle history",
+      "offline model evaluation on exact frozen revision",
+      "shadow-mode evidence with no external side effects",
+      "drift and rollback evidence",
+      "AI cost and latency evidence",
+      "adversarial LLM and multimodal evaluation if those paths are enabled"
+    ],
+    "production_authorized_requires": [
+      "all applicable institutional gates PASS on current evidence",
+      "human production promotion approval"
+    ]
+  },
+  "research_sources": [
+    "https://www.nist.gov/itl/ai-risk-management-framework",
+    "https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence",
+    "https://genai.owasp.org/llm-top-10/",
+    "https://owasp.org/Top10/",
+    "https://openai.com/index/introducing-the-agents-api/",
+    "https://platform.openai.com/docs/guides/evals",
+    "https://opentelemetry.io/docs/specs/semconv/",
+    "https://slsa.dev/spec/v1.2/",
+    "https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/",
+    "https://cloud.google.com/bigquery/docs/bqml-introduction",
+    "https://cloud.google.com/bigquery/docs/arima-single-time-series-forecasting-with-large-scale-data",
+    "https://developers.cloudflare.com/ai-gateway/"
+  ]
+}

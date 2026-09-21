@@ -11,7 +11,7 @@
     "fail_closed": true,
     "live_financial_capital_authorized": false,
     "autonomous_external_publication_authorized": false,
-    "reason": "Current public-site evidence is strong, but institutional authorization remains closed until every domain-specific mandatory gate is current, exact-revision-bound, and independently satisfied."
+    "reason": "Current public-site evidence is strong, and a governed revenue-intelligence control plane is now an implementation candidate. Institutional authorization remains closed until every applicable domain-specific mandatory gate is current, exact-revision-bound, independently satisfied, and human-approved where required."
   },
   "authority_model": {
     "umbrella_manifest": "config/institutional-production-manifest-2026.json",
@@ -20,7 +20,8 @@
       "config/agent-production-manifest.json",
       "config/agent-production-readiness.json",
       "config/slo-policy.json",
-      "security/api-security-manifest.json"
+      "security/api-security-manifest.json",
+      "config/revenue-intelligence-control-plane-2026.json"
     ],
     "rule": "A PASS in one domain never promotes another domain. The umbrella decision is the logical AND of applicable domain promotion decisions plus human approval.",
     "critical_actions_never_authorized_by_probabilistic_output_alone": true
@@ -380,6 +381,31 @@
         "human publication approval",
         "post-publication measurement and rollback/takedown path"
       ]
+    },
+    "revenue_intelligence": {
+      "state": "IMPLEMENTATION_CANDIDATE",
+      "production_authorized": false,
+      "autonomous_external_actions_authorized": false,
+      "max_unapproved_ad_spend_usd": 0,
+      "source_of_truth": "config/revenue-intelligence-control-plane-2026.json",
+      "positive_implementation": [
+        "deterministic recommend-only engine",
+        "aggregate authenticated runtime endpoint",
+        "privacy-safe BigQuery feature and model templates",
+        "governed LLM/multimodal agent specification",
+        "D1 lifecycle/snapshot/proposal schema",
+        "CI validation and adversarial tests"
+      ],
+      "remaining_mandatory_evidence": [
+        "GA4 BigQuery link plus first daily events table independently observed",
+        "sufficient governed lead lifecycle labels",
+        "exact-revision offline model evaluation on a frozen temporal holdout",
+        "shadow-mode evidence with no external side effects",
+        "drift rollback latency and cost evidence",
+        "LLM and multimodal adversarial evals before those paths are enabled",
+        "current institutional gates plus explicit human production promotion approval"
+      ],
+      "critical_action_boundary": "Models and agents may observe and recommend; paid spend, publication, customer outreach, payments, credentials, production promotion and live capital remain human-gated."
     }
   },
   "agentic_and_mcp_security": {

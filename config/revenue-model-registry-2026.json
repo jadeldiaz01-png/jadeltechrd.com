@@ -1,0 +1,128 @@
+{
+  "schema_version": "2026.1",
+  "registry_id": "jadeltechrd-revenue-model-registry",
+  "generated_at": "2026-09-20T23:38:00Z",
+  "policy": {
+    "production_authorized": false,
+    "critical_action_authority_from_model_output": false,
+    "external_side_effects_authorized": false,
+    "live_capital_authorized": false,
+    "max_unapproved_ad_spend_usd": 0,
+    "promotion_requires_human_approval": true
+  },
+  "models": [
+    {
+      "id": "rev-baseline-rules",
+      "kind": "deterministic_rules",
+      "state": "ACTIVE_SAFE_INTERNAL",
+      "purpose": "Aggregate KPI interpretation and recommendation generation",
+      "training_required": false,
+      "critical_action_authority": false,
+      "output_contract": "recommendations_only"
+    },
+    {
+      "id": "lead-propensity-logreg",
+      "kind": "bigquery_ml_logistic_regression",
+      "state": "CANDIDATE_NO_TRAINING_DATA_YET",
+      "purpose": "Estimate lead conversion propensity from privacy-reviewed, point-in-time features",
+      "training_required": true,
+      "critical_action_authority": false,
+      "baseline_role": "primary_interpretable_ml_baseline",
+      "promotion_requirements": [
+        "labeled_outcomes",
+        "temporal_holdout",
+        "calibration",
+        "segment_metrics",
+        "no_leakage"
+      ]
+    },
+    {
+      "id": "lead-propensity-boosted-tree",
+      "kind": "bigquery_ml_boosted_tree_classifier",
+      "state": "CANDIDATE",
+      "purpose": "Nonlinear challenger to logistic regression",
+      "training_required": true,
+      "critical_action_authority": false,
+      "promotion_requirements": [
+        "beat_logistic_on_predeclared_metrics",
+        "temporal_holdout",
+        "calibration",
+        "stability",
+        "cost_justification"
+      ]
+    },
+    {
+      "id": "lead-propensity-dnn",
+      "kind": "bigquery_ml_dnn_classifier",
+      "state": "RESEARCH_ONLY_DATA_VOLUME_GATE",
+      "purpose": "Deep-learning challenger only when sample size and incremental value justify complexity",
+      "training_required": true,
+      "critical_action_authority": false,
+      "activation_requirements": [
+        "sufficient_labeled_sample_size",
+        "incremental_value_over_simpler_models",
+        "regularization",
+        "reproducible_training",
+        "compute_budget_approval"
+      ]
+    },
+    {
+      "id": "revenue-forecast-arima-plus",
+      "kind": "bigquery_ml_arima_plus",
+      "state": "CANDIDATE_AFTER_HISTORY",
+      "purpose": "Time-series forecasting for observed, reconciled commercial outcomes",
+      "training_required": true,
+      "critical_action_authority": false,
+      "promotion_requirements": [
+        "sufficient_history",
+        "backtest",
+        "forecast_interval_coverage",
+        "regime_checks"
+      ]
+    },
+    {
+      "id": "revenue-forecast-timesfm-eval",
+      "kind": "bigquery_timesfm",
+      "state": "EVALUATION_ONLY_PREVIEW",
+      "purpose": "Benchmark foundation-model forecasting against ARIMA_PLUS when the preview feature is appropriate",
+      "training_required": false,
+      "critical_action_authority": false,
+      "promotion_requirements": [
+        "provider_feature_available",
+        "benchmark_only",
+        "no_sole_decision_authority"
+      ]
+    },
+    {
+      "id": "llm-revenue-analyst",
+      "kind": "openai_agent_advisory",
+      "state": "CANDIDATE_HUMAN_GATED",
+      "purpose": "Analyze aggregate commercial evidence, explain anomalies and draft internal action plans",
+      "training_required": false,
+      "critical_action_authority": false,
+      "activation_requirements": [
+        "server_side_secret",
+        "gateway_budget",
+        "tool_allowlist",
+        "structured_outputs",
+        "eval_suite",
+        "prompt_injection_tests",
+        "human_gate_external_actions"
+      ]
+    },
+    {
+      "id": "multimodal-creative-qc",
+      "kind": "multimodal_advisory",
+      "state": "CANDIDATE_HUMAN_GATED",
+      "purpose": "Review creative assets for quality, rights metadata, brand consistency and risk signals",
+      "training_required": false,
+      "critical_action_authority": false,
+      "activation_requirements": [
+        "rights_metadata",
+        "content_safety_eval",
+        "visual_injection_eval",
+        "human_publication_approval"
+      ]
+    }
+  ]
+}

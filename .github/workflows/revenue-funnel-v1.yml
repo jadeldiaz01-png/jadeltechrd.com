@@ -40,4 +40,10 @@ jobs:
             grep -Fq 'rel="canonical"' "$page"
             grep -Fq 'data-revenue-event="offer_cta_click"' "$page"
           done
+          grep -Fq 'offer_id=whatsapp_support&service_id=support' whatsapp-ia-empresas-rd.html
+          grep -Fq 'offer_id=automation_blueprint&service_id=architecture' automatizacion-procesos-ia-rd.html
+          grep -Fq 'offer_id=sales_lead_intelligence&service_id=sales' agente-ventas-ia-rd.html
+          grep -Fq 'params.get("offer_id")' revenue-funnel.js
+          grep -Fq 'params.get("service_id")' revenue-funnel.js
+          echo "REVENUE_ATTRIBUTION_PROPAGATION=PASS"
           echo "REVENUE_FUNNEL_GATE=PASS"
