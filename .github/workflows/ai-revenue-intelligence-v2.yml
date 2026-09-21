@@ -38,36 +38,35 @@ jobs:
       - name: Validate AI revenue manifest
         shell: bash
         run: |
-          python - <<'PY'
-            import json
-            p=json.load(open("config/ai-revenue-intelligence-v2.json"))
-            assert p["mode"]=="SHADOW_RECOMMEND_ONLY"
-            assert p["production_authorized"] is False
-            assert p["external_side_effects_authorized"] is False
-            assert p["financial_execution_authorized"] is False
-            assert p["recognized_revenue_state"]=="SETTLED_CASH"
-            assert p["automatic_control"]["state"]=="IMPLEMENTED_DISABLED_BY_DEFAULT"
-            assert p["model_families"]["deep_learning"]["default"]=="OFF"
-            assert p["model_families"]["llm"]["authority"]=="ADVISORY_ONLY"
-            assert p["model_families"]["multimodal"]["authority"]=="HUMAN_PUBLICATION_REVIEW_REQUIRED"
-            assert "HUMAN_PRODUCTION_APPROVAL" in p["promotion_gates"]
-            assert "RUNTIME_EVIDENCE_BOUND_TO_EXACT_SHA" in p["promotion_gates"]
-            print("AI_REVENUE_MANIFEST=PASS")
-            PY
+          set -euo pipefail
+          jq -e '
+            .mode=="SHADOW_RECOMMEND_ONLY" and
+            .production_authorized==false and
+            .external_side_effects_authorized==false and
+            .financial_execution_authorized==false and
+            .recognized_revenue_state=="SETTLED_CASH" and
+            .automatic_control.state=="IMPLEMENTED_DISABLED_BY_DEFAULT" and
+            .model_families.deep_learning.default=="OFF" and
+            .model_families.llm.authority=="ADVISORY_ONLY" and
+            .model_families.multimodal.authority=="HUMAN_PUBLICATION_REVIEW_REQUIRED" and
+            (.promotion_gates | index("HUMAN_PRODUCTION_APPROVAL") != null) and
+            (.promotion_gates | index("RUNTIME_EVIDENCE_BOUND_TO_EXACT_SHA") != null)
+          ' config/ai-revenue-intelligence-v2.json >/dev/null
+          echo 'AI_REVENUE_MANIFEST=PASS'
 
       - name: Validate knowledge policy
         shell: bash
         run: |
-          python - <<'PY'
-            import json
-            p=json.load(open("config/ai-knowledge-index-2026.json"))
-            assert p["status"]=="IMPLEMENTED_NOT_INGESTED"
-            assert p["retrieval_filter"]=={"trust":"APPROVED","active":True}
-            assert p["ingestion"]["network_write_default"] is False
-            assert p["security"]["retrieved_text_is_instruction"] is False
-            assert p["security"]["pii_forbidden"] is True
-            print("KNOWLEDGE_POLICY=PASS")
-            PY
+          set -euo pipefail
+          jq -e '
+            .status=="IMPLEMENTED_NOT_INGESTED" and
+            .retrieval_filter.trust=="APPROVED" and
+            .retrieval_filter.active==true and
+            .ingestion.network_write_default==false and
+            .security.retrieved_text_is_instruction==false and
+            .security.pii_forbidden==true
+          ' config/ai-knowledge-index-2026.json >/dev/null
+          echo 'KNOWLEDGE_POLICY=PASS'
 
       - name: Syntax-check AI runtime and browser console
         run: |
