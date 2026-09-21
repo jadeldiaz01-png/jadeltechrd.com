@@ -7,6 +7,7 @@ function routeName(request) {
     if (pathname === "/api/v1/paypal/webhooks") return "paypal_webhooks";
     if (pathname === "/api/v1/admin/approvals") return "admin_approvals";
     if (pathname === "/api/v1/admin/revenue-intelligence") return "admin_revenue_intelligence";
+    if (pathname === "/api/v1/admin/lead-lifecycle") return "admin_lead_lifecycle";
     return "other";
   } catch {
     return "invalid_url";
