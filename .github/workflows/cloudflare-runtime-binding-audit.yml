@@ -1,0 +1,182 @@
+name: Cloudflare runtime binding audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/cloudflare-runtime-binding-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOMAIN: jadeltechrd.com
+  WORKER_NAME: jadel-commercial-runtime
+  D1_NAME: jadel-commercial-runtime
+
+jobs:
+  worker-account:
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    outputs:
+      account_hash: ${{ steps.audit.outputs.account_hash }}
+      db_hash: ${{ steps.audit.outputs.db_hash }}
+    env:
+      T1: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      T2: ${{ secrets.CF_API_TOKEN }}
+      T3: ${{ secrets.CLOUDFLARE_TOKEN }}
+      T4: ${{ secrets.CF_TOKEN }}
+    steps:
+      - name: Read Worker bindings and permission surface
+        id: audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          token=""
+          account_id=""
+          for raw in "${T1:-}" "${T2:-}" "${T3:-}" "${T4:-}"; do
+            [ -n "$raw" ] || continue
+            candidate=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+            [ -n "$candidate" ] || continue
+            echo "::add-mask::$candidate"
+            tmp=$(mktemp)
+            code=$(curl -sS -o "$tmp" -w '%{http_code}' -H "Authorization: Bearer $candidate"               "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50" || true)
+            [ "$code" = 200 ] || continue
+            candidate_account=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .account.id // empty' "$tmp" | head -n1)
+            [ -n "$candidate_account" ] || continue
+            token="$candidate"
+            account_id="$candidate_account"
+            break
+          done
+          test -n "$token"
+          test -n "$account_id"
+          echo "::add-mask::$account_id"
+
+          account_hash=$(printf '%s' "$account_id" | sha256sum | awk '{print $1}')
+          echo "account_hash=$account_hash" >> "$GITHUB_OUTPUT"
+          echo "WORKER_ACCOUNT_HASH=$account_hash"
+
+          api_code() {
+            local url="$1" tmp code
+            tmp=$(mktemp)
+            code=$(curl -sS -o "$tmp" -w '%{http_code}' -H "Authorization: Bearer $token" "$url" || true)
+            printf '%s' "$code"
+          }
+
+          turnstile_code=$(api_code "https://api.cloudflare.com/client/v4/accounts/$account_id/challenges/widgets?per_page=1")
+          workers_code=$(api_code "https://api.cloudflare.com/client/v4/accounts/$account_id/workers/scripts")
+          d1_code=$(api_code "https://api.cloudflare.com/client/v4/accounts/$account_id/d1/database?per_page=1")
+          echo "TURNSTILE_READ_HTTP=$turnstile_code"
+          echo "WORKERS_READ_HTTP=$workers_code"
+          echo "D1_READ_HTTP=$d1_code"
+
+          settings_tmp=$(mktemp)
+          settings_code=$(curl -sS -o "$settings_tmp" -w '%{http_code}' -H "Authorization: Bearer $token"             "https://api.cloudflare.com/client/v4/accounts/$account_id/workers/scripts/${WORKER_NAME}/settings" || true)
+          echo "WORKER_SETTINGS_HTTP=$settings_code"
+          test "$settings_code" = 200
+          test "$(jq -r '.success' "$settings_tmp")" = true
+          database_id=$(jq -r '.result.bindings[]? | select(.name=="DB" and (.type=="d1" or .type=="d1_database")) | (.database_id // .id // empty)' "$settings_tmp" | head -n1)
+          test -n "$database_id"
+          echo "::add-mask::$database_id"
+          db_hash=$(printf '%s' "$database_id" | sha256sum | awk '{print $1}')
+          echo "db_hash=$db_hash" >> "$GITHUB_OUTPUT"
+          echo "WORKER_D1_BINDING_HASH=$db_hash"
+
+          secrets_tmp=$(mktemp)
+          secrets_code=$(curl -sS -o "$secrets_tmp" -w '%{http_code}' -H "Authorization: Bearer $token"             "https://api.cloudflare.com/client/v4/accounts/$account_id/workers/scripts/${WORKER_NAME}/secrets" || true)
+          echo "WORKER_SECRETS_HTTP=$secrets_code"
+          if [ "$secrets_code" = 200 ]; then
+            test "$(jq -r '.success' "$secrets_tmp")" = true
+            for name in PAYPAL_CLIENT_ID PAYPAL_CLIENT_SECRET PAYPAL_WEBHOOK_ID ADMIN_API_TOKEN TURNSTILE_SECRET_KEY; do
+              if jq -e --arg n "$name" '.result | any(.name==$n)' "$secrets_tmp" >/dev/null; then
+                echo "WORKER_SECRET_${name}=PRESENT"
+              else
+                echo "WORKER_SECRET_${name}=ABSENT"
+              fi
+            done
+          fi
+
+          jq -n             --arg account_hash "$account_hash"             --arg db_hash "$db_hash"             --arg turnstile_http "$turnstile_code"             --arg workers_http "$workers_code"             --arg d1_http "$d1_code"             --arg settings_http "$settings_code"             --arg secrets_http "$secrets_code"             '{schema:"jadel.cloudflare.runtime_binding_audit.v1",source:"jadeltechrd",account_hash:$account_hash,db_hash:$db_hash,turnstile_http:$turnstile_http,workers_http:$workers_http,d1_http:$d1_http,settings_http:$settings_http,secrets_http:$secrets_http}'             > worker-account-audit.json
+
+      - name: Upload Worker audit
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cloudflare-worker-binding-audit-${{ github.run_id }}
+          path: worker-account-audit.json
+          if-no-files-found: error
+          retention-days: 14
+
+  d1-account:
+    environment:
+      name: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      account_hash: ${{ steps.audit.outputs.account_hash }}
+      db_hash: ${{ steps.audit.outputs.db_hash }}
+    env:
+      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Read dedicated D1 identity
+        id: audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_D1_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          account_id=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          test -n "$token"
+          test -n "$account_id"
+          echo "::add-mask::$token"
+          echo "::add-mask::$account_id"
+          verify=$(curl --fail-with-body -sS -H "Authorization: Bearer $token"             "https://api.cloudflare.com/client/v4/accounts/$account_id/tokens/verify")
+          test "$(jq -r '.success' <<<"$verify")" = true
+          test "$(jq -r '.result.status' <<<"$verify")" = active
+
+          account_hash=$(printf '%s' "$account_id" | sha256sum | awk '{print $1}')
+          echo "account_hash=$account_hash" >> "$GITHUB_OUTPUT"
+          echo "D1_ACCOUNT_HASH=$account_hash"
+
+          listed=$(curl --fail-with-body -sS -H "Authorization: Bearer $token"             "https://api.cloudflare.com/client/v4/accounts/$account_id/d1/database?name=${D1_NAME}&per_page=100")
+          test "$(jq -r '.success' <<<"$listed")" = true
+          matches=$(jq -r --arg n "$D1_NAME" '[.result[] | select(.name==$n)] | length' <<<"$listed")
+          test "$matches" = 1
+          database_id=$(jq -r --arg n "$D1_NAME" '.result[] | select(.name==$n) | .uuid' <<<"$listed")
+          test -n "$database_id"
+          echo "::add-mask::$database_id"
+          db_hash=$(printf '%s' "$database_id" | sha256sum | awk '{print $1}')
+          echo "db_hash=$db_hash" >> "$GITHUB_OUTPUT"
+          echo "D1_DATABASE_HASH=$db_hash"
+
+  compare:
+    needs: [worker-account, d1-account]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Compare identities fail-closed
+        shell: bash
+        env:
+          WORKER_ACCOUNT_HASH: ${{ needs.worker-account.outputs.account_hash }}
+          WORKER_DB_HASH: ${{ needs.worker-account.outputs.db_hash }}
+          D1_ACCOUNT_HASH: ${{ needs.d1-account.outputs.account_hash }}
+          D1_DB_HASH: ${{ needs.d1-account.outputs.db_hash }}
+        run: |
+          set -euo pipefail
+          test -n "$WORKER_ACCOUNT_HASH"
+          test -n "$WORKER_DB_HASH"
+          test -n "$D1_ACCOUNT_HASH"
+          test -n "$D1_DB_HASH"
+          if [ "$WORKER_ACCOUNT_HASH" = "$D1_ACCOUNT_HASH" ]; then
+            echo 'CLOUDFLARE_ACCOUNT_MATCH=PASS'
+          else
+            echo 'CLOUDFLARE_ACCOUNT_MATCH=FAIL'
+          fi
+          if [ "$WORKER_DB_HASH" = "$D1_DB_HASH" ]; then
+            echo 'D1_BINDING_MATCH=PASS'
+          else
+            echo 'D1_BINDING_MATCH=FAIL'
+          fi
