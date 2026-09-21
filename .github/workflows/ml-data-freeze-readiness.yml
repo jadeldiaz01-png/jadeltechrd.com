@@ -1,0 +1,208 @@
+name: ML data freeze and shadow readiness
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'config/ml-dataset-freeze-policy-2026.json'
+      - 'config/analytics-control-plane-v1.json'
+      - 'config/ga4-bigquery-daily-export-v1.json'
+      - 'config/revenue-model-registry-2026.json'
+      - 'evidence/analytics/**'
+      - 'analytics/bigquery/2*.sql.tmpl'
+      - 'scripts/validate-ml-data-freeze.mjs'
+      - 'commercial-runtime/**'
+      - 'project-request.js'
+      - 'revenue-funnel.js'
+      - 'ga4-loader.js'
+      - 'approval-console.*'
+      - '.github/workflows/ml-data-freeze-readiness.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'config/ml-dataset-freeze-policy-2026.json'
+      - 'analytics/bigquery/2*.sql.tmpl'
+      - 'commercial-runtime/**'
+      - 'project-request.js'
+      - 'revenue-funnel.js'
+      - 'ga4-loader.js'
+      - 'approval-console.*'
+      - '.github/workflows/ml-data-freeze-readiness.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  static-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Setup Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Validate freeze, leakage and shadow contracts
+        run: node scripts/validate-ml-data-freeze.mjs
+
+      - name: Run governed-label and runtime tests
+        run: |
+          node --test commercial-runtime/test/*.test.mjs
+          node --check project-request.js
+          node --check revenue-funnel.js
+          node --check ga4-loader.js
+          node --check approval-console.js
+
+      - name: Validate D1 migration chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f /tmp/ml-freeze.db
+          for migration in commercial-runtime/migrations/*.sql; do
+            sqlite3 /tmp/ml-freeze.db < "$migration"
+          done
+          test "$(sqlite3 /tmp/ml-freeze.db 'PRAGMA integrity_check;')" = "ok"
+          sqlite3 /tmp/ml-freeze.db ".schema project_requests" | grep -q 'analytics_join_id'
+          sqlite3 /tmp/ml-freeze.db ".schema lead_lifecycle_events" | grep -q 'source_event_id'
+          echo 'ML_DATA_D1_SCHEMA=PASS'
+
+  production-label-readiness:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    environment:
+      name: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    env:
+      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      D1_NAME: jadel-commercial-runtime
+    steps:
+      - name: Query only aggregate commercial-label evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          token=$(printf '%s' "${CLOUDFLARE_D1_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          account_id=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          test -n "$token" && test -n "$account_id"
+          echo "::add-mask::$token"
+          auth=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
+          listed=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${account_id}/d1/database?name=${D1_NAME}&per_page=100")
+          database_id=$(jq -r --arg n "$D1_NAME" '.result[] | select(.name==$n) | .uuid' <<<"$listed" | head -n1)
+          test -n "$database_id" && test "$database_id" != null
+          query() {
+            local sql="$1"
+            curl --fail-with-body -sS -X POST "${auth[@]}"               "https://api.cloudflare.com/client/v4/accounts/${account_id}/d1/database/${database_id}/query"               --data "$(jq -nc --arg sql "$sql" '{sql:$sql}')"
+          }
+          totals=$(query "SELECT COUNT(*) AS total_requests FROM project_requests")
+          labels=$(query "SELECT stage,COUNT(*) AS event_count,COUNT(DISTINCT project_id) AS project_count FROM lead_lifecycle_events GROUP BY stage ORDER BY stage")
+          total_requests=$(jq -r '.result[0].results[0].total_requests // 0' <<<"$totals")
+          positive=$(jq -r '[.result[0].results[]? | select(.stage=="close_convert_lead") | .project_count] | add // 0' <<<"$labels")
+          negative=$(jq -r '[.result[0].results[]? | select(.stage=="close_unconvert_lead" or .stage=="disqualify_lead") | .project_count] | add // 0' <<<"$labels")
+          status=READY_FOR_STRUCTURAL_FREEZE
+          if [ "$positive" -lt 1 ] || [ "$negative" -lt 1 ]; then status=BLOCKED_CLASS_COVERAGE; fi
+          mkdir -p evidence-runtime
+          jq -n             --arg observed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"             --arg status "$status"             --argjson total_requests "$total_requests"             --argjson positive_terminal_labels "$positive"             --argjson negative_terminal_labels "$negative"             --argjson stage_counts "$(jq '.result[0].results // []' <<<"$labels")"             '{
+              schema:"jadel.commercial_label_readiness.v1",
+              observed_at:$observed_at,
+              source:"production Cloudflare D1 aggregate SELECT queries",
+              pii_exported:false,
+              total_requests:$total_requests,
+              positive_terminal_labels:$positive_terminal_labels,
+              negative_terminal_labels:$negative_terminal_labels,
+              stage_counts:$stage_counts,
+              status:$status
+            }' > evidence-runtime/commercial-label-readiness.json
+          cat evidence-runtime/commercial-label-readiness.json
+
+      - name: Upload non-PII label readiness evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: commercial-label-readiness-${{ github.sha }}
+          path: evidence-runtime/commercial-label-readiness.json
+          if-no-files-found: error
+          retention-days: 30
+
+  bigquery-live-read:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_BIGQUERY_READ_SERVICE_ACCOUNT != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      GCP_PROJECT_ID: jadeltechrd-analytics-prod
+      DATASET_ID: analytics_555066228
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Authenticate with keyless Workload Identity Federation
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          project_id: jadeltechrd-analytics-prod
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_BIGQUERY_READ_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+
+      - name: Verify GA4 daily export and collect non-PII evidence
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ACCESS_TOKEN"
+          query=$(cat <<'SQL'
+          SELECT table_name, creation_time
+          FROM `jadeltechrd-analytics-prod.analytics_555066228.INFORMATION_SCHEMA.TABLES`
+          WHERE REGEXP_CONTAINS(table_name, r'^events_[0-9]{8}$')
+          ORDER BY table_name DESC
+          LIMIT 20
+          SQL
+          )
+          response=$(curl --fail-with-body -sS -X POST             -H "Authorization: Bearer $ACCESS_TOKEN"             -H 'Content-Type: application/json'             "https://bigquery.googleapis.com/bigquery/v2/projects/${GCP_PROJECT_ID}/queries"             --data "$(jq -nc --arg q "$query" '{query:$q,useLegacySql:false,timeoutMs:30000}')")
+          test "$(jq -r '.jobComplete' <<<"$response")" = true
+          latest=$(jq -r '.rows[0].f[0].v // empty' <<<"$response")
+          test -n "$latest" || { echo 'GA4_BIGQUERY_DAILY_EXPORT=NO_DAILY_TABLE' >&2; exit 31; }
+
+          stable_cutoff=$(date -u -d '4 days ago' +%Y%m%d)
+          suffix="${latest#events_}"
+          stable=false
+          if [[ "$suffix" =~ ^[0-9]{8}$ ]] && [ "$suffix" -le "$stable_cutoff" ]; then stable=true; fi
+
+          volume_query="SELECT COUNT(*) AS event_count, COUNTIF(event_name='page_view') AS page_views, COUNTIF(event_name='generate_lead') AS generated_leads FROM `${GCP_PROJECT_ID}.${DATASET_ID}.${latest}`"
+          volume=$(curl --fail-with-body -sS -X POST             -H "Authorization: Bearer $ACCESS_TOKEN"             -H 'Content-Type: application/json'             "https://bigquery.googleapis.com/bigquery/v2/projects/${GCP_PROJECT_ID}/queries"             --data "$(jq -nc --arg q "$volume_query" '{query:$q,useLegacySql:false,timeoutMs:30000}')")
+          test "$(jq -r '.jobComplete' <<<"$volume")" = true
+          event_count=$(jq -r '.rows[0].f[0].v // 0' <<<"$volume")
+          page_views=$(jq -r '.rows[0].f[1].v // 0' <<<"$volume")
+          generated_leads=$(jq -r '.rows[0].f[2].v // 0' <<<"$volume")
+
+          mkdir -p evidence-runtime
+          jq -n             --arg observed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"             --arg project "$GCP_PROJECT_ID"             --arg dataset "$DATASET_ID"             --arg latest_table "$latest"             --argjson stable "$stable"             --argjson event_count "$event_count"             --argjson page_views "$page_views"             --argjson generated_leads "$generated_leads"             '{
+              schema:"jadel.ga4_bigquery_live_evidence.v1",
+              observed_at:$observed_at,
+              project:$project,
+              dataset:$dataset,
+              latest_daily_table:$latest_table,
+              stable_for_freeze:$stable,
+              event_count:$event_count,
+              page_views:$page_views,
+              generated_leads:$generated_leads,
+              pii_exported:false
+            }' > evidence-runtime/ga4-bigquery-live.json
+          cat evidence-runtime/ga4-bigquery-live.json
+
+      - name: Upload BigQuery evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ga4-bigquery-live-${{ github.sha }}
+          path: evidence-runtime/ga4-bigquery-live.json
+          if-no-files-found: error
+          retention-days: 30
