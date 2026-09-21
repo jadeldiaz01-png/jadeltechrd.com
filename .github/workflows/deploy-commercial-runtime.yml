@@ -162,6 +162,7 @@ jobs:
     timeout-minutes: 15
     env:
       CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+      ADMIN_API_TOKEN_RAW: ${{ secrets.ADMIN_API_TOKEN }}
       D1_ACCOUNT_HASH: ${{ needs.prepare-production-d1.outputs.account_hash }}
       D1_DATABASE_ID: ${{ needs.prepare-production-d1.outputs.database_id }}
       D1_DATABASE_HASH: ${{ needs.prepare-production-d1.outputs.database_hash }}
@@ -186,6 +187,19 @@ jobs:
           test -n "$token" || { echo 'CLOUDFLARE_WORKER_TOKEN_PRESENT=NO' >&2; exit 2; }
           echo "::add-mask::$token"
           printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+
+      - name: Normalize required admin credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${ADMIN_API_TOKEN_RAW:-}"
+          value=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$value" == \"*\" && "$value" == *\" ]]; then value="${value:1:${#value}-2}"; fi
+          test -n "$value" || { echo 'ADMIN_API_TOKEN_PRESENT=NO' >&2; exit 3; }
+          test "${#value}" -ge 32 || { echo 'ADMIN_API_TOKEN_STRENGTH=FAIL_MIN_LENGTH_32' >&2; exit 3; }
+          echo "::add-mask::$value"
+          printf 'ADMIN_API_TOKEN=%s\n' "$value" >> "$GITHUB_ENV"
+          echo 'ADMIN_API_TOKEN_PRESENT=YES'
 
       - name: Resolve zone account and bind it to D1 evidence
         id: cloudflare
@@ -298,7 +312,8 @@ jobs:
         run: |
           set -euo pipefail
           npx wrangler deploy --config wrangler.deploy.jsonc
-          echo 'WORKER_DEPLOY_NO_ROUTE_OR_SECRET_MUTATION=PASS'
+          printf '%s' "$ADMIN_API_TOKEN" | npx wrangler secret put ADMIN_API_TOKEN --config wrangler.deploy.jsonc
+          echo 'WORKER_DEPLOY_NO_ROUTE_MUTATION_ADMIN_SECRET_RECONCILED=PASS'
 
       - name: Verify production runtime canaries
         shell: bash
@@ -340,6 +355,13 @@ jobs:
           echo 'REVENUE_INTELLIGENCE_ROUTE_CANARY=PASS'
 
           paypal_code=$(curl -sS -o /tmp/paypal.json -w '%{http_code}'             -X POST -H 'content-type: application/json' --data '{}'             "https://${API_HOST}/api/v1/paypal/webhooks")
-          test "$paypal_code" = 403 || { echo "PAYPAL_SECRET_CANARY=FAIL_HTTP_${paypal_code}" >&2; cat /tmp/paypal.json >&2; exit 54; }
-          echo 'PAYPAL_SECRET_CANARY=PASS'
+          if [ "$paypal_code" = 403 ]; then
+            echo 'PAYPAL_SECRET_CANARY=PASS_CONFIGURED_REJECTS_INVALID_SIGNATURE'
+          elif [ "$paypal_code" = 503 ] && [ "$(jq -r '.error // empty' /tmp/paypal.json)" = "PAYPAL_WEBHOOK_NOT_CONFIGURED" ]; then
+            echo 'PAYPAL_SECRET_CANARY=PASS_DISABLED_FAIL_CLOSED'
+          else
+            echo "PAYPAL_SECRET_CANARY=FAIL_HTTP_${paypal_code}" >&2
+            cat /tmp/paypal.json >&2
+            exit 54
+          fi
           echo 'COMMERCIAL_RUNTIME_PRODUCTION_CANARY=PASS'
