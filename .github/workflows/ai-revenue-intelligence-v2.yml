@@ -1,0 +1,38 @@
+name: AI revenue intelligence v2 contract
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'config/ai-revenue-intelligence-v2.json'
+      - 'commercial-runtime/src/model-governance.mjs'
+      - 'commercial-runtime/test/model-governance.test.mjs'
+      - '.github/workflows/ai-revenue-intelligence-v2.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Validate manifest
+        run: python - <<'PY'
+          import json
+          p=json.load(open("config/ai-revenue-intelligence-v2.json"))
+          assert p["mode"]=="SHADOW_RECOMMEND_ONLY"
+          assert p["external_side_effects_authorized"] is False
+          assert p["financial_execution_authorized"] is False
+          assert p["recognized_revenue_state"]=="SETTLED_CASH"
+          assert "HUMAN_PRODUCTION_APPROVAL" in p["promotion_gates"]
+          print("AI_REVENUE_MANIFEST=PASS")
+          PY
+      - name: Run adversarial governance tests
+        run: node --test commercial-runtime/test/model-governance.test.mjs
+      - name: Reject secret literals
+        run: |
+          set -euo pipefail
+          if grep -RIEq 'sk-[A-Za-z0-9_-]{20,}|-----BEGIN (RSA )?PRIVATE KEY-----' config/ai-revenue-intelligence-v2.json commercial-runtime/src/model-governance.mjs; then
+            echo 'SECRET_SCAN=FAIL'; exit 50
+          fi
+          echo 'SECRET_SCAN=PASS'
