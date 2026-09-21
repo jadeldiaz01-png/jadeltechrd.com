@@ -213,8 +213,8 @@ async function callStructuredResponse({ env, input, schema, schemaName, maxOutpu
     signal: AbortSignal.timeout(Math.min(Math.max(Number(env.AI_TIMEOUT_MS || 20000), 3000), 30000))
   });
   if (!response.ok) {
-    const text = (await response.text()).slice(0, 500);
-    throw new Error(`AI_PROVIDER_HTTP_${response.status}:${text.replace(/[\r\n]/g, " ")}`);
+    await response.text().catch(() => "");
+    throw new Error(`AI_PROVIDER_HTTP_${response.status}`);
   }
   const payload = await response.json();
   return {
@@ -265,10 +265,11 @@ async function failRun(db, runId, code) {
   ).bind(safeString(code, 160), new Date().toISOString(), runId).run();
 }
 
-export async function runRevenueAdvisor({ env, revenueView, objective = "OPERATING_REVIEW", knowledge = [], fetchImpl = fetch }) {
+export async function runRevenueAdvisor({ env, revenueView, objective = "OPERATING_REVIEW", knowledge = [], runKind = "REVENUE_ADVISOR", fetchImpl = fetch }) {
   const objectiveText = allowedObjective.get(objective);
   if (!objectiveText) throw new Error("AI_OBJECTIVE_NOT_ALLOWED");
-  await rateLimit(env, "revenue-advisor");
+  if (!["REVENUE_ADVISOR", "SCHEDULED_REVENUE_ADVISOR"].includes(runKind)) throw new Error("AI_RUN_KIND_NOT_ALLOWED");
+  await rateLimit(env, runKind === "SCHEDULED_REVENUE_ADVISOR" ? "scheduled-revenue-advisor" : "revenue-advisor");
   const safe = sanitizeRevenueFacts(revenueView?.summary, revenueView?.recommendation);
   const safeKnowledge = sanitizeKnowledgeContext(knowledge);
   const inputEnvelope = {
@@ -278,7 +279,7 @@ export async function runRevenueAdvisor({ env, revenueView, objective = "OPERATI
     knowledge: safeKnowledge
   };
   const inputHash = await hashJson(inputEnvelope);
-  const runId = await createRun(env.DB, env, "REVENUE_ADVISOR", inputHash);
+  const runId = await createRun(env.DB, env, runKind, inputHash);
 
   const system = [
     "You are Jadel Tech RD's bounded revenue intelligence analyst.",
