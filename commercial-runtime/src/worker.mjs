@@ -7,8 +7,8 @@ const TURNSTILE_SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/sit
 const PAYPAL_API_BASE = "https://api-m.paypal.com";
 const TURNSTILE_ACTION = "project_request";
 const INSERT_REQUEST_SQL = `INSERT INTO project_requests
-(project_id,idempotency_key,request_fingerprint,name,email,company,service_ids_json,notes,locale,state,policy_status,created_at,updated_at)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+(project_id,idempotency_key,request_fingerprint,analytics_join_id,name,email,company,service_ids_json,notes,locale,state,policy_status,created_at,updated_at)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 const INSERT_EVIDENCE_SQL = `INSERT INTO evidence_events
 (event_id,project_id,event_type,state,correlation_id,payload_json,created_at)
 VALUES (?,?,?,?,?,?,?)`;
@@ -24,6 +24,9 @@ VALUES (?,?,?,?,?,?,?,?,?,?)`;
 const INSERT_APPROVAL_SQL = `INSERT INTO approval_events
 (approval_id,project_id,approval_type,decision,actor,reason,evidence_json,created_at)
 VALUES (?,?,?,?,?,?,?,?)`;
+const INSERT_LEAD_LIFECYCLE_SQL = `INSERT INTO lead_lifecycle_events
+(event_id,project_id,stage,source,source_event_id,evidence_json,created_at)
+VALUES (?,?,?,?,?,?,?)`;
 
 function baseHeaders(extraHeaders = {}) {
   return {
@@ -93,6 +96,7 @@ async function requestFingerprint(input) {
     service_ids: input.serviceIds,
     notes: input.notes,
     locale: input.locale,
+    lead_event_id: input.leadEventId,
   }));
 }
 
@@ -215,12 +219,17 @@ export async function handleProjectRequest(request, env, deps = {}) {
   try {
     await env.DB.batch([
       env.DB.prepare(INSERT_REQUEST_SQL).bind(
-        projectId,idempotencyKey,fingerprint,input.name,input.email,input.company,
+        projectId,idempotencyKey,fingerprint,input.leadEventId,input.name,input.email,input.company,
         JSON.stringify(input.serviceIds),input.notes,input.locale,state,policyStatus,now,now,
       ),
       env.DB.prepare(INSERT_EVIDENCE_SQL).bind(
         eventId,projectId,"PROJECT_REQUEST_ACCEPTED",state,correlationId,
-        JSON.stringify({ service_ids: input.serviceIds, locale: input.locale, request_fingerprint: fingerprint }),now,
+        JSON.stringify({
+          service_ids: input.serviceIds,
+          locale: input.locale,
+          request_fingerprint: fingerprint,
+          analytics_join_id: input.leadEventId
+        }),now,
       ),
       env.DB.prepare(INSERT_OUTBOX_SQL).bind(
         outboxId,projectId,workflowInstanceId,"PENDING",0,now,now,
@@ -397,6 +406,106 @@ export async function handleAdminApprovals(request, env) {
   return json({ approval_id: approvalId, project_id: projectId, state: nextState, policy_status: nextPolicy });
 }
 
+const LEAD_STAGES = new Set([
+  "working_lead","qualify_lead","disqualify_lead","close_convert_lead","close_unconvert_lead"
+]);
+const LEAD_REASON_CODES = new Set([
+  "OPERATOR_CONSOLE","CUSTOMER_CONFIRMED","PAYMENT_RECONCILED","NOT_FIT","NO_RESPONSE","OTHER"
+]);
+const TERMINAL_LEAD_STAGES = new Set(["disqualify_lead","close_convert_lead","close_unconvert_lead"]);
+
+function leadTransitionAllowed(previousStage, nextStage) {
+  if (!previousStage) return nextStage === "working_lead";
+  if (previousStage === "working_lead") return nextStage === "qualify_lead" || nextStage === "disqualify_lead";
+  if (previousStage === "qualify_lead") return nextStage === "close_convert_lead" || nextStage === "close_unconvert_lead";
+  return false;
+}
+
+export async function handleAdminLeadLifecycle(request, env) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+
+  if (request.method === "GET") {
+    const [projects, counts] = await Promise.all([
+      env.DB.prepare(`
+        SELECT
+          p.project_id,p.name,p.email,p.service_ids_json,p.state,p.policy_status,p.created_at,
+          (SELECT e.stage FROM lead_lifecycle_events e
+           WHERE e.project_id=p.project_id
+           ORDER BY e.created_at DESC,e.event_id DESC LIMIT 1) AS latest_stage
+        FROM project_requests p
+        ORDER BY p.created_at DESC
+        LIMIT 100
+      `).all(),
+      env.DB.prepare(`
+        SELECT stage,COUNT(*) AS event_count,COUNT(DISTINCT project_id) AS project_count
+        FROM lead_lifecycle_events
+        GROUP BY stage
+        ORDER BY stage
+      `).all(),
+    ]);
+    const rows = counts.results || [];
+    const countFor = (stage) => Number(rows.find((row) => row.stage === stage)?.project_count || 0);
+    return json({
+      projects: projects.results || [],
+      summary: {
+        working_lead: countFor("working_lead"),
+        qualify_lead: countFor("qualify_lead"),
+        disqualify_lead: countFor("disqualify_lead"),
+        close_convert_lead: countFor("close_convert_lead"),
+        close_unconvert_lead: countFor("close_unconvert_lead"),
+        positive_terminal_labels: countFor("close_convert_lead"),
+        negative_terminal_labels: countFor("disqualify_lead") + countFor("close_unconvert_lead"),
+      }
+    });
+  }
+
+  if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  let input;
+  try { input = await readJsonWithLimit(request); } catch { return json({ error: "INVALID_LEAD_LABEL_REQUEST" }, 400); }
+  const allowedFields = new Set(["project_id","stage","source_event_id","reason_code"]);
+  for (const key of Object.keys(input || {})) {
+    if (!allowedFields.has(key)) return json({ error: "INVALID_LEAD_LABEL_REQUEST" }, 400);
+  }
+  const projectId = typeof input.project_id === "string" && /^[0-9a-f-]{36}$/i.test(input.project_id) ? input.project_id : null;
+  const stage = typeof input.stage === "string" ? input.stage : "";
+  const sourceEventId = typeof input.source_event_id === "string" ? input.source_event_id : "";
+  const reasonCode = typeof input.reason_code === "string" ? input.reason_code : "OTHER";
+  if (!projectId || !LEAD_STAGES.has(stage) || !/^[A-Za-z0-9_-]{16,128}$/.test(sourceEventId) || !LEAD_REASON_CODES.has(reasonCode)) {
+    return json({ error: "INVALID_LEAD_LABEL_REQUEST" }, 400);
+  }
+
+  const project = await env.DB.prepare(
+    "SELECT project_id FROM project_requests WHERE project_id=? LIMIT 1"
+  ).bind(projectId).first();
+  if (!project) return json({ error: "PROJECT_NOT_FOUND" }, 404);
+
+  const replay = await env.DB.prepare(
+    "SELECT event_id,project_id,stage FROM lead_lifecycle_events WHERE source='human' AND source_event_id=? LIMIT 1"
+  ).bind(sourceEventId).first();
+  if (replay) {
+    if (replay.project_id !== projectId || replay.stage !== stage) return json({ error: "LEAD_LABEL_IDEMPOTENCY_CONFLICT" }, 409);
+    return json({ event_id: replay.event_id, project_id: projectId, stage, replayed: true });
+  }
+
+  const latest = await env.DB.prepare(
+    "SELECT stage FROM lead_lifecycle_events WHERE project_id=? ORDER BY created_at DESC,event_id DESC LIMIT 1"
+  ).bind(projectId).first();
+  const previousStage = latest?.stage || null;
+  if (TERMINAL_LEAD_STAGES.has(previousStage || "") || !leadTransitionAllowed(previousStage, stage)) {
+    return json({ error: "INVALID_LEAD_STAGE_TRANSITION", previous_stage: previousStage, requested_stage: stage }, 409);
+  }
+
+  const now = new Date().toISOString();
+  const eventId = crypto.randomUUID();
+  await env.DB.prepare(INSERT_LEAD_LIFECYCLE_SQL).bind(
+    eventId,projectId,stage,"human",sourceEventId,
+    JSON.stringify({ reason_code: reasonCode, source: "approval_console" }),now,
+  ).run();
+  return json({ event_id: eventId, project_id: projectId, stage, previous_stage: previousStage, replayed: false }, 201);
+}
+
 export async function handleAdminRevenueIntelligence(request, env) {
   if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
   if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
@@ -472,6 +581,9 @@ export default {
     }
     if (url.pathname === "/api/v1/admin/revenue-intelligence") {
       return handleAdminRevenueIntelligence(request, env);
+    }
+    if (url.pathname === "/api/v1/admin/lead-lifecycle") {
+      return handleAdminLeadLifecycle(request, env);
     }
     return json({ error: "NOT_FOUND" }, 404);
   },
