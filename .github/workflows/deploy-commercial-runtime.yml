@@ -214,7 +214,7 @@ jobs:
         run: |
           set -euo pipefail
           tmp=$(mktemp)
-          code=$(curl -sS -o "$tmp" -w '%{http_code}'             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/content" || true)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}'             -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"             "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/content/v2" || true)
           if [ "$code" != 200 ]; then
             echo "WORKER_SCRIPT_EDITOR_PREFLIGHT=FAIL_HTTP_${code}" >&2
             echo 'WORKER_SCRIPT_EDITOR_REQUIRED=Workers_Scripts_Write_on_existing_jadel-commercial-runtime' >&2
