@@ -1,0 +1,62 @@
+{
+  "schema": "jadel.ga4.observation.v1",
+  "observed_date_utc": "2026-09-21",
+  "source": "Windsor.ai read-only Google Analytics 4 connector",
+  "authoritative_for": "GA4 reporting observation only",
+  "property_id": "555066228",
+  "measurement_id": "G-K60SQ2ZHL9",
+  "hostname": "jadeltechrd.com",
+  "report_date": "2026-09-20",
+  "query_window": "last_7dT",
+  "observations": [
+    {
+      "event_name": "session_start",
+      "active_users": 6,
+      "sessions": 9,
+      "views": 0,
+      "event_count": 9,
+      "key_events": 0
+    },
+    {
+      "event_name": "page_view",
+      "active_users": 6,
+      "sessions": 8,
+      "views": 9,
+      "event_count": 9,
+      "key_events": 0
+    },
+    {
+      "event_name": "first_visit",
+      "active_users": 6,
+      "sessions": 6,
+      "views": 0,
+      "event_count": 6,
+      "key_events": 0
+    },
+    {
+      "event_name": "user_engagement",
+      "active_users": 1,
+      "sessions": 2,
+      "views": 0,
+      "event_count": 3,
+      "key_events": 0
+    },
+    {
+      "event_name": "scroll",
+      "active_users": 1,
+      "sessions": 1,
+      "views": 0,
+      "event_count": 1,
+      "key_events": 0
+    }
+  ],
+  "custom_funnel_events_observed": [],
+  "conversions_observed": 0,
+  "interpretation": {
+    "ga4_live_data_present": true,
+    "bigquery_export_verified": false,
+    "training_dataset_ready": false,
+    "reason": "Real GA4 activity is now observable, but no BigQuery daily export table and no terminal commercial outcome labels have been independently certified."
+  },
+  "privacy": "Aggregate metrics only; no user identifiers or PII retained in this evidence file."
+}
