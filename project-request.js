@@ -2,6 +2,7 @@ const API_ORIGIN = "https://intake.jadeltechrd.com";
 const CONFIG_URL = `${API_ORIGIN}/api/v1/public-config`;
 const REQUEST_URL = `${API_ORIGIN}/api/v1/project-requests`;
 const IDEMPOTENCY_SESSION_KEY = "jadel-project-request-idempotency-v1";
+const LEAD_EVENT_SESSION_KEY = "jadel-project-request-lead-event-v1";
 const ALLOWED_SERVICES = new Set([
   "architecture","support","sales","social","cineforge","meta","analytics","revenue","quant","governance","multiagent"
 ]);
@@ -22,6 +23,7 @@ let submitting = false;
 let completed = false;
 let bootstrapping = false;
 let fallbackIdempotencyKey = crypto.randomUUID();
+let fallbackLeadEventId = crypto.randomUUID();
 
 function setStatus(message, kind = "") {
   if (!status) return;
@@ -52,9 +54,26 @@ function getIdempotencyKey() {
   }
 }
 
-function clearIdempotencyKey() {
+function getLeadEventId() {
+  try {
+    let value = sessionStorage.getItem(LEAD_EVENT_SESSION_KEY);
+    if (!value || !/^[0-9a-f-]{36}$/i.test(value)) {
+      value = crypto.randomUUID();
+      sessionStorage.setItem(LEAD_EVENT_SESSION_KEY, value);
+    }
+    return value;
+  } catch {
+    return fallbackLeadEventId;
+  }
+}
+
+function clearRequestCorrelation() {
   fallbackIdempotencyKey = crypto.randomUUID();
-  try { sessionStorage.removeItem(IDEMPOTENCY_SESSION_KEY); } catch { /* storage may be unavailable */ }
+  fallbackLeadEventId = crypto.randomUUID();
+  try {
+    sessionStorage.removeItem(IDEMPOTENCY_SESSION_KEY);
+    sessionStorage.removeItem(LEAD_EVENT_SESSION_KEY);
+  } catch { /* storage may be unavailable */ }
 }
 
 function resetTurnstile() {
@@ -138,7 +157,7 @@ function explainRuntimeBlock(error) {
   updateSubmitState();
 }
 
-function payloadFromForm() {
+function payloadFromForm(leadEventId) {
   const data = new FormData(form);
   return {
     name: String(data.get("name") || "").trim(),
@@ -147,6 +166,7 @@ function payloadFromForm() {
     service_ids: selectedServices(),
     notes: String(data.get("notes") || "").trim(),
     locale: document.documentElement.lang || "es-DO",
+    lead_event_id: leadEventId,
     turnstile_token: turnstileToken,
   };
 }
@@ -175,6 +195,7 @@ form?.addEventListener("submit", async (event) => {
   updateSubmitState();
   setStatus("Enviando solicitud de forma segura…", "working");
   const idempotencyKey = getIdempotencyKey();
+  const leadEventId = getLeadEventId();
 
   try {
     const response = await fetch(REQUEST_URL, {
@@ -187,7 +208,7 @@ form?.addEventListener("submit", async (event) => {
         "content-type": "application/json",
         "idempotency-key": idempotencyKey,
       },
-      body: JSON.stringify(payloadFromForm()),
+      body: JSON.stringify(payloadFromForm(leadEventId)),
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -198,9 +219,12 @@ form?.addEventListener("submit", async (event) => {
     }
 
     completed = true;
-    clearIdempotencyKey();
     const projectId = body.project_id || "registrado";
-    window.RevenueAnalytics?.track("generate_lead", { lead_source: "project_request" });
+    window.RevenueAnalytics?.track("generate_lead", {
+      lead_source: "project_request",
+      lead_event_id: leadEventId
+    });
+    clearRequestCorrelation();
     setStatus(`Solicitud recibida. ID de seguimiento: ${projectId}. Estado: ${body.state || "VALIDATED"}.`, "success");
     form.querySelectorAll("input,textarea,button").forEach((node) => { node.disabled = true; });
     turnstileStatus.textContent = body.replayed ? "Reintento reconciliado sin duplicar la solicitud." : "Verificación completada.";
