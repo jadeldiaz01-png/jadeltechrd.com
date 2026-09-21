@@ -1,0 +1,68 @@
+{
+  "schema": "jadel.ai-knowledge-index.v1",
+  "status": "IMPLEMENTED_NOT_INGESTED",
+  "vector_store": "Cloudflare Vectorize",
+  "embedding_runtime": "Workers AI",
+  "namespace": "revenue-knowledge-v1",
+  "trust_model": "ALLOWLIST_AND_HASH",
+  "retrieval_filter": {
+    "trust": "APPROVED",
+    "active": true
+  },
+  "metadata_indexes": [
+    {
+      "name": "trust",
+      "type": "string"
+    },
+    {
+      "name": "active",
+      "type": "boolean"
+    },
+    {
+      "name": "doc_type",
+      "type": "string"
+    },
+    {
+      "name": "revision",
+      "type": "string"
+    },
+    {
+      "name": "effective_epoch",
+      "type": "number"
+    }
+  ],
+  "max_chunks_per_query": 4,
+  "max_chunk_text_chars": 1200,
+  "approved_sources": [
+    "docs/ADR-002-agent-services-commercial-site-2026.md",
+    "docs/AGENTIC-ROUTING-POLICY.md",
+    "docs/revenue/REVENUE-INTELLIGENCE-CONTROL-PLANE-2026.md",
+    "config/revenue-intelligence-control-plane-2026.json",
+    "config/revenue-agent-spec-2026.json",
+    "config/ai-revenue-intelligence-v2.json"
+  ],
+  "prohibited_corpus": [
+    "customer free text",
+    "raw email",
+    "raw phone",
+    "payment payloads",
+    "authentication material",
+    "unreviewed web content",
+    "model-generated text without human approval"
+  ],
+  "ingestion": {
+    "network_write_default": false,
+    "exact_source_sha_required": true,
+    "source_sha256_per_document_required": true,
+    "deterministic_chunking_required": true,
+    "reindex_on_revision_change": true,
+    "human_approval_before_activation": true
+  },
+  "security": {
+    "retrieved_text_is_instruction": false,
+    "indirect_prompt_injection_eval_required": true,
+    "cross_tenant_data_forbidden": true,
+    "secrets_forbidden": true,
+    "pii_forbidden": true
+  }
+}
