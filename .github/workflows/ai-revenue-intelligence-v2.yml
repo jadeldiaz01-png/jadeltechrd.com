@@ -36,34 +36,38 @@ jobs:
           node-version: '22'
 
       - name: Validate AI revenue manifest
-        run: python - <<'PY'
-          import json
-          p=json.load(open("config/ai-revenue-intelligence-v2.json"))
-          assert p["mode"]=="SHADOW_RECOMMEND_ONLY"
-          assert p["production_authorized"] is False
-          assert p["external_side_effects_authorized"] is False
-          assert p["financial_execution_authorized"] is False
-          assert p["recognized_revenue_state"]=="SETTLED_CASH"
-          assert p["automatic_control"]["state"]=="IMPLEMENTED_DISABLED_BY_DEFAULT"
-          assert p["model_families"]["deep_learning"]["default"]=="OFF"
-          assert p["model_families"]["llm"]["authority"]=="ADVISORY_ONLY"
-          assert p["model_families"]["multimodal"]["authority"]=="HUMAN_PUBLICATION_REVIEW_REQUIRED"
-          assert "HUMAN_PRODUCTION_APPROVAL" in p["promotion_gates"]
-          assert "RUNTIME_EVIDENCE_BOUND_TO_EXACT_SHA" in p["promotion_gates"]
-          print("AI_REVENUE_MANIFEST=PASS")
-          PY
+        shell: bash
+        run: |
+          python - <<'PY'
+            import json
+            p=json.load(open("config/ai-revenue-intelligence-v2.json"))
+            assert p["mode"]=="SHADOW_RECOMMEND_ONLY"
+            assert p["production_authorized"] is False
+            assert p["external_side_effects_authorized"] is False
+            assert p["financial_execution_authorized"] is False
+            assert p["recognized_revenue_state"]=="SETTLED_CASH"
+            assert p["automatic_control"]["state"]=="IMPLEMENTED_DISABLED_BY_DEFAULT"
+            assert p["model_families"]["deep_learning"]["default"]=="OFF"
+            assert p["model_families"]["llm"]["authority"]=="ADVISORY_ONLY"
+            assert p["model_families"]["multimodal"]["authority"]=="HUMAN_PUBLICATION_REVIEW_REQUIRED"
+            assert "HUMAN_PRODUCTION_APPROVAL" in p["promotion_gates"]
+            assert "RUNTIME_EVIDENCE_BOUND_TO_EXACT_SHA" in p["promotion_gates"]
+            print("AI_REVENUE_MANIFEST=PASS")
+            PY
 
       - name: Validate knowledge policy
-        run: python - <<'PY'
-          import json
-          p=json.load(open("config/ai-knowledge-index-2026.json"))
-          assert p["status"]=="IMPLEMENTED_NOT_INGESTED"
-          assert p["retrieval_filter"]=={"trust":"APPROVED","active":True}
-          assert p["ingestion"]["network_write_default"] is False
-          assert p["security"]["retrieved_text_is_instruction"] is False
-          assert p["security"]["pii_forbidden"] is True
-          print("KNOWLEDGE_POLICY=PASS")
-          PY
+        shell: bash
+        run: |
+          python - <<'PY'
+            import json
+            p=json.load(open("config/ai-knowledge-index-2026.json"))
+            assert p["status"]=="IMPLEMENTED_NOT_INGESTED"
+            assert p["retrieval_filter"]=={"trust":"APPROVED","active":True}
+            assert p["ingestion"]["network_write_default"] is False
+            assert p["security"]["retrieved_text_is_instruction"] is False
+            assert p["security"]["pii_forbidden"] is True
+            print("KNOWLEDGE_POLICY=PASS")
+            PY
 
       - name: Syntax-check AI runtime and browser console
         run: |
