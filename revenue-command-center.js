@@ -7,7 +7,7 @@ function esc(value){
 }
 function setStatus(text,kind=""){ $("command-status").textContent=text; $("command-status").dataset.kind=kind; }
 function enabled(value){
-  for(const node of document.querySelectorAll("#refresh,.ai-action,#run-multimodal,#disconnect")) node.disabled=!value;
+  for(const node of document.querySelectorAll("#refresh,.ai-action,#run-multimodal,#record-settlement,#disconnect")) node.disabled=!value;
 }
 async function api(path,options={}){
   if(!token) throw new Error("NOT_AUTHENTICATED");
@@ -27,6 +27,14 @@ function renderRecommendations(items=[]){
       <small>${esc(item.scope)} · human=${esc(item.requires_human)}</small>
     </article>`).join(""):"<p>Sin recomendaciones deterministas.</p>";
 }
+function renderSettlements(items=[]){
+  $("settlement-list").innerHTML=items.length?items.map((item)=>`
+    <article class="recommendation-item">
+      <strong>SETTLED_CASH · ${esc(item.settled_amount_usd)} ${esc(item.currency_code)}</strong>
+      <span>Ledger ${esc(item.ledger_id)}</span>
+      <small>${esc(item.settled_at)} · evidence ${esc(item.evidence_sha256)}</small>
+    </article>`).join(""):"<p>Sin settlements registrados.</p>";
+}
 function renderRuns(items=[]){
   $("model-runs").innerHTML=items.length?items.map((run)=>`
     <article class="recommendation-item">
@@ -36,9 +44,10 @@ function renderRuns(items=[]){
     </article>`).join(""):"<p>Sin ejecuciones registradas.</p>";
 }
 async function refresh(){
-  const [view,runs]=await Promise.all([
+  const [view,runs,settlements]=await Promise.all([
     api("/api/v1/admin/revenue-intelligence"),
-    api("/api/v1/admin/model-runs").catch(()=>({runs:[]}))
+    api("/api/v1/admin/model-runs").catch(()=>({runs:[]})),
+    api("/api/v1/admin/settlements").catch(()=>({settlements:[]}))
   ]);
   const s=view.summary||{};
   $("metric-revenue").textContent=Number(s.settled_cash_usd||0).toLocaleString("en-US",{style:"currency",currency:"USD"});
@@ -55,6 +64,7 @@ async function refresh(){
     production_authorized:view.production_authorized
   },null,2);
   renderRuns(runs.runs||[]);
+  renderSettlements(settlements.settlements||[]);
 }
 $("revenue-auth")?.addEventListener("submit",async(event)=>{
   event.preventDefault();
@@ -91,4 +101,32 @@ $("multimodal-form")?.addEventListener("submit",async(event)=>{
     await refresh();
   }catch(e){ $("multimodal-output").textContent=`NO_GO: ${e.message}`; }
   finally{ if(token) $("run-multimodal").disabled=false; }
+});
+
+$("settlement-form")?.addEventListener("submit",async(event)=>{
+  event.preventDefault();
+  if(!$("settlement-confirm").checked) return;
+  $("record-settlement").disabled=true;
+  $("settlement-status").textContent="Registrando evidencia de settlement…";
+  const localValue=$("settlement-at").value;
+  const settledAt=localValue?new Date(localValue).toISOString():"";
+  try{
+    const body=await api("/api/v1/admin/settlements",{method:"POST",body:JSON.stringify({
+      confirmation:"RECORD_SETTLED_CASH",
+      ledger_id:$("settlement-ledger-id").value.trim(),
+      settled_amount_usd:Number($("settlement-amount").value),
+      settlement_reference:$("settlement-reference").value.trim(),
+      evidence_sha256:$("settlement-evidence-sha").value.trim().toLowerCase(),
+      settled_at:settledAt
+    })});
+    $("settlement-reference").value="";
+    $("settlement-evidence-sha").value="";
+    $("settlement-confirm").checked=false;
+    $("settlement-status").textContent=`Registrado: ${body.state} · ${body.settled_amount_usd} ${body.currency_code}`;
+    await refresh();
+  }catch(e){
+    $("settlement-status").textContent=`NO_GO: ${e.message}`;
+  }finally{
+    if(token) $("record-settlement").disabled=false;
+  }
 });
