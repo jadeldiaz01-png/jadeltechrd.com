@@ -1,0 +1,25 @@
+-- Shadow scoring only: predictions are stored for later reconciliation, never executed.
+CREATE TABLE IF NOT EXISTS `__GCP_PROJECT_ID__.jadel_ml_shadow.lead_propensity_scores` (
+  lead_event_id STRING,
+  model_id STRING,
+  model_revision STRING,
+  scored_at TIMESTAMP,
+  predicted_converted BOOL,
+  predicted_probability FLOAT64,
+  external_side_effects_authorized BOOL
+);
+
+INSERT INTO `__GCP_PROJECT_ID__.jadel_ml_shadow.lead_propensity_scores`
+SELECT
+  lead_event_id,
+  'lead-propensity-logreg' AS model_id,
+  '__MODEL_REVISION__' AS model_revision,
+  CURRENT_TIMESTAMP() AS scored_at,
+  predicted_converted,
+  (SELECT prob FROM UNNEST(predicted_converted_probs) WHERE label=TRUE LIMIT 1) AS predicted_probability,
+  FALSE AS external_side_effects_authorized
+FROM ML.PREDICT(
+  MODEL `__GCP_PROJECT_ID__.jadel_ml.lead_propensity_logreg_offline`,
+  (SELECT *
+   FROM `__GCP_PROJECT_ID__.jadel_features.lead_shadow_unlabeled_v1`)
+);
