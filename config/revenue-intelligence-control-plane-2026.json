@@ -83,7 +83,16 @@
       "turnstile_tokens",
       "secrets"
     ],
-    "retention_policy": "Minimize and retain only what is needed for an explicitly documented business, security, legal or evaluation purpose."
+    "retention_policy": "Minimize and retain only what is needed for an explicitly documented business, security, legal or evaluation purpose.",
+    "ml_dataset_freeze_policy": "config/ml-dataset-freeze-policy-2026.json",
+    "privacy_safe_join": {
+      "field": "lead_event_id",
+      "source": "one-time browser submission UUID",
+      "sink": "project_requests.analytics_join_id",
+      "ga4_event": "generate_lead",
+      "pii": false,
+      "persistent_identity": false
+    }
   },
   "model_stack": {
     "deterministic_baseline": "rev-baseline-rules",
@@ -305,5 +314,13 @@
     "https://cloud.google.com/bigquery/docs/bqml-introduction",
     "https://cloud.google.com/bigquery/docs/arima-single-time-series-forecasting-with-large-scale-data",
     "https://developers.cloudflare.com/ai-gateway/"
-  ]
+  ],
+  "current_ml_increment": {
+    "ga4_real_activity": "OBSERVED",
+    "bigquery_daily_export": "PENDING_LIVE_EVIDENCE",
+    "governed_outcome_capture": "IMPLEMENTED_PENDING_PROMOTION",
+    "first_frozen_training_dataset": "BLOCKED",
+    "offline_evaluation": "BLOCKED",
+    "shadow_scoring": "BLOCKED"
+  }
 }
