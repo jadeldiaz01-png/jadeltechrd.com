@@ -18,6 +18,8 @@ A successful project request now carries a one-time UUIDv4 `lead_event_id`. The 
 
 It is not a name, email, phone number, account ID, user ID or persistent device/session identifier. It is scoped to one project-request submission. It is intentionally **not registered as a GA4 custom dimension**; the raw BigQuery export is the only analytical use, avoiding high-cardinality report configuration.
 
+Because GA4 is consent-gated, not every D1 request is guaranteed to have a matching GA4 `generate_lead`. The freeze certificate must therefore report join coverage. Unmatched leads are never converted into negative labels or silently imputed. Potential consent-selection bias must be reviewed before interpreting model performance.
+
 ## Commercial outcome labels
 
 The authenticated operator console now supports the append-only lifecycle:
