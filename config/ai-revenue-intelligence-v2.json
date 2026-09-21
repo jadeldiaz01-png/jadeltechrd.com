@@ -1,0 +1,55 @@
+{
+  "schema":"jadel.ai-revenue-intelligence.v2",
+  "mode":"SHADOW_RECOMMEND_ONLY",
+  "production_authorized":false,
+  "external_side_effects_authorized":false,
+  "paid_spend_authorized":false,
+  "financial_execution_authorized":false,
+  "recognized_revenue_state":"SETTLED_CASH",
+  "data_contract":{
+    "facts":["GA4 aggregate events","D1 governed project lifecycle","reconciled payment ledger"],
+    "labels":["generate_lead","qualify_lead","close_convert_lead","settled_cash"],
+    "prohibited_features":["raw_email","raw_phone","free_text_secret","protected_class_proxy"],
+    "lineage_required":true,
+    "event_time_required":true,
+    "consent_purpose_required_where_applicable":true
+  },
+  "model_families":{
+    "baseline":{"type":"deterministic_rules","required":true},
+    "ml":{"types":["logistic_regression","gradient_boosted_trees"],"purpose":"lead propensity and anomaly triage","activation":"frozen_temporal_holdout_then_shadow"},
+    "deep_learning":{"purpose":"only when sample size and measured lift justify complexity","default":"OFF"},
+    "llm":{"api":"OpenAI Responses","structured_outputs":true,"purpose":["classification","summarization","proposal_generation"],"authority":"ADVISORY_ONLY"},
+    "multimodal":{"purpose":["user-authorized image/document understanding"],"authority":"ADVISORY_ONLY","default":"OFF"}
+  },
+  "evaluation":{
+    "temporal_split_required":true,
+    "leakage_tests_required":true,
+    "calibration_required":true,
+    "metrics":["PR_AUC","ROC_AUC","Brier","log_loss","calibration_error","cost_per_correct_policy_compliant_result"],
+    "slice_analysis_required":true,
+    "drift_detection_required":true,
+    "shadow_mode_required":true,
+    "rollback_required":true
+  },
+  "agent_control":{
+    "untrusted_content_is_data_not_instruction":true,
+    "tool_allowlist_required":true,
+    "typed_tool_io_required":true,
+    "least_privilege_required":true,
+    "budgets":["tokens","latency","tool_calls","recursion","cost"],
+    "human_approval":["customer_outreach","publication","paid_spend","credential_change","payment","production_promotion"],
+    "kill_switch_required":true
+  },
+  "promotion_gates":[
+    "GA4_BIGQUERY_DAILY_EXPORT_OBSERVED",
+    "GOVERNED_LABELS_SUFFICIENT",
+    "FROZEN_TEMPORAL_HOLDOUT_PASS",
+    "MODEL_CARD_AND_LINEAGE_PASS",
+    "SHADOW_MODE_PASS",
+    "DRIFT_AND_ROLLBACK_PASS",
+    "LLM_ADVERSARIAL_EVAL_PASS",
+    "MULTIMODAL_ADVERSARIAL_EVAL_PASS_IF_ENABLED",
+    "FINOPS_BUDGET_PASS",
+    "HUMAN_PRODUCTION_APPROVAL"
+  ]
+}
