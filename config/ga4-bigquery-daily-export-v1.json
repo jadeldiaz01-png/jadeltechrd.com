@@ -9,7 +9,9 @@
     "measurement_id": "G-K60SQ2ZHL9",
     "realtime_verified": true,
     "debugview_verified": true,
-    "debugview_evidence": "User-provided GA4 DebugView screenshot on 2026-09-20 showing page_view, session_start and user_engagement"
+    "debugview_evidence": "User-provided GA4 DebugView screenshot on 2026-09-20 showing page_view, session_start and user_engagement",
+    "reporting_data_observed": true,
+    "reporting_evidence": "evidence/analytics/ga4-observed-2026-09-20.json"
   },
   "bigquery": {
     "gcp_project_id": "jadeltechrd-analytics-prod",
@@ -25,7 +27,15 @@
     "legacy_service_account_policy": "LEGACY_ONLY_DO_NOT_REQUIRE_FOR_NEW_LINK",
     "required_project_role_for_resource_identity": "roles/bigquery.user",
     "required_dataset_role_for_resource_identity": "roles/bigquery.dataOwner",
-    "project_id_source": "User-provided Google Cloud Console screenshot, 2026-09-20"
+    "project_id_source": "User-provided Google Cloud Console screenshot, 2026-09-20",
+    "github_live_read": {
+      "auth": "WORKLOAD_IDENTITY_FEDERATION_REQUIRED",
+      "static_service_account_key_allowed": false,
+      "provider_variable": "GCP_WORKLOAD_IDENTITY_PROVIDER",
+      "service_account_variable": "GCP_BIGQUERY_READ_SERVICE_ACCOUNT",
+      "workflow": ".github/workflows/ml-data-freeze-readiness.yml",
+      "status": "PENDING_GCP_WIF_CONFIGURATION"
+    }
   },
   "security": {
     "static_service_account_json_allowed": false,
@@ -66,8 +76,13 @@
       "analytics/bigquery/10_revenue_feature_contract.sql.tmpl",
       "analytics/bigquery/11_lead_propensity_models.sql.tmpl",
       "analytics/bigquery/12_revenue_forecast_arima_plus.sql.tmpl",
-      "analytics/bigquery/13_dnn_research_candidate.sql.tmpl"
+      "analytics/bigquery/13_dnn_research_candidate.sql.tmpl",
+      "analytics/bigquery/20_lead_training_point_in_time.sql.tmpl",
+      "analytics/bigquery/21_freeze_training_dataset.sql.tmpl",
+      "analytics/bigquery/22_offline_logreg_eval.sql.tmpl",
+      "analytics/bigquery/23_shadow_score.sql.tmpl"
     ],
-    "model_research_activation": "BLOCKED_UNTIL_DAILY_EXPORT_AND_LABELED_OUTCOME_EVIDENCE"
+    "model_research_activation": "BLOCKED_UNTIL_DAILY_EXPORT_AND_LABELED_OUTCOME_EVIDENCE",
+    "dataset_freeze_policy": "config/ml-dataset-freeze-policy-2026.json"
   }
 }
