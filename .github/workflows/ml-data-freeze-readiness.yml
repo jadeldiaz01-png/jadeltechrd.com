@@ -102,20 +102,42 @@ jobs:
           }
           totals=$(query "SELECT COUNT(*) AS total_requests FROM project_requests")
           labels=$(query "SELECT stage,COUNT(*) AS event_count,COUNT(DISTINCT project_id) AS project_count FROM lead_lifecycle_events GROUP BY stage ORDER BY stage")
+          columns=$(query "PRAGMA table_info(project_requests)")
           total_requests=$(jq -r '.result[0].results[0].total_requests // 0' <<<"$totals")
           positive=$(jq -r '[.result[0].results[]? | select(.stage=="close_convert_lead") | .project_count] | add // 0' <<<"$labels")
           negative=$(jq -r '[.result[0].results[]? | select(.stage=="close_unconvert_lead" or .stage=="disqualify_lead") | .project_count] | add // 0' <<<"$labels")
-          status=READY_FOR_STRUCTURAL_FREEZE
-          if [ "$positive" -lt 1 ] || [ "$negative" -lt 1 ]; then status=BLOCKED_CLASS_COVERAGE; fi
+          join_column_present=$(jq -r '[.result[0].results[]?.name] | index("analytics_join_id") != null' <<<"$columns")
+
           mkdir -p evidence-runtime
-          jq -n             --arg observed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"             --arg status "$status"             --argjson total_requests "$total_requests"             --argjson positive_terminal_labels "$positive"             --argjson negative_terminal_labels "$negative"             --argjson stage_counts "$(jq '.result[0].results // []' <<<"$labels")"             '{
+          : > evidence-runtime/lead-outcomes-v1.jsonl
+          matched_terminal_labels=0
+          if [ "$join_column_present" = true ]; then
+            outcomes=$(query "WITH ranked AS (SELECT project_id,stage,created_at,event_id,ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY created_at DESC,event_id DESC) AS rn FROM lead_lifecycle_events) SELECT p.analytics_join_id AS lead_event_id,r.stage AS terminal_stage,r.created_at AS label_ts,'VERIFIED' AS evidence_state FROM ranked r JOIN project_requests p ON p.project_id=r.project_id WHERE r.rn=1 AND r.stage IN ('close_convert_lead','close_unconvert_lead','disqualify_lead') AND p.analytics_join_id IS NOT NULL AND p.analytics_join_id<>'' ORDER BY p.analytics_join_id")
+            jq -c '.result[0].results[]? | {lead_event_id,terminal_stage,label_ts,evidence_state}' <<<"$outcomes" > evidence-runtime/lead-outcomes-v1.jsonl
+            matched_terminal_labels=$(wc -l < evidence-runtime/lead-outcomes-v1.jsonl | tr -d '[:space:]')
+          fi
+          labels_sha256=$(sha256sum evidence-runtime/lead-outcomes-v1.jsonl | awk '{print $1}')
+
+          status=READY_FOR_STRUCTURAL_FREEZE
+          if [ "$join_column_present" != true ]; then
+            status=BLOCKED_JOIN_SCHEMA_NOT_DEPLOYED
+          elif [ "$positive" -lt 1 ] || [ "$negative" -lt 1 ]; then
+            status=BLOCKED_CLASS_COVERAGE
+          elif [ "$matched_terminal_labels" -lt $((positive + negative)) ]; then
+            status=BLOCKED_JOIN_COVERAGE
+          fi
+
+          jq -n             --arg observed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"             --arg status "$status"             --argjson total_requests "$total_requests"             --argjson positive_terminal_labels "$positive"             --argjson negative_terminal_labels "$negative"             --argjson matched_terminal_labels "$matched_terminal_labels"             --argjson join_column_present "$join_column_present"             --arg labels_sha256 "$labels_sha256"             --argjson stage_counts "$(jq '.result[0].results // []' <<<"$labels")"             '{
               schema:"jadel.commercial_label_readiness.v1",
               observed_at:$observed_at,
-              source:"production Cloudflare D1 aggregate SELECT queries",
+              source:"production Cloudflare D1 SELECT queries",
               pii_exported:false,
               total_requests:$total_requests,
               positive_terminal_labels:$positive_terminal_labels,
               negative_terminal_labels:$negative_terminal_labels,
+              matched_terminal_labels:$matched_terminal_labels,
+              analytics_join_id_schema_present:$join_column_present,
+              sanitized_label_snapshot_sha256:$labels_sha256,
               stage_counts:$stage_counts,
               status:$status
             }' > evidence-runtime/commercial-label-readiness.json
@@ -125,7 +147,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: commercial-label-readiness-${{ github.sha }}
-          path: evidence-runtime/commercial-label-readiness.json
+          path: |
+            evidence-runtime/commercial-label-readiness.json
+            evidence-runtime/lead-outcomes-v1.jsonl
           if-no-files-found: error
           retention-days: 30
 
