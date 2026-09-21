@@ -194,6 +194,21 @@ jobs:
           echo "db_hash=$db_hash" >> "$GITHUB_OUTPUT"
           echo "D1_DATABASE_HASH=$db_hash"
 
+          code_for() {
+            local url="$1" tmp code
+            tmp=$(mktemp)
+            code=$(curl -sS -o "$tmp" -w '%{http_code}' -H "Authorization: Bearer $token" "$url" || true)
+            printf '%s' "$code"
+          }
+          turnstile_code=$(code_for "https://api.cloudflare.com/client/v4/accounts/$account_id/challenges/widgets?per_page=1")
+          workers_code=$(code_for "https://api.cloudflare.com/client/v4/accounts/$account_id/workers/scripts")
+          settings_code=$(code_for "https://api.cloudflare.com/client/v4/accounts/$account_id/workers/scripts/${WORKER_NAME}/settings")
+          secrets_code=$(code_for "https://api.cloudflare.com/client/v4/accounts/$account_id/workers/scripts/${WORKER_NAME}/secrets")
+          echo "D1_TOKEN_TURNSTILE_HTTP=$turnstile_code"
+          echo "D1_TOKEN_WORKERS_HTTP=$workers_code"
+          echo "D1_TOKEN_SETTINGS_HTTP=$settings_code"
+          echo "D1_TOKEN_SECRETS_HTTP=$secrets_code"
+
   compare:
     needs: [worker-account, d1-account]
     runs-on: ubuntu-24.04
