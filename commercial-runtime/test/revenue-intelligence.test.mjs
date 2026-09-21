@@ -19,7 +19,9 @@ test("runtime aggregate stays aggregate-only and does not infer GA4 metrics", as
   assert.equal(summary.pending_policy_reviews, 2);
   assert.equal(summary.qualified_leads, 1);
   assert.equal(summary.converted_customers, 1);
+  assert.equal(summary.settled_cash_usd, 900);
   assert.equal(summary.reconciled_usd_revenue, 900);
+  assert.equal(summary.revenue_recognition, "SETTLED_CASH_ONLY");
   assert.equal(summary.landing_sessions, 0);
   assert.equal(summary.generated_leads, 0);
 });
@@ -27,8 +29,8 @@ test("runtime aggregate stays aggregate-only and does not infer GA4 metrics", as
 test("runtime view remains recommend-only with all advanced model paths disabled", async () => {
   const view = await buildRuntimeRevenueView(fakeDb([3,1,0,0,0]));
   assert.equal(view.recommendation.authority, "NO_EXTERNAL_SIDE_EFFECTS");
-  assert.equal(view.evidence_state.ml_models, "NOT_ACTIVATED");
-  assert.equal(view.evidence_state.llm_agent, "NOT_ACTIVATED");
-  assert.equal(view.evidence_state.multimodal_agent, "NOT_ACTIVATED");
+  assert.equal(view.evidence_state.ml_models, "RESEARCH_GATED");
+  assert.equal(view.evidence_state.llm_agent, "SHADOW_GATED");
+  assert.equal(view.evidence_state.multimodal_agent, "SHADOW_GATED");
   assert.equal(view.evidence_state.external_actions, "HUMAN_GATED");
 });
