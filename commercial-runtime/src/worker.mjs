@@ -399,6 +399,89 @@ export async function handleAdminApprovals(request, env) {
   return json({ approval_id: approvalId, project_id: projectId, state: nextState, policy_status: nextPolicy });
 }
 
+export async function handleAdminSettlements(request, env) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+
+  if (request.method === "GET") {
+    try {
+      const rows = await env.DB.prepare(
+        "SELECT s.settlement_id,s.ledger_id,s.provider,s.settled_amount_usd,s.currency_code,s.evidence_sha256,s.settled_at,s.reconciled_at,s.actor,s.created_at FROM settlement_events s ORDER BY s.settled_at DESC LIMIT 50"
+      ).all();
+      return json({ settlements: rows.results || [], authority: "AUDIT_READ_ONLY" });
+    } catch (error) {
+      console.error("settlement_read_failed", { error: String(error?.name || "Error") });
+      return json({ error: "SETTLEMENT_LEDGER_UNAVAILABLE" }, 503);
+    }
+  }
+  if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  let input;
+  try { input = await readJsonWithLimit(request); } catch { return json({ error: "INVALID_SETTLEMENT_REQUEST" }, 400); }
+  if (input?.confirmation !== "RECORD_SETTLED_CASH") return json({ error: "SETTLEMENT_CONFIRMATION_REQUIRED" }, 400);
+
+  const ledgerId = typeof input?.ledger_id === "string" && /^[0-9a-f-]{36}$/i.test(input.ledger_id) ? input.ledger_id : "";
+  const evidenceSha = typeof input?.evidence_sha256 === "string" && /^[0-9a-f]{64}$/i.test(input.evidence_sha256)
+    ? input.evidence_sha256.toLowerCase() : "";
+  const settlementReference = typeof input?.settlement_reference === "string" ? input.settlement_reference.trim().slice(0, 256) : "";
+  const settledAtMs = Date.parse(String(input?.settled_at || ""));
+  const settledAmount = Number(input?.settled_amount_usd);
+
+  if (!ledgerId || !evidenceSha || !settlementReference || !Number.isFinite(settledAtMs) || !Number.isFinite(settledAmount) || settledAmount <= 0) {
+    return json({ error: "INVALID_SETTLEMENT_REQUEST" }, 400);
+  }
+  if (settledAtMs > Date.now() + 5 * 60_000) return json({ error: "SETTLEMENT_TIME_IN_FUTURE" }, 400);
+
+  const ledger = await env.DB.prepare(
+    "SELECT ledger_id,provider,ledger_state,amount_usd,currency_code FROM payment_ledger WHERE ledger_id=? LIMIT 1"
+  ).bind(ledgerId).first();
+  if (!ledger) return json({ error: "PAYMENT_LEDGER_NOT_FOUND" }, 404);
+  if (ledger.ledger_state !== "MATCHED") return json({ error: "PAYMENT_NOT_MATCHED" }, 409);
+  if (ledger.currency_code !== "USD") return json({ error: "SETTLEMENT_CURRENCY_NOT_SUPPORTED" }, 400);
+
+  const gross = Number(ledger.amount_usd);
+  if (!Number.isFinite(gross) || gross <= 0 || settledAmount > gross) {
+    return json({ error: "SETTLEMENT_AMOUNT_INVALID" }, 400);
+  }
+
+  const existing = await env.DB.prepare(
+    "SELECT settlement_id FROM settlement_events WHERE ledger_id=? LIMIT 1"
+  ).bind(ledgerId).first();
+  if (existing) return json({ error: "SETTLEMENT_ALREADY_RECORDED", settlement_id: existing.settlement_id }, 409);
+
+  const now = new Date().toISOString();
+  const settlementId = crypto.randomUUID();
+  const referenceHash = await sha256Hex(settlementReference);
+  try {
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO settlement_events (settlement_id,ledger_id,provider,settlement_reference_hash,settled_amount_usd,currency_code,evidence_sha256,settled_at,reconciled_at,actor,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+      ).bind(
+        settlementId,ledgerId,String(ledger.provider),referenceHash,settledAmount,"USD",
+        evidenceSha,new Date(settledAtMs).toISOString(),now,"admin",now
+      ),
+      env.DB.prepare(INSERT_APPROVAL_SQL).bind(
+        crypto.randomUUID(),null,"settlement_record","APPROVED","admin",
+        "Explicit RECORD_SETTLED_CASH confirmation",
+        JSON.stringify({ settlement_id:settlementId, ledger_id:ledgerId, evidence_sha256:evidenceSha }),now
+      ),
+    ]);
+  } catch (error) {
+    console.error("settlement_record_failed", { ledger_id: ledgerId, error: String(error?.name || "Error") });
+    return json({ error: "SETTLEMENT_WRITE_FAILED" }, 503);
+  }
+
+  return json({
+    settlement_id:settlementId,
+    ledger_id:ledgerId,
+    state:"SETTLED_CASH",
+    settled_amount_usd:settledAmount,
+    currency_code:"USD",
+    evidence_sha256:evidenceSha,
+    authority:"HUMAN_RECONCILED"
+  }, 201);
+}
+
 export async function handleAdminRevenueIntelligence(request, env) {
   if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
   if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
@@ -585,6 +668,9 @@ export default {
     }
     if (url.pathname === "/api/v1/admin/approvals") {
       return handleAdminApprovals(request, env);
+    }
+    if (url.pathname === "/api/v1/admin/settlements") {
+      return handleAdminSettlements(request, env);
     }
     if (url.pathname === "/api/v1/admin/revenue-intelligence/analyze") {
       return handleAdminRevenueAnalysis(request, env);
