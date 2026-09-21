@@ -18,7 +18,16 @@
     "debugview_verified": true,
     "windsor_read_connection_verified": true,
     "debugview_evidence": "User-provided GA4 DebugView screenshot showing page_view, session_start and user_engagement; non_personalized_ads=1",
-    "ga4_core_verified": true
+    "ga4_core_verified": true,
+    "ga4_reporting_data_observed": true,
+    "ga4_reporting_observation": "evidence/analytics/ga4-observed-2026-09-20.json",
+    "ga4_reporting_observation_summary": {
+      "report_date": "2026-09-20",
+      "active_users": 6,
+      "page_views": 9,
+      "session_start_events": 9,
+      "key_events": 0
+    }
   },
   "architecture": {
     "browser_layer": {
@@ -57,7 +66,9 @@
       "gcp_project_id": "jadeltechrd-analytics-prod",
       "activation_gate": "GOOGLE_CLOUD_PROJECT_AND_GA4_EDITOR_ACCESS_REQUIRED",
       "cost_guard": "daily export first; streaming requires explicit cost approval",
-      "project_id_confirmed": true
+      "project_id_confirmed": true,
+      "live_read_mode": "GitHub OIDC Workload Identity Federation; no static service-account key",
+      "live_read_workflow": ".github/workflows/ml-data-freeze-readiness.yml"
     },
     "windsor": {
       "mode": "read_only_observability",
@@ -90,7 +101,8 @@
       "utm_medium",
       "utm_campaign",
       "utm_content",
-      "utm_term"
+      "utm_term",
+      "lead_event_id"
     ],
     "browser_parameter_denylist": [
       "name",
@@ -141,6 +153,10 @@
     "bigquery_ml_role": "GATED_RESEARCH_AND_ANALYTICS",
     "production_authorized": false,
     "autonomous_external_side_effects_authorized": false,
-    "max_unapproved_ad_spend_usd": 0
+    "max_unapproved_ad_spend_usd": 0,
+    "dataset_freeze_policy": "config/ml-dataset-freeze-policy-2026.json",
+    "join_contract": "one-time lead_event_id -> D1 analytics_join_id -> GA4 generate_lead raw export",
+    "offline_ml_authorized": false,
+    "shadow_ml_authorized": false
   }
 }
