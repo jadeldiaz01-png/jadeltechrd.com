@@ -56,26 +56,29 @@ jobs:
           echo "::add-mask::$token"
           printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
 
-      - name: Normalize P1 runtime secrets
+      - name: Normalize optional GitHub runtime secrets
         shell: bash
         run: |
           set -euo pipefail
-          normalize_secret() {
+          normalize_optional_secret() {
             local name="$1" raw="$2" value
             value=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
             if [[ "$value" == \"*\" && "$value" == *\" ]]; then value="${value:1:${#value}-2}"; fi
             if [ -z "$value" ]; then
-              echo "${name}_PRESENT=NO" >&2
-              exit 3
+              printf 'HAS_%s=false\n' "$name" >> "$GITHUB_ENV"
+              echo "${name}_SOURCE=EXISTING_WORKER_REQUIRED"
+              return 0
             fi
             echo "::add-mask::$value"
             printf '%s=%s\n' "$name" "$value" >> "$GITHUB_ENV"
+            printf 'HAS_%s=true\n' "$name" >> "$GITHUB_ENV"
+            echo "${name}_SOURCE=GITHUB_ENVIRONMENT"
           }
-          normalize_secret PAYPAL_CLIENT_ID "${PAYPAL_CLIENT_ID_RAW:-}"
-          normalize_secret PAYPAL_CLIENT_SECRET "${PAYPAL_CLIENT_SECRET_RAW:-}"
-          normalize_secret PAYPAL_WEBHOOK_ID "${PAYPAL_WEBHOOK_ID_RAW:-}"
-          normalize_secret ADMIN_API_TOKEN "${ADMIN_API_TOKEN_RAW:-}"
-          echo 'P1_RUNTIME_SECRETS=PASS'
+          normalize_optional_secret PAYPAL_CLIENT_ID "${PAYPAL_CLIENT_ID_RAW:-}"
+          normalize_optional_secret PAYPAL_CLIENT_SECRET "${PAYPAL_CLIENT_SECRET_RAW:-}"
+          normalize_optional_secret PAYPAL_WEBHOOK_ID "${PAYPAL_WEBHOOK_ID_RAW:-}"
+          normalize_optional_secret ADMIN_API_TOKEN "${ADMIN_API_TOKEN_RAW:-}"
+          echo 'OPTIONAL_GITHUB_RUNTIME_SECRETS_NORMALIZED=PASS'
 
       - name: Resolve account and verify required permissions
         id: cloudflare
@@ -110,6 +113,46 @@ jobs:
           check_api TURNSTILE_ACCESS "https://api.cloudflare.com/client/v4/accounts/${account_id}/challenges/widgets?per_page=1"
           check_api WORKERS_SCRIPTS_ACCESS "https://api.cloudflare.com/client/v4/accounts/${account_id}/workers/scripts"
           echo "CLOUDFLARE_DEPLOY_PREFLIGHT=PASS"
+
+      - name: Verify required Worker secrets exist or are supplied
+        shell: bash
+        env:
+          ACCOUNT_ID: ${{ steps.cloudflare.outputs.account_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          tmp=$(mktemp)
+          code=$(curl -sS -o "$tmp" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/secrets" || true)
+
+          if [ "$code" = 200 ]; then
+            test "$(jq -r '.success' "$tmp")" = true
+          elif [ "$code" = 404 ]; then
+            printf '{"success":true,"result":[]}' > "$tmp"
+          else
+            echo "WORKER_SECRET_PREFLIGHT=FAIL_HTTP_${code}" >&2
+            jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' "$tmp" >&2 || true
+            exit 11
+          fi
+
+          require_secret() {
+            local name="$1" supplied="$2"
+            if [ "$supplied" = true ]; then
+              echo "${name}=SUPPLIED_BY_GITHUB"
+              return 0
+            fi
+            if jq -e --arg n "$name" '.result | any(.name==$n and (.type=="secret_text" or .type=="secret_key"))' "$tmp" >/dev/null; then
+              echo "${name}=PRESERVE_EXISTING_WORKER_SECRET"
+              return 0
+            fi
+            echo "${name}=MISSING_FROM_GITHUB_AND_WORKER" >&2
+            exit 12
+          }
+
+          require_secret PAYPAL_CLIENT_ID "${HAS_PAYPAL_CLIENT_ID:-false}"
+          require_secret PAYPAL_CLIENT_SECRET "${HAS_PAYPAL_CLIENT_SECRET:-false}"
+          require_secret PAYPAL_WEBHOOK_ID "${HAS_PAYPAL_WEBHOOK_ID:-false}"
+          require_secret ADMIN_API_TOKEN "${HAS_ADMIN_API_TOKEN:-false}"
+          echo 'WORKER_SECRET_PREFLIGHT=PASS'
 
       - name: Reconcile D1 database without destructive actions
         id: d1
@@ -220,10 +263,19 @@ jobs:
           set -euo pipefail
           npx wrangler deploy --config wrangler.deploy.jsonc
           printf '%s' "$TURNSTILE_SECRET" | npx wrangler secret put TURNSTILE_SECRET_KEY --config wrangler.deploy.jsonc
-          printf '%s' "$PAYPAL_CLIENT_ID" | npx wrangler secret put PAYPAL_CLIENT_ID --config wrangler.deploy.jsonc
-          printf '%s' "$PAYPAL_CLIENT_SECRET" | npx wrangler secret put PAYPAL_CLIENT_SECRET --config wrangler.deploy.jsonc
-          printf '%s' "$PAYPAL_WEBHOOK_ID" | npx wrangler secret put PAYPAL_WEBHOOK_ID --config wrangler.deploy.jsonc
-          printf '%s' "$ADMIN_API_TOKEN" | npx wrangler secret put ADMIN_API_TOKEN --config wrangler.deploy.jsonc
+          if [ "${HAS_PAYPAL_CLIENT_ID:-false}" = true ]; then
+            printf '%s' "$PAYPAL_CLIENT_ID" | npx wrangler secret put PAYPAL_CLIENT_ID --config wrangler.deploy.jsonc
+          fi
+          if [ "${HAS_PAYPAL_CLIENT_SECRET:-false}" = true ]; then
+            printf '%s' "$PAYPAL_CLIENT_SECRET" | npx wrangler secret put PAYPAL_CLIENT_SECRET --config wrangler.deploy.jsonc
+          fi
+          if [ "${HAS_PAYPAL_WEBHOOK_ID:-false}" = true ]; then
+            printf '%s' "$PAYPAL_WEBHOOK_ID" | npx wrangler secret put PAYPAL_WEBHOOK_ID --config wrangler.deploy.jsonc
+          fi
+          if [ "${HAS_ADMIN_API_TOKEN:-false}" = true ]; then
+            printf '%s' "$ADMIN_API_TOKEN" | npx wrangler secret put ADMIN_API_TOKEN --config wrangler.deploy.jsonc
+          fi
+          echo 'WORKER_EXISTING_SECRETS_PRESERVED=PASS'
           echo 'WORKER_WORKFLOW_DEPLOY=PASS'
 
       - name: Verify D1 schema and public canary
