@@ -61,7 +61,9 @@
       "POSITIVE_CLASS_PRESENT",
       "NEGATIVE_CLASS_PRESENT",
       "EXACT_QUERY_REVISION_RECORDED",
-      "CONTENT_HASH_RECORDED"
+      "CONTENT_HASH_RECORDED",
+      "JOIN_COVERAGE_REPORTED",
+      "CONSENT_SELECTION_BIAS_REVIEW"
     ],
     "prohibited_features": [
       "name",
@@ -92,6 +94,12 @@
       "positive": "latest terminal lifecycle stage is close_convert_lead",
       "negative": "latest terminal lifecycle stage is close_unconvert_lead or disqualify_lead",
       "unresolved": "all non-terminal stages are excluded from supervised training"
+    },
+    "join_coverage": {
+      "denominator": "terminally labeled D1 projects with a non-empty analytics_join_id",
+      "numerator": "those labels matched to a GA4 generate_lead event by lead_event_id",
+      "unresolved_policy": "Unmatched leads are excluded from GA4-feature training, never imputed as negative.",
+      "promotion_rule": "Coverage and potential consent-selection bias must be reported before model evaluation can be interpreted."
     }
   },
   "evaluation_contract": {
