@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://intake.jadeltechrd.com; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>Revenue Command Center | Jadel Tech RD</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/revenue-ai.css">
+  <script type="module" src="/revenue-command-center.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+  <header class="site-header"><div class="shell header-inner"><a class="brand" href="/"><span class="brand-mark">JT</span><span>Jadel Tech RD</span></a><nav class="nav"><a href="/">Inicio</a><a href="/revenue-intelligence.html">Revenue Intelligence</a></nav></div></header>
+  <main id="main" class="shell revenue-page">
+    <section class="request-hero">
+      <div class="eyebrow"><span class="live-dot"></span> Consola privada · Shadow / Recommend only</div>
+      <h1>Revenue Command Center.</h1>
+      <p class="lead">Métricas agregadas, recomendaciones deterministas, análisis LLM, multimodal QC y evidencia de ejecuciones. La consola no mueve dinero ni autoriza gasto, publicación, refunds o despliegues. El reconocimiento de caja exige una conciliación humana explícita y evidencia SHA-256.</p>
+    </section>
+
+    <section class="command-auth revenue-card">
+      <form id="revenue-auth">
+        <label>Token de operador<input id="revenue-admin-token" type="password" autocomplete="off" required></label>
+        <button class="button primary" type="submit">Conectar consola</button>
+        <button class="button secondary" id="disconnect" type="button" disabled>Desconectar</button>
+      </form>
+      <p id="command-status" role="status" aria-live="polite">Sin autenticar.</p>
+    </section>
+
+    <section class="command-grid">
+      <article class="revenue-card"><span>SETTLED CASH</span><strong id="metric-revenue">—</strong><small>USD reconocido sólo con settlement evidence</small></article>
+      <article class="revenue-card"><span>REQUESTS</span><strong id="metric-requests">—</strong><small>solicitudes gobernadas</small></article>
+      <article class="revenue-card"><span>QUALIFIED</span><strong id="metric-qualified">—</strong><small>leads cualificados</small></article>
+      <article class="revenue-card"><span>CONVERTED</span><strong id="metric-converted">—</strong><small>conversión comercial</small></article>
+    </section>
+
+    <section class="request-card">
+      <div class="section-heading"><div><div class="eyebrow">Financial truth</div><h2>Registrar SETTLED_CASH</h2></div></div>
+      <p class="muted">Sólo para un payment ledger ya MATCHED. Este acto no mueve fondos; registra evidencia humana de un settlement real. La referencia del proveedor se hashea antes de persistir.</p>
+      <form id="settlement-form" class="settlement-form">
+        <label>Ledger ID<input id="settlement-ledger-id" autocomplete="off" required></label>
+        <label>Monto liquidado USD<input id="settlement-amount" type="number" min="0.01" step="0.01" required></label>
+        <label>Referencia del settlement<input id="settlement-reference" autocomplete="off" required></label>
+        <label>Evidence SHA-256<input id="settlement-evidence-sha" pattern="[A-Fa-f0-9]{64}" autocomplete="off" required></label>
+        <label>Fecha/hora del settlement<input id="settlement-at" type="datetime-local" required></label>
+        <label class="check-line"><input id="settlement-confirm" type="checkbox" required> Confirmo que verifiqué el settlement real y su evidencia.</label>
+        <button class="button secondary" id="record-settlement" type="submit" disabled>Registrar SETTLED_CASH</button>
+      </form>
+      <p id="settlement-status" role="status" aria-live="polite"></p>
+      <div id="settlement-list" class="recommendation-list"></div>
+    </section>
+
+    <section class="request-card">
+      <div class="section-heading"><div><div class="eyebrow">Control automático interno</div><h2>Estado y recomendaciones</h2></div><button class="button secondary" id="refresh" type="button" disabled>Actualizar</button></div>
+      <pre id="runtime-state" class="command-output">No cargado.</pre>
+      <div id="deterministic-recommendations" class="recommendation-list"></div>
+    </section>
+
+    <section class="request-card">
+      <div class="section-heading"><div><div class="eyebrow">LLM advisory</div><h2>Análisis estructurado</h2></div></div>
+      <div class="command-actions">
+        <button data-objective="OPERATING_REVIEW" class="button secondary ai-action" disabled>Operating review</button>
+        <button data-objective="FUNNEL_DIAGNOSIS" class="button secondary ai-action" disabled>Diagnóstico funnel</button>
+        <button data-objective="REVENUE_RECONCILIATION" class="button secondary ai-action" disabled>Reconciliación</button>
+        <button data-objective="EXPERIMENT_PLANNING" class="button secondary ai-action" disabled>Plan de experimentos</button>
+      </div>
+      <pre id="ai-output" class="command-output">Sin ejecución.</pre>
+    </section>
+
+    <section class="request-card">
+      <div class="section-heading"><div><div class="eyebrow">Multimodal</div><h2>Creative QC privado</h2></div></div>
+      <form id="multimodal-form" class="command-inline">
+        <label>R2 object key<input id="asset-key" placeholder="approved/campaign/creative.webp" autocomplete="off"></label>
+        <label class="check-line"><input id="rights-metadata" type="checkbox"> Rights metadata verificada</label>
+        <button class="button secondary" id="run-multimodal" type="submit" disabled>Analizar asset</button>
+      </form>
+      <pre id="multimodal-output" class="command-output">Sin ejecución.</pre>
+    </section>
+
+    <section class="request-card">
+      <div class="section-heading"><div><div class="eyebrow">Evidence ledger</div><h2>Últimas ejecuciones de modelos</h2></div></div>
+      <div id="model-runs" class="recommendation-list"></div>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,59 @@
+{
+  "schema": "jadel.ai-revenue.shadow-readiness.v1",
+  "default_decision": "NO_GO",
+  "stage": "RESOURCE_AND_POLICY_READINESS",
+  "expected": {
+    "gateway_id": "jadel-revenue-ai",
+    "gateway_collect_logs": true,
+    "gateway_rate_limit": {
+      "maximum_requests": 5,
+      "interval_seconds": 60
+    },
+    "spend_limits": {
+      "required": true,
+      "max_daily_usd": 2,
+      "max_monthly_usd": 25,
+      "action": "BLOCK_429"
+    },
+    "vectorize_index": "jadel-revenue-knowledge",
+    "vectorize_metadata_indexes": {
+      "trust": "string",
+      "active": "boolean",
+      "doc_type": "string",
+      "revision": "string",
+      "effective_epoch": "number"
+    },
+    "r2_asset_bucket": "jadel-ai-approved-assets",
+    "r2_public_access": false,
+    "model_candidate": "openai/gpt-5.6-luna",
+    "automatic_control_enabled": false
+  },
+  "credentials": {
+    "readiness_token": "CLOUDFLARE_AI_READINESS_TOKEN",
+    "readiness_token_required_permissions": [
+      "AI Gateway Read",
+      "Vectorize Read",
+      "Workers R2 Storage Read"
+    ],
+    "runtime_token": "AI_RUNTIME_TOKEN",
+    "runtime_token_required_permissions": [
+      "Workers AI Read"
+    ],
+    "same_token_reuse_for_readiness_and_runtime_forbidden": true
+  },
+  "gates": [
+    "EXACT_SOURCE_SHA",
+    "READINESS_TOKEN_ACTIVE",
+    "RUNTIME_TOKEN_ACTIVE",
+    "AI_GATEWAY_PRESENT",
+    "AI_GATEWAY_LOGGING",
+    "AI_GATEWAY_RATE_LIMIT",
+    "AI_GATEWAY_SPEND_LIMIT",
+    "VECTORIZE_INDEX_PRESENT",
+    "VECTORIZE_METADATA_INDEXES",
+    "R2_PRIVATE_ASSET_BUCKET_PRESENT",
+    "NO_INFERENCE_EXECUTED",
+    "NO_RESOURCE_MUTATION"
+  ],
+  "production_authorized": false
+}

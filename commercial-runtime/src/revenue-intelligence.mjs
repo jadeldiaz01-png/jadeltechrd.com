@@ -25,7 +25,8 @@ export function buildRevenueRecommendation(summary = {}, modelSignals = {}) {
     pending_policy_reviews: finiteNonNegative(summary.pending_policy_reviews, "pending_policy_reviews"),
     qualified_leads: finiteNonNegative(summary.qualified_leads, "qualified_leads"),
     converted_customers: finiteNonNegative(summary.converted_customers, "converted_customers"),
-    reconciled_usd_revenue: finiteNonNegative(summary.reconciled_usd_revenue, "reconciled_usd_revenue"),
+    settled_cash_usd: finiteNonNegative(summary.settled_cash_usd ?? summary.reconciled_usd_revenue, "settled_cash_usd"),
+    reconciled_usd_revenue: finiteNonNegative(summary.settled_cash_usd ?? summary.reconciled_usd_revenue, "reconciled_usd_revenue"),
   };
 
   const signals = {
@@ -61,7 +62,7 @@ export function buildRevenueRecommendation(summary = {}, modelSignals = {}) {
       scope:"MODEL_REVIEW", external_side_effect:false, requires_human:false
     });
   }
-  if (metrics.converted_customers > 0 && metrics.reconciled_usd_revenue === 0) {
+  if (metrics.converted_customers > 0 && metrics.settled_cash_usd === 0) {
     proposals.push({
       id:"reconcile-conversion-revenue", priority:"HIGH",
       action:"Reconcile converted-customer evidence against the payment ledger before reporting revenue.",
@@ -100,13 +101,13 @@ export async function loadRevenueAggregate(db) {
     pendingPolicyReviews,
     qualifiedLeads,
     convertedCustomers,
-    reconciledUsdRevenue,
+    settledCashUsd,
   ] = await Promise.all([
     scalar(db, "SELECT COUNT(*) AS value FROM project_requests"),
     scalar(db, "SELECT COUNT(*) AS value FROM project_requests WHERE policy_status IN ('PENDING','REQUIRES_HUMAN')"),
     scalar(db, "SELECT COUNT(DISTINCT project_id) AS value FROM lead_lifecycle_events WHERE stage='qualify_lead'"),
     scalar(db, "SELECT COUNT(DISTINCT project_id) AS value FROM lead_lifecycle_events WHERE stage='close_convert_lead'"),
-    scalar(db, "SELECT COALESCE(SUM(CASE WHEN currency_code='USD' AND ledger_state='MATCHED' THEN CAST(amount_usd AS REAL) ELSE 0 END),0) AS value FROM payment_ledger"),
+    scalar(db, "SELECT COALESCE(SUM(settled_amount_usd),0) AS value FROM settlement_events WHERE currency_code='USD'"),
   ]);
 
   return {
@@ -115,7 +116,9 @@ export async function loadRevenueAggregate(db) {
     pending_policy_reviews:pendingPolicyReviews,
     qualified_leads:qualifiedLeads,
     converted_customers:convertedCustomers,
-    reconciled_usd_revenue:reconciledUsdRevenue,
+    settled_cash_usd:settledCashUsd,
+    reconciled_usd_revenue:settledCashUsd,
+    revenue_recognition:"SETTLED_CASH_ONLY",
     landing_sessions:0,
     generated_leads:0,
     analytics_note:"GA4 funnel metrics are intentionally not inferred from the commercial ledger."
@@ -128,9 +131,9 @@ export async function buildRuntimeRevenueView(db) {
     summary,
     recommendation:buildRevenueRecommendation(summary),
     evidence_state:{
-      ml_models:"NOT_ACTIVATED",
-      llm_agent:"NOT_ACTIVATED",
-      multimodal_agent:"NOT_ACTIVATED",
+      ml_models:"RESEARCH_GATED",
+      llm_agent:"SHADOW_GATED",
+      multimodal_agent:"SHADOW_GATED",
       external_actions:"HUMAN_GATED"
     }
   };

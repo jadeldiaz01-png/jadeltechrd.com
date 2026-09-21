@@ -1,5 +1,7 @@
 import { validateIdempotencyKey, validateProjectRequest } from "./validation.mjs";
 import { buildRuntimeRevenueView } from "./revenue-intelligence.mjs";
+import { aiRuntimeStatus, runRevenueAdvisor, runMultimodalCreativeQc } from "./ai-revenue-agent.mjs";
+import { knowledgeRuntimeStatus, retrieveApprovedKnowledge } from "./knowledge-retrieval.mjs";
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_WEBHOOK_BYTES = 64 * 1024;
@@ -397,6 +399,89 @@ export async function handleAdminApprovals(request, env) {
   return json({ approval_id: approvalId, project_id: projectId, state: nextState, policy_status: nextPolicy });
 }
 
+export async function handleAdminSettlements(request, env) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+
+  if (request.method === "GET") {
+    try {
+      const rows = await env.DB.prepare(
+        "SELECT s.settlement_id,s.ledger_id,s.provider,s.settled_amount_usd,s.currency_code,s.evidence_sha256,s.settled_at,s.reconciled_at,s.actor,s.created_at FROM settlement_events s ORDER BY s.settled_at DESC LIMIT 50"
+      ).all();
+      return json({ settlements: rows.results || [], authority: "AUDIT_READ_ONLY" });
+    } catch (error) {
+      console.error("settlement_read_failed", { error: String(error?.name || "Error") });
+      return json({ error: "SETTLEMENT_LEDGER_UNAVAILABLE" }, 503);
+    }
+  }
+  if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  let input;
+  try { input = await readJsonWithLimit(request); } catch { return json({ error: "INVALID_SETTLEMENT_REQUEST" }, 400); }
+  if (input?.confirmation !== "RECORD_SETTLED_CASH") return json({ error: "SETTLEMENT_CONFIRMATION_REQUIRED" }, 400);
+
+  const ledgerId = typeof input?.ledger_id === "string" && /^[0-9a-f-]{36}$/i.test(input.ledger_id) ? input.ledger_id : "";
+  const evidenceSha = typeof input?.evidence_sha256 === "string" && /^[0-9a-f]{64}$/i.test(input.evidence_sha256)
+    ? input.evidence_sha256.toLowerCase() : "";
+  const settlementReference = typeof input?.settlement_reference === "string" ? input.settlement_reference.trim().slice(0, 256) : "";
+  const settledAtMs = Date.parse(String(input?.settled_at || ""));
+  const settledAmount = Number(input?.settled_amount_usd);
+
+  if (!ledgerId || !evidenceSha || !settlementReference || !Number.isFinite(settledAtMs) || !Number.isFinite(settledAmount) || settledAmount <= 0) {
+    return json({ error: "INVALID_SETTLEMENT_REQUEST" }, 400);
+  }
+  if (settledAtMs > Date.now() + 5 * 60_000) return json({ error: "SETTLEMENT_TIME_IN_FUTURE" }, 400);
+
+  const ledger = await env.DB.prepare(
+    "SELECT ledger_id,provider,ledger_state,amount_usd,currency_code FROM payment_ledger WHERE ledger_id=? LIMIT 1"
+  ).bind(ledgerId).first();
+  if (!ledger) return json({ error: "PAYMENT_LEDGER_NOT_FOUND" }, 404);
+  if (ledger.ledger_state !== "MATCHED") return json({ error: "PAYMENT_NOT_MATCHED" }, 409);
+  if (ledger.currency_code !== "USD") return json({ error: "SETTLEMENT_CURRENCY_NOT_SUPPORTED" }, 400);
+
+  const gross = Number(ledger.amount_usd);
+  if (!Number.isFinite(gross) || gross <= 0 || settledAmount > gross) {
+    return json({ error: "SETTLEMENT_AMOUNT_INVALID" }, 400);
+  }
+
+  const existing = await env.DB.prepare(
+    "SELECT settlement_id FROM settlement_events WHERE ledger_id=? LIMIT 1"
+  ).bind(ledgerId).first();
+  if (existing) return json({ error: "SETTLEMENT_ALREADY_RECORDED", settlement_id: existing.settlement_id }, 409);
+
+  const now = new Date().toISOString();
+  const settlementId = crypto.randomUUID();
+  const referenceHash = await sha256Hex(settlementReference);
+  try {
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO settlement_events (settlement_id,ledger_id,provider,settlement_reference_hash,settled_amount_usd,currency_code,evidence_sha256,settled_at,reconciled_at,actor,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+      ).bind(
+        settlementId,ledgerId,String(ledger.provider),referenceHash,settledAmount,"USD",
+        evidenceSha,new Date(settledAtMs).toISOString(),now,"admin",now
+      ),
+      env.DB.prepare(INSERT_APPROVAL_SQL).bind(
+        crypto.randomUUID(),null,"settlement_record","APPROVED","admin",
+        "Explicit RECORD_SETTLED_CASH confirmation",
+        JSON.stringify({ settlement_id:settlementId, ledger_id:ledgerId, evidence_sha256:evidenceSha }),now
+      ),
+    ]);
+  } catch (error) {
+    console.error("settlement_record_failed", { ledger_id: ledgerId, error: String(error?.name || "Error") });
+    return json({ error: "SETTLEMENT_WRITE_FAILED" }, 503);
+  }
+
+  return json({
+    settlement_id:settlementId,
+    ledger_id:ledgerId,
+    state:"SETTLED_CASH",
+    settled_amount_usd:settledAmount,
+    currency_code:"USD",
+    evidence_sha256:evidenceSha,
+    authority:"HUMAN_RECONCILED"
+  }, 201);
+}
+
 export async function handleAdminRevenueIntelligence(request, env) {
   if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
   if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
@@ -409,10 +494,124 @@ export async function handleAdminRevenueIntelligence(request, env) {
       generated_at: new Date().toISOString(),
       authority: "RECOMMEND_ONLY",
       production_authorized: false,
+      ai_runtime: aiRuntimeStatus(env),
+      knowledge_runtime: knowledgeRuntimeStatus(env),
     });
   } catch (error) {
     console.error("revenue_intelligence_read_failed", { error: String(error?.name || "Error") });
     return json({ error: "REVENUE_INTELLIGENCE_UNAVAILABLE" }, 503);
+  }
+}
+
+
+function safeRuntimeError(error) {
+  return String(error?.message || "RUNTIME_ERROR").split(":", 1)[0].slice(0, 160);
+}
+
+export async function handleAdminRevenueAnalysis(request, env) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+  if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  let input;
+  try { input = await readJsonWithLimit(request); } catch { return json({ error: "INVALID_ANALYSIS_REQUEST" }, 400); }
+  const objective = String(input?.objective || "OPERATING_REVIEW").toUpperCase();
+  if (!new Set(["FUNNEL_DIAGNOSIS","REVENUE_RECONCILIATION","EXPERIMENT_PLANNING","OPERATING_REVIEW"]).has(objective)) {
+    return json({ error: "AI_OBJECTIVE_NOT_ALLOWED" }, 400);
+  }
+
+  try {
+    const revenueView = await buildRuntimeRevenueView(env.DB);
+    const knowledge = await retrieveApprovedKnowledge(objective, env);
+    const result = await runRevenueAdvisor({
+      env,
+      revenueView,
+      objective,
+      knowledge: knowledge.items || [],
+    });
+    return json({
+      result,
+      knowledge_state: knowledge.status,
+      authority: "NO_EXTERNAL_SIDE_EFFECTS",
+      production_authorized: false,
+      external_side_effects_authorized: false,
+    });
+  } catch (error) {
+    const code = safeRuntimeError(error);
+    console.error("ai_revenue_analysis_failed", { code });
+    if (code === "AI_RATE_LIMITED") return json({ error: code }, 429, { "retry-after": "60" });
+    if (code === "AI_OBJECTIVE_NOT_ALLOWED") return json({ error: code }, 400);
+    return json({ error: "AI_REVENUE_ANALYSIS_UNAVAILABLE", blocker: code }, 503);
+  }
+}
+
+export async function handleAdminMultimodalQc(request, env) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+  if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  let input;
+  try { input = await readJsonWithLimit(request); } catch { return json({ error: "INVALID_MULTIMODAL_REQUEST" }, 400); }
+  try {
+    const result = await runMultimodalCreativeQc({
+      env,
+      assetKey: input?.asset_key,
+      rightsMetadataPresent: input?.rights_metadata_present === true,
+    });
+    return json({
+      result,
+      authority: "HUMAN_PUBLICATION_REVIEW_REQUIRED",
+      publication_authorized: false,
+    });
+  } catch (error) {
+    const code = safeRuntimeError(error);
+    console.error("multimodal_qc_failed", { code });
+    if (new Set(["INVALID_ASSET_KEY","ASSET_NOT_FOUND","ASSET_TOO_LARGE","ASSET_MEDIA_TYPE_NOT_ALLOWED"]).has(code)) {
+      return json({ error: code }, code === "ASSET_NOT_FOUND" ? 404 : 400);
+    }
+    if (code === "AI_RATE_LIMITED") return json({ error: code }, 429, { "retry-after": "60" });
+    return json({ error: "MULTIMODAL_QC_UNAVAILABLE", blocker: code }, 503);
+  }
+}
+
+export async function handleAdminModelRuns(request, env) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+  if (request.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+  try {
+    const rows = await env.DB.prepare(
+      "SELECT run_id,run_kind,model_id,source_sha,status,policy_mode,provider_request_id,input_tokens,output_tokens,latency_ms,error_code,created_at,completed_at FROM ai_model_runs ORDER BY created_at DESC LIMIT 50"
+    ).all();
+    return json({ runs: rows.results || [], authority: "AUDIT_READ_ONLY" });
+  } catch (error) {
+    console.error("ai_model_runs_read_failed", { code: safeRuntimeError(error) });
+    return json({ error: "AI_MODEL_RUNS_UNAVAILABLE" }, 503);
+  }
+}
+
+async function maybeRunScheduledRevenueAnalysis(env) {
+  if (String(env.AI_AUTOMATED_CONTROL_ENABLED || "0") !== "1") return;
+  if (!aiRuntimeStatus(env).enabled) return;
+  try {
+    const intervalMinutes = Math.min(Math.max(Number(env.AI_AUTOMATED_CONTROL_INTERVAL_MINUTES || 360), 60), 1440);
+    const latest = await env.DB.prepare(
+      "SELECT created_at FROM ai_model_runs WHERE run_kind='SCHEDULED_REVENUE_ADVISOR' AND status='SUCCEEDED' ORDER BY created_at DESC LIMIT 1"
+    ).first();
+    if (latest?.created_at) {
+      const elapsed = Date.now() - new Date(latest.created_at).getTime();
+      if (Number.isFinite(elapsed) && elapsed < intervalMinutes * 60_000) return;
+    }
+    const revenueView = await buildRuntimeRevenueView(env.DB);
+    const knowledge = await retrieveApprovedKnowledge("OPERATING_REVIEW", env);
+    await runRevenueAdvisor({
+      env,
+      revenueView,
+      objective: "OPERATING_REVIEW",
+      knowledge: knowledge.items || [],
+      runKind: "SCHEDULED_REVENUE_ADVISOR",
+    });
+  } catch (error) {
+    console.error("scheduled_ai_revenue_analysis_failed", { code: safeRuntimeError(error) });
   }
 }
 
@@ -470,6 +669,18 @@ export default {
     if (url.pathname === "/api/v1/admin/approvals") {
       return handleAdminApprovals(request, env);
     }
+    if (url.pathname === "/api/v1/admin/settlements") {
+      return handleAdminSettlements(request, env);
+    }
+    if (url.pathname === "/api/v1/admin/revenue-intelligence/analyze") {
+      return handleAdminRevenueAnalysis(request, env);
+    }
+    if (url.pathname === "/api/v1/admin/multimodal-qc") {
+      return handleAdminMultimodalQc(request, env);
+    }
+    if (url.pathname === "/api/v1/admin/model-runs") {
+      return handleAdminModelRuns(request, env);
+    }
     if (url.pathname === "/api/v1/admin/revenue-intelligence") {
       return handleAdminRevenueIntelligence(request, env);
     }
@@ -477,5 +688,6 @@ export default {
   },
   async scheduled(_controller, env) {
     await dispatchOutbox(env);
+    await maybeRunScheduledRevenueAnalysis(env);
   },
 };

@@ -1,0 +1,290 @@
+{
+  "schema": "jadel.ai-revenue-intelligence.v2",
+  "revision": "2026-09-20.2",
+  "mode": "SHADOW_RECOMMEND_ONLY",
+  "production_authorized": false,
+  "external_side_effects_authorized": false,
+  "paid_spend_authorized": false,
+  "financial_execution_authorized": false,
+  "recognized_revenue_state": "SETTLED_CASH",
+  "architecture": {
+    "static_experience": "GitHub Pages",
+    "public_edge": "Cloudflare",
+    "commercial_runtime": "Cloudflare Workers",
+    "commercial_system_of_record": "Cloudflare D1",
+    "behavioral_analytics": "GA4",
+    "analytical_warehouse": "BigQuery daily export gated",
+    "ml_platform": "BigQuery ML",
+    "llm_transport": "Cloudflare AI Gateway Responses-compatible endpoint",
+    "rag": "Workers AI embeddings + Vectorize approved corpus",
+    "multimodal_assets": "private R2 binding by approved object key only",
+    "audit": "D1 ai_model_runs plus CI/runtime evidence"
+  },
+  "runtime": {
+    "default_enabled": false,
+    "kill_switch_default": "ON",
+    "source_sha_binding_required": true,
+    "admin_auth_required": true,
+    "no_browser_model_credentials": true,
+    "model_candidate": "openai/gpt-5.6-luna",
+    "provider_model_runtime_configurable": true,
+    "response_contract": "strict JSON Schema",
+    "max_output_tokens": 1200,
+    "timeout_ms": 20000,
+    "ai_gateway_rate_limit_required": true,
+    "ai_gateway_spend_limit_required": true,
+    "dedicated_ai_runtime_token_required": true,
+    "control_plane_token_reuse_for_ai_forbidden": true
+  },
+  "automatic_control": {
+    "state": "IMPLEMENTED_DISABLED_BY_DEFAULT",
+    "mode": "SCHEDULED_INTERNAL_OBSERVE_RECOMMEND",
+    "minimum_interval_minutes": 60,
+    "recommended_interval_minutes": 360,
+    "allowed": [
+      "read aggregate commercial facts",
+      "retrieve approved knowledge",
+      "run bounded model inference",
+      "persist AI run evidence",
+      "produce internal recommendations"
+    ],
+    "forbidden": [
+      "customer outreach",
+      "external publication",
+      "paid spend",
+      "payment",
+      "refund",
+      "settlement fabrication",
+      "credential change",
+      "production deployment",
+      "live trading",
+      "resource deletion"
+    ],
+    "rule": "Automatic control may change internal evidence state only; external business actions require deterministic policy and human approval."
+  },
+  "data_contract": {
+    "facts": [
+      "GA4 consented aggregate events",
+      "D1 governed project lifecycle",
+      "D1 settlement_events for SETTLED_CASH only",
+      "approved Vectorize knowledge metadata",
+      "approved R2 creative assets"
+    ],
+    "labels": [
+      "generate_lead",
+      "qualify_lead",
+      "close_convert_lead",
+      "settled_cash"
+    ],
+    "prohibited_features": [
+      "raw_name",
+      "raw_email",
+      "raw_phone",
+      "free_text_notes",
+      "payment_credentials",
+      "authentication_tokens",
+      "turnstile_tokens",
+      "protected_class_proxy"
+    ],
+    "lineage_required": true,
+    "event_time_required": true,
+    "ingestion_time_required": true,
+    "schema_revision_required": true,
+    "consent_purpose_required_where_applicable": true,
+    "pii_to_llm_forbidden": true
+  },
+  "model_families": {
+    "baseline": {
+      "type": "deterministic_rules",
+      "required": true,
+      "state": "ACTIVE_SAFE_INTERNAL"
+    },
+    "ml": {
+      "types": [
+        "LOGISTIC_REG",
+        "BOOSTED_TREE_CLASSIFIER"
+      ],
+      "purpose": [
+        "lead propensity",
+        "funnel anomaly triage"
+      ],
+      "activation": "frozen temporal holdout then shadow",
+      "explainability_required": true
+    },
+    "deep_learning": {
+      "types": [
+        "DNN_CLASSIFIER"
+      ],
+      "purpose": "challenger only after simple-model baseline",
+      "default": "OFF",
+      "gates": [
+        "minimum labeled volume",
+        "incremental value over simpler model",
+        "training reproducibility",
+        "regularization",
+        "cost justification",
+        "explainability"
+      ]
+    },
+    "forecasting": {
+      "types": [
+        "ARIMA_PLUS"
+      ],
+      "purpose": "settled-cash and funnel forecasting after sufficient history",
+      "activation": "research then backtested shadow"
+    },
+    "llm": {
+      "api": "Responses-compatible",
+      "gateway": "Cloudflare AI Gateway",
+      "structured_outputs": true,
+      "purpose": [
+        "aggregate diagnosis",
+        "reconciliation review",
+        "experiment planning",
+        "operating review"
+      ],
+      "authority": "ADVISORY_ONLY",
+      "tool_calls_enabled": false
+    },
+    "multimodal": {
+      "input": "private R2 approved object key; no arbitrary URL",
+      "allowed_mime": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "max_bytes": 4194304,
+      "purpose": [
+        "creative quality",
+        "brand consistency",
+        "risk signal review"
+      ],
+      "authority": "HUMAN_PUBLICATION_REVIEW_REQUIRED",
+      "default": "OFF"
+    },
+    "rag": {
+      "corpus": "APPROVED_ONLY",
+      "vector_store": "Cloudflare Vectorize",
+      "retrieved_content_trust": "UNTRUSTED_DATA_NOT_INSTRUCTION",
+      "metadata_filter": {
+        "trust": "APPROVED",
+        "active": true
+      },
+      "max_chunks": 4
+    }
+  },
+  "evaluation": {
+    "temporal_split_required": true,
+    "leakage_tests_required": true,
+    "point_in_time_lineage_required": true,
+    "baseline_comparison_required": true,
+    "calibration_required": true,
+    "metrics": [
+      "PR_AUC",
+      "ROC_AUC",
+      "Brier",
+      "log_loss",
+      "calibration_error",
+      "cost_per_correct_policy_compliant_result"
+    ],
+    "slice_analysis_required": true,
+    "explainability_required": true,
+    "independent_reproduction_required": true,
+    "drift_detection_required": true,
+    "shadow_mode_required": true,
+    "rollback_required": true,
+    "dnn_extra": [
+      "data_volume_gate",
+      "incremental_value_gate",
+      "reproducibility_gate"
+    ],
+    "llm_extra": [
+      "prompt_injection",
+      "indirect_prompt_injection",
+      "structured_output",
+      "hallucinated_revenue",
+      "unsupported_roi",
+      "cost_budget",
+      "stale_data",
+      "conflicting_sources"
+    ],
+    "multimodal_extra": [
+      "visual_prompt_injection",
+      "rights_metadata",
+      "unsafe_content",
+      "human_publication_review"
+    ]
+  },
+  "agent_control": {
+    "untrusted_content_is_data_not_instruction": true,
+    "tool_allowlist_required": true,
+    "typed_tool_io_required": true,
+    "least_privilege_required": true,
+    "budgets": [
+      "tokens",
+      "latency",
+      "requests",
+      "cost"
+    ],
+    "human_approval": [
+      "customer_outreach",
+      "publication",
+      "paid_spend",
+      "credential_change",
+      "payment",
+      "refund",
+      "settlement_record",
+      "production_promotion",
+      "model_promotion",
+      "external_data_export"
+    ],
+    "kill_switch_required": true,
+    "model_output_is_authorization": false
+  },
+  "endpoints": {
+    "aggregate": "GET /api/v1/admin/revenue-intelligence",
+    "analyze": "POST /api/v1/admin/revenue-intelligence/analyze",
+    "multimodal_qc": "POST /api/v1/admin/multimodal-qc",
+    "model_runs": "GET /api/v1/admin/model-runs"
+  },
+  "bindings": {
+    "required_for_llm": [
+      "DB",
+      "AI_ANALYSIS_RATE_LIMITER",
+      "AI_RUNTIME_TOKEN",
+      "CLOUDFLARE_ACCOUNT_ID",
+      "AI_GATEWAY_ID",
+      "AI_MODEL",
+      "AI_SOURCE_SHA"
+    ],
+    "optional_rag": [
+      "AI",
+      "KNOWLEDGE_INDEX",
+      "AI_EMBEDDING_MODEL"
+    ],
+    "optional_multimodal": [
+      "AI_ASSETS"
+    ],
+    "browser_exposure_forbidden": [
+      "AI_RUNTIME_TOKEN",
+      "CLOUDFLARE_ACCOUNT_ID"
+    ]
+  },
+  "promotion_gates": [
+    "GA4_BIGQUERY_DAILY_EXPORT_OBSERVED",
+    "SETTLED_CASH_LEDGER_CONTRACT_PASS",
+    "GOVERNED_LABELS_SUFFICIENT",
+    "FROZEN_TEMPORAL_HOLDOUT_PASS",
+    "MODEL_CARD_AND_LINEAGE_PASS",
+    "BASELINE_COMPARISON_PASS",
+    "CALIBRATION_AND_SLICE_PASS",
+    "SHADOW_MODE_PASS",
+    "DRIFT_AND_ROLLBACK_PASS",
+    "LLM_ADVERSARIAL_EVAL_PASS",
+    "MULTIMODAL_ADVERSARIAL_EVAL_PASS_IF_ENABLED",
+    "AI_GATEWAY_RATE_AND_SPEND_LIMITS_PASS",
+    "FINOPS_BUDGET_PASS",
+    "RUNTIME_EVIDENCE_BOUND_TO_EXACT_SHA",
+    "HUMAN_PRODUCTION_APPROVAL"
+  ]
+}

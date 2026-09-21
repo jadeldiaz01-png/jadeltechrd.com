@@ -1,0 +1,25 @@
+-- EXPLAINABILITY TEMPLATE — NEVER RUN AUTOMATICALLY.
+-- Models must have ENABLE_GLOBAL_EXPLAIN=TRUE and must already have passed
+-- immutable lineage + frozen temporal holdout gates.
+
+SELECT
+  'logreg' AS model_id,
+  *
+FROM ML.GLOBAL_EXPLAIN(
+  MODEL `__GCP_PROJECT_ID__.jadel_ml.lead_propensity_logreg`
+);
+
+SELECT
+  'boosted_tree' AS model_id,
+  *
+FROM ML.GLOBAL_EXPLAIN(
+  MODEL `__GCP_PROJECT_ID__.jadel_ml.lead_propensity_boosted_tree`
+);
+
+-- DNN remains research-only. This query is valid only after the DNN gates pass.
+SELECT
+  'dnn_research' AS model_id,
+  *
+FROM ML.GLOBAL_EXPLAIN(
+  MODEL `__GCP_PROJECT_ID__.jadel_ml.lead_propensity_dnn_research`
+);
