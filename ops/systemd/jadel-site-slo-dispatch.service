@@ -1,0 +1,13 @@
+[Unit]
+Description=Dispatch Jadel public SLO probe
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/jadel/site-slo-watchdog.env
+ExecStart=/srv/jadeltechrd/current/ops/site-slo-external-watchdog.sh dispatch
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
