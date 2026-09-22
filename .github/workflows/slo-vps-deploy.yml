@@ -1,0 +1,124 @@
+name: Deploy SLO external watchdog to VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact protected main SHA approved for deployment
+        required: true
+        type: string
+      confirmation:
+        description: Type DEPLOY_SLO_EXTERNAL_WATCHDOG
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: jadel-slo-external-watchdog-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: inputs.confirmation == 'DEPLOY_SLO_EXTERNAL_WATCHDOG'
+    runs-on: [self-hosted, linux, x64, jadel-agent-runtime]
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Validate exact SHA
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          echo EXACT_SHA_FORMAT=PASS
+
+      - name: Checkout immutable approved revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify protected main and closed deployment scope
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          test "$(git status --porcelain)" = ""
+          files=(
+            ops/site-slo-external-watchdog.sh
+            ops/systemd/jadel-site-slo-dispatch.service
+            ops/systemd/jadel-site-slo-dispatch.timer
+            ops/systemd/jadel-site-slo-watchdog.service
+            ops/systemd/jadel-site-slo-watchdog.timer
+          )
+          for f in "${files[@]}"; do test -f "$f"; done
+          ! grep -R -E 'production_authorized[=:][[:space:]]*true' ops/site-slo-external-watchdog.sh ops/systemd/jadel-site-slo-*
+          echo DEPLOYMENT_SCOPE=PASS
+          echo PROTECTED_MAIN_SHA_MATCH=PASS
+
+      - name: Host privilege and dependency preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v systemctl
+          command -v curl
+          command -v jq
+          command -v install
+          sudo -n true
+          echo SLO_VPS_PREFLIGHT=PASS
+
+      - name: Install approved SLO files only
+        shell: bash
+        env:
+          SLO_GITHUB_TOKEN: ${{ secrets.SLO_GITHUB_ACTIONS_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${SLO_GITHUB_TOKEN:-}"
+          echo "::add-mask::$SLO_GITHUB_TOKEN"
+          sudo install -d -m 0755 /srv/jadeltechrd/current/ops
+          sudo install -d -m 0755 /etc/jadel
+          sudo install -m 0755 ops/site-slo-external-watchdog.sh /srv/jadeltechrd/current/ops/site-slo-external-watchdog.sh
+          for unit in jadel-site-slo-dispatch.service jadel-site-slo-dispatch.timer jadel-site-slo-watchdog.service jadel-site-slo-watchdog.timer; do
+            sudo install -m 0644 "ops/systemd/$unit" "/etc/systemd/system/$unit"
+          done
+          tmp="$(mktemp)"
+          trap 'rm -f "$tmp"' EXIT
+          umask 077
+          printf 'GH_TOKEN=%s\nSLO_REPOSITORY=%s\nSLO_REF=main\n' "$SLO_GITHUB_TOKEN" "$GITHUB_REPOSITORY" > "$tmp"
+          sudo install -m 0600 "$tmp" /etc/jadel/site-slo-watchdog.env
+          echo SLO_FILES_INSTALLED=PASS
+
+      - name: Activate only approved timers
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now jadel-site-slo-dispatch.timer
+          sudo systemctl enable --now jadel-site-slo-watchdog.timer
+          systemctl is-enabled --quiet jadel-site-slo-dispatch.timer
+          systemctl is-enabled --quiet jadel-site-slo-watchdog.timer
+          systemctl is-active --quiet jadel-site-slo-dispatch.timer
+          systemctl is-active --quiet jadel-site-slo-watchdog.timer
+          systemctl list-timers --all jadel-site-slo-dispatch.timer jadel-site-slo-watchdog.timer --no-pager
+          echo SLO_SYSTEMD_TIMERS=PASS
+
+      - name: Non-destructive freshness verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo systemctl start jadel-site-slo-dispatch.service
+          sleep 8
+          sudo systemctl start jadel-site-slo-watchdog.service
+          sudo systemctl is-failed --quiet jadel-site-slo-dispatch.service && exit 70 || true
+          sudo systemctl is-failed --quiet jadel-site-slo-watchdog.service && exit 71 || true
+          echo SLO_EXTERNAL_WATCHDOG_DEPLOYMENT=PASS
+          echo production_authorized=false
