@@ -31,22 +31,36 @@ for (const file of walk(probeDir)) {
   }
 }
 
-const byRun = new Map();
-for (const sample of parsed) {
-  const runId = String(sample.workflow_run_id ?? '');
-  if (!runId) continue;
-  const attempt = Number(sample.workflow_run_attempt ?? 0);
-  const prev = byRun.get(runId);
-  if (!prev || attempt >= Number(prev.workflow_run_attempt ?? 0)) byRun.set(runId, sample);
-}
-
-const all = [...byRun.values()].sort((a,b) => Date.parse(a.observed_at) - Date.parse(b.observed_at));
-const scheduled = all.filter(x => x.event_name === 'schedule');
-const excludedNonSchedule = all.length - scheduled.length;
-
 const dayStartMs = Date.parse(`${targetDate}T00:00:00Z`);
 const dayEndMs = Date.parse(`${targetDate}T24:00:00Z`);
 const expectedSlots = 144;
+const slotMs = 10 * 60 * 1000;
+
+function authorized(sample) {
+  return (sample.event_name === 'schedule' && (sample.provider_id === 'github_actions' || sample.provider_id == null)) ||
+    (sample.event_name === 'workflow_dispatch' && sample.provider_id === 'external_watchdog');
+}
+
+function sampleBad(sample) {
+  return sample.probes?.public_site?.good !== true || sample.probes?.commercial_intake?.good !== true;
+}
+
+const authorizedSamples = parsed.filter(authorized).sort((a,b) => Date.parse(a.observed_at) - Date.parse(b.observed_at));
+const excludedNonSchedule = parsed.length - authorizedSamples.length;
+const bySlot = new Map();
+for (const sample of authorizedSamples) {
+  const t = Date.parse(sample.observed_at);
+  if (!Number.isFinite(t) || t < dayStartMs || t >= dayEndMs) continue;
+  const slot = Math.floor((t - dayStartMs) / slotMs);
+  const prev = bySlot.get(slot);
+  // A duplicate source can never hide a bad observation. Otherwise keep the earliest observation deterministically.
+  if (!prev || (sampleBad(sample) && !sampleBad(prev)) ||
+      (sampleBad(sample) === sampleBad(prev) && Date.parse(sample.observed_at) < Date.parse(prev.observed_at))) {
+    bySlot.set(slot, sample);
+  }
+}
+const scheduled = [...bySlot.values()].sort((a,b) => Date.parse(a.observed_at) - Date.parse(b.observed_at));
+const duplicateSamples = authorizedSamples.length - scheduled.length;
 
 function maxGapMinutes(samples) {
   if (!samples.length) return 1440;
@@ -86,6 +100,7 @@ function serviceSummary(samples, key) {
 const compactSamples = scheduled.map(s => ({
   observed_at: s.observed_at,
   workflow_run_id: String(s.workflow_run_id),
+  provider_id: s.provider_id ?? 'github_actions',
   workflow_run_attempt: String(s.workflow_run_attempt ?? '1'),
   source_sha: s.source_sha,
   public_site: {
@@ -105,16 +120,17 @@ const compactSamples = scheduled.map(s => ({
 }));
 
 const summary = {
-  schema_version: '1.0',
+  schema_version: '1.1',
   control_id: 'SITE_SLO_DAILY_ROLLUP',
   target_date: targetDate,
   generated_at: new Date().toISOString(),
   expected_slots: expectedSlots,
   scheduled_sample_count: scheduled.length,
   excluded_non_schedule_samples: excludedNonSchedule,
+  duplicate_authorized_samples: duplicateSamples,
   coverage_ratio: scheduled.length / expectedSlots,
   maximum_gap_minutes: maxGapMinutes(scheduled),
-  measurement_model: 'scheduled_first_attempt_no_retry',
+  measurement_model: 'authorized_slot_deduplicated_first_attempt_no_retry',
   services: {
     public_site: serviceSummary(scheduled, 'public_site'),
     commercial_intake_health: serviceSummary(scheduled, 'commercial_intake')
