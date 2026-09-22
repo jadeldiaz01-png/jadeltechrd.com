@@ -1,0 +1,41 @@
+name: SLO external watchdog contract
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/site-slo-evidence.yml'
+      - '.github/workflows/site-slo-daily-rollup.yml'
+      - '.github/workflows/slo-external-watchdog-contract.yml'
+      - 'scripts/build-site-slo-daily-rollup.mjs'
+      - 'tests/site-slo-provider-dedup.test.mjs'
+      - 'ops/site-slo-external-watchdog.sh'
+      - 'ops/systemd/jadel-site-slo-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Syntax
+        run: |
+          set -euo pipefail
+          bash -n ops/site-slo-external-watchdog.sh
+          node --check scripts/build-site-slo-daily-rollup.mjs
+          node --check tests/site-slo-provider-dedup.test.mjs
+      - name: Provider equivalence and slot deduplication
+        run: node tests/site-slo-provider-dedup.test.mjs
+      - name: Deployment remains human gated
+        run: |
+          set -euo pipefail
+          grep -Fq 'EnvironmentFile=/etc/jadel/site-slo-watchdog.env' ops/systemd/jadel-site-slo-dispatch.service
+          grep -Fq 'external_watchdog' ops/site-slo-external-watchdog.sh
+          ! grep -R -E 'production_authorized[=:][[:space:]]*true' ops .github/workflows/slo-external-watchdog-contract.yml
+          echo SLO_EXTERNAL_DEPLOYMENT_GATE=PASS
