@@ -1,0 +1,38 @@
+name: SLO VPS deploy contract
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/slo-vps-deploy.yml'
+      - '.github/workflows/slo-vps-deploy-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Enforce deployment boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          f=.github/workflows/slo-vps-deploy.yml
+          grep -Fq 'workflow_dispatch:' "$f"
+          ! grep -Eq '(^|[[:space:]])(push|pull_request|schedule):' "$f"
+          grep -Fq 'runs-on: [self-hosted, linux, x64, jadel-agent-runtime]' "$f"
+          grep -Fq "if: inputs.confirmation == 'DEPLOY_SLO_EXTERNAL_WATCHDOG'" "$f"
+          grep -Fq 'ref: ${{ inputs.expected_sha }}' "$f"
+          grep -Fq 'SLO_GITHUB_ACTIONS_TOKEN' "$f"
+          grep -Fq 'production_authorized=false' "$f"
+          ! grep -Eq 'production_authorized[=:][[:space:]]*true' "$f"
+          for unit in jadel-site-slo-dispatch.service jadel-site-slo-dispatch.timer jadel-site-slo-watchdog.service jadel-site-slo-watchdog.timer; do
+            grep -Fq "$unit" "$f"
+          done
+          echo SLO_VPS_DEPLOY_CONTRACT=PASS
