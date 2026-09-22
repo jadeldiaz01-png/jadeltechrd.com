@@ -37,17 +37,13 @@ Nunca se confía en JavaScript del navegador para afirmar resultados comerciales
 
 Google Analytics recomienda los eventos de generación de leads anteriores para poblar su Lead Acquisition report. Para Google Ads, el feedback offline debe diseñarse con Data Manager API según el cambio efectivo de junio de 2026.
 
-## GA4 activation gate
+## GA4 y join de outcomes
 
-Este PR **no inventa un Measurement ID**. La cola de eventos queda implementada, pero `analytics.activation_state=MEASUREMENT_ID_REQUIRED`.
+GA4 está activo con el Measurement ID `G-K60SQ2ZHL9`. Existe evidencia real de actividad en producción y se conserva como agregado en `evidence/analytics/ga4-observed-2026-09-20.json`.
 
-Un PR de activación posterior debe:
-1. registrar/confirmar la propiedad GA4;
-2. añadir el Measurement ID mediante un cambio revisado;
-3. actualizar CSP solo para los dominios estrictamente necesarios;
-4. verificar que no se envía nombre, email, teléfono, notas ni identificadores de pago;
-5. demostrar `generate_lead` end-to-end en DebugView/Realtime;
-6. probar el sync de estados offline sin exponer secretos al frontend.
+Para enlazar un `generate_lead` con su outcome comercial sin enviar PII, cada envío exitoso usa un UUIDv4 de un solo uso llamado `lead_event_id`. El runtime lo guarda como `project_requests.analytics_join_id` y el navegador lo emite únicamente con `generate_lead`. No se registra como dimensión personalizada de GA4 y no funciona como identidad persistente de usuario o dispositivo.
+
+El siguiente gate es observar el dataset diario `analytics_555066228.events_YYYYMMDD`, congelar solamente fechas estables y unirlas con los outcomes terminales gobernados de D1. Nombre, email, teléfono, empresa, notas, secretos e identificadores de pago quedan fuera del dataset de ML.
 
 ## Dashboard
 

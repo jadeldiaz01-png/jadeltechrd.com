@@ -23,7 +23,7 @@
     {
       "id": "lead-propensity-logreg",
       "kind": "bigquery_ml_logistic_regression",
-      "state": "CANDIDATE_NO_TRAINING_DATA_YET",
+      "state": "CANDIDATE_DATA_CAPTURE_READY_FREEZE_PENDING",
       "purpose": "Estimate lead conversion propensity from privacy-reviewed, point-in-time features",
       "training_required": true,
       "critical_action_authority": false,
@@ -39,7 +39,7 @@
     {
       "id": "lead-propensity-boosted-tree",
       "kind": "bigquery_ml_boosted_tree_classifier",
-      "state": "CANDIDATE",
+      "state": "CANDIDATE_FREEZE_PENDING",
       "purpose": "Nonlinear challenger to logistic regression",
       "training_required": true,
       "critical_action_authority": false,
@@ -54,7 +54,7 @@
     {
       "id": "lead-propensity-dnn",
       "kind": "bigquery_ml_dnn_classifier",
-      "state": "RESEARCH_ONLY_DATA_VOLUME_GATE",
+      "state": "RESEARCH_ONLY_DATA_VOLUME_AND_FREEZE_GATE",
       "purpose": "Deep-learning challenger only when sample size and incremental value justify complexity",
       "training_required": true,
       "critical_action_authority": false,
@@ -124,5 +124,13 @@
         "human_publication_approval"
       ]
     }
-  ]
+  ],
+  "dataset_freeze_policy": "config/ml-dataset-freeze-policy-2026.json",
+  "data_capture": {
+    "ga4_real_activity_observed": true,
+    "lead_event_join_capture": "IMPLEMENTED_IN_BRANCH_PENDING_PRODUCTION_PROMOTION",
+    "governed_outcome_labeling": "IMPLEMENTED_IN_BRANCH_PENDING_PRODUCTION_PROMOTION",
+    "bigquery_daily_export_evidence": "PENDING",
+    "frozen_training_dataset": "PENDING"
+  }
 }

@@ -1,0 +1,58 @@
+-- Point-in-time lead training source.
+-- Requires GA4 daily export plus a privacy-reviewed label table imported from D1.
+-- Never include names, email, phone, free text, payment identifiers, secrets or post-outcome facts.
+WITH ga4_leads AS (
+  SELECT
+    TIMESTAMP_MICROS(event_timestamp) AS lead_event_ts,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key='lead_event_id' LIMIT 1) AS lead_event_id,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key='offer_id' LIMIT 1) AS offer_id,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key='service_id' LIMIT 1) AS service_id,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key='landing_path' LIMIT 1) AS landing_path,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key='utm_source' LIMIT 1) AS utm_source,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key='utm_medium' LIMIT 1) AS utm_medium,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key='utm_campaign' LIMIT 1) AS utm_campaign,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key='utm_content' LIMIT 1) AS utm_content,
+    (SELECT value.string_value FROM UNNEST(event_params) WHERE key='utm_term' LIMIT 1) AS utm_term,
+    EXTRACT(HOUR FROM TIMESTAMP_MICROS(event_timestamp)) AS event_hour_utc,
+    EXTRACT(DAYOFWEEK FROM TIMESTAMP_MICROS(event_timestamp)) AS event_day_of_week,
+    ROW_NUMBER() OVER (
+      PARTITION BY (SELECT value.string_value FROM UNNEST(event_params) WHERE key='lead_event_id' LIMIT 1)
+      ORDER BY event_timestamp
+    ) AS lead_event_rank
+  FROM `__GCP_PROJECT_ID__.analytics_555066228.events_*`
+  WHERE event_name='generate_lead'
+    AND _TABLE_SUFFIX <= FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 4 DAY))
+),
+labels AS (
+  SELECT
+    lead_event_id,
+    label_ts,
+    CASE
+      WHEN terminal_stage='close_convert_lead' THEN TRUE
+      WHEN terminal_stage IN ('close_unconvert_lead','disqualify_lead') THEN FALSE
+      ELSE NULL
+    END AS converted
+  FROM `__GCP_PROJECT_ID__.jadel_ml_inputs.lead_outcomes_v1`
+  WHERE evidence_state='VERIFIED'
+)
+SELECT
+  g.lead_event_id,
+  g.lead_event_ts,
+  COALESCE(g.offer_id,'unknown') AS offer_id,
+  COALESCE(g.service_id,'unknown') AS service_id,
+  COALESCE(g.landing_path,'/') AS landing_path,
+  COALESCE(g.utm_source,'(direct)') AS utm_source,
+  COALESCE(g.utm_medium,'(none)') AS utm_medium,
+  COALESCE(g.utm_campaign,'(none)') AS utm_campaign,
+  COALESCE(g.utm_content,'(none)') AS utm_content,
+  COALESCE(g.utm_term,'(none)') AS utm_term,
+  g.event_hour_utc,
+  g.event_day_of_week,
+  l.label_ts,
+  l.converted
+FROM ga4_leads g
+JOIN labels l USING (lead_event_id)
+WHERE g.lead_event_rank=1
+  AND g.lead_event_id IS NOT NULL
+  AND l.converted IS NOT NULL
+  AND g.lead_event_ts < l.label_ts;

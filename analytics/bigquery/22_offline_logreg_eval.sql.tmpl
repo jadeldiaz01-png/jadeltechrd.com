@@ -1,0 +1,38 @@
+-- Offline-only model evaluation. No prediction here can trigger an external action.
+CREATE OR REPLACE MODEL `__GCP_PROJECT_ID__.jadel_ml.lead_propensity_logreg_offline`
+OPTIONS(
+  MODEL_TYPE='LOGISTIC_REG',
+  INPUT_LABEL_COLS=['converted'],
+  AUTO_CLASS_WEIGHTS=TRUE,
+  DATA_SPLIT_METHOD='NO_SPLIT'
+) AS
+SELECT * EXCEPT(lead_event_id, lead_event_ts, label_ts, split)
+FROM `__GCP_PROJECT_ID__.jadel_ml_frozen.__FROZEN_TABLE__`
+WHERE split='TRAIN';
+
+CREATE OR REPLACE MODEL `__GCP_PROJECT_ID__.jadel_ml.lead_propensity_boosted_tree_offline`
+OPTIONS(
+  MODEL_TYPE='BOOSTED_TREE_CLASSIFIER',
+  INPUT_LABEL_COLS=['converted'],
+  AUTO_CLASS_WEIGHTS=TRUE,
+  DATA_SPLIT_METHOD='NO_SPLIT'
+) AS
+SELECT * EXCEPT(lead_event_id, lead_event_ts, label_ts, split)
+FROM `__GCP_PROJECT_ID__.jadel_ml_frozen.__FROZEN_TABLE__`
+WHERE split='TRAIN';
+
+SELECT 'logreg' AS model_id, *
+FROM ML.EVALUATE(
+  MODEL `__GCP_PROJECT_ID__.jadel_ml.lead_propensity_logreg_offline`,
+  (SELECT * EXCEPT(lead_event_id, lead_event_ts, label_ts, split)
+   FROM `__GCP_PROJECT_ID__.jadel_ml_frozen.__FROZEN_TABLE__`
+   WHERE split='HOLDOUT')
+);
+
+SELECT 'boosted_tree' AS model_id, *
+FROM ML.EVALUATE(
+  MODEL `__GCP_PROJECT_ID__.jadel_ml.lead_propensity_boosted_tree_offline`,
+  (SELECT * EXCEPT(lead_event_id, lead_event_ts, label_ts, split)
+   FROM `__GCP_PROJECT_ID__.jadel_ml_frozen.__FROZEN_TABLE__`
+   WHERE split='HOLDOUT')
+);

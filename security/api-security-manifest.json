@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "surface": "commercial-runtime /api/v1/project-requests, /api/v1/paypal/webhooks, /api/v1/admin/approvals, /api/v1/admin/revenue-intelligence",
+  "surface": "commercial-runtime /api/v1/project-requests, /api/v1/paypal/webhooks, /api/v1/admin/approvals, /api/v1/admin/revenue-intelligence, /api/v1/admin/lead-lifecycle",
   "public_write_policy": "anonymous intake and verified PayPal webhooks only; no privileged action, payout, deployment, publication or agent execution directly from request",
   "controls": {
     "turnstile_on_abuse_prone_public_forms": true,
@@ -19,7 +19,11 @@
     "fulfillment_requires_human_reconciliation": true,
     "revenue_intelligence_admin_authentication": true,
     "revenue_intelligence_read_only_aggregate": true,
-    "model_output_has_no_critical_action_authority": true
+    "model_output_has_no_critical_action_authority": true,
+    "lead_lifecycle_admin_authentication": true,
+    "lead_lifecycle_append_only_state_machine": true,
+    "ml_training_join_excludes_direct_identifiers": true,
+    "ml_outputs_have_no_external_action_authority": true
   },
   "implementation": {
     "turnstile": "commercial-runtime/src/worker.mjs::verifyTurnstile uses fixed Cloudflare Siteverify endpoint and server-only secret",
@@ -35,7 +39,9 @@
     "durability": "D1 transactional batch writes project + evidence + dispatch outbox before asynchronous workflow dispatch",
     "payments": "verified PayPal webhooks write payment_events plus payment_ledger in REQUIRES_HUMAN; no automatic PAID transition",
     "approvals": "admin approval endpoint records approval_events and can promote only policy status, not payment, deployment or ACTIVE state",
-    "revenue_intelligence": "Authenticated GET-only aggregate endpoint; no PII fields, no write verb, no paid-media/publication/payment/trading authority; advanced ML/LLM/multimodal paths remain not activated."
+    "revenue_intelligence": "Authenticated GET-only aggregate endpoint; no PII fields, no write verb, no paid-media/publication/payment/trading authority; advanced ML/LLM/multimodal paths remain not activated.",
+    "lead_lifecycle": "Authenticated admin-only append-only labels with explicit state transitions, idempotent source_event_id and normalized reason codes.",
+    "ml_join": "One-time UUIDv4 lead_event_id is stored as project_requests.analytics_join_id and emitted only with generate_lead; it is not a persistent user/device identifier and contains no PII."
   },
   "tests": {
     "injection": "commercial-runtime/test/injection.test.mjs",
@@ -45,7 +51,8 @@
     "paypal_webhook": "commercial-runtime/test/paypal-webhook.test.mjs",
     "approvals": "commercial-runtime/test/approvals.test.mjs",
     "revenue_intelligence": "commercial-runtime/test/revenue-intelligence.test.mjs",
-    "revenue_intelligence_admin": "commercial-runtime/test/revenue-admin.test.mjs"
+    "revenue_intelligence_admin": "commercial-runtime/test/revenue-admin.test.mjs",
+    "lead_lifecycle": "commercial-runtime/test/lead-lifecycle.test.mjs"
   },
   "promotion_blockers": [
     "Cloudflare Worker not deployed",
@@ -56,6 +63,7 @@
     "frontend submit form not enabled",
     "PayPal webhook deployed credentials and webhook ID not provisioned",
     "payment-provider-to-project matching and quote reconciliation not fully automated",
-    "production SLO and alert evidence not collected"
+    "production SLO and alert evidence not collected",
+    "GA4 BigQuery daily export and frozen point-in-time training dataset not yet certified"
   ]
 }

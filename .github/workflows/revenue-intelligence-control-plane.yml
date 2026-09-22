@@ -8,10 +8,12 @@ on:
       - 'config/revenue-model-registry-2026.json'
       - 'config/revenue-agent-spec-2026.json'
       - 'config/analytics-control-plane-v1.json'
+      - 'config/ml-dataset-freeze-policy-2026.json'
       - 'scripts/revenue-decision-engine.mjs'
       - 'scripts/test-revenue-decision-engine.mjs'
       - 'scripts/validate-revenue-intelligence-control-plane.mjs'
       - 'analytics/bigquery/1*.sql.tmpl'
+      - 'analytics/bigquery/2*.sql.tmpl'
       - 'commercial-runtime/**'
       - 'docs/revenue/REVENUE-INTELLIGENCE-CONTROL-PLANE-2026.md'
       - '.github/workflows/revenue-intelligence-control-plane.yml'
@@ -21,9 +23,11 @@ on:
       - 'config/revenue-intelligence-control-plane-2026.json'
       - 'config/revenue-model-registry-2026.json'
       - 'config/revenue-agent-spec-2026.json'
+      - 'config/ml-dataset-freeze-policy-2026.json'
       - 'scripts/revenue-decision-engine.mjs'
       - 'scripts/validate-revenue-intelligence-control-plane.mjs'
       - 'analytics/bigquery/1*.sql.tmpl'
+      - 'analytics/bigquery/2*.sql.tmpl'
       - 'commercial-runtime/**'
       - '.github/workflows/revenue-intelligence-control-plane.yml'
   workflow_dispatch:
@@ -50,7 +54,7 @@ jobs:
         run: node scripts/validate-revenue-intelligence-control-plane.mjs
 
       - name: Test deterministic decision engine
-        run: node --test scripts/test-revenue-decision-engine.mjs commercial-runtime/test/revenue-intelligence.test.mjs commercial-runtime/test/revenue-admin.test.mjs
+        run: node --test scripts/test-revenue-decision-engine.mjs commercial-runtime/test/revenue-intelligence.test.mjs commercial-runtime/test/revenue-admin.test.mjs commercial-runtime/test/lead-lifecycle.test.mjs
 
       - name: Validate runtime syntax
         run: |

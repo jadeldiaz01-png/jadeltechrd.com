@@ -10,6 +10,7 @@ async function fingerprint(input) {
     service_ids: input.service_ids,
     notes: input.notes || "",
     locale: input.locale || "es-DO",
+    lead_event_id: input.lead_event_id,
   });
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalized));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -48,7 +49,7 @@ function requestFor(input, key = "1234567890abcdef") {
 }
 
 test("same idempotency key and same normalized payload replay without Siteverify or write", async () => {
-  const input = { name: "Cliente prueba", email: "client@example.com", service_ids: ["support"] };
+  const input = { name: "Cliente prueba", email: "client@example.com", service_ids: ["support"], lead_event_id: "123e4567-e89b-42d3-a456-426614174000" };
   const requestFingerprint = await fingerprint(input);
   let siteverifyCalls = 0;
   const response = await handleProjectRequest(
@@ -64,7 +65,7 @@ test("same idempotency key and same normalized payload replay without Siteverify
 });
 
 test("same idempotency key with different payload fails closed", async () => {
-  const original = { name: "Cliente prueba", email: "client@example.com", service_ids: ["support"] };
+  const original = { name: "Cliente prueba", email: "client@example.com", service_ids: ["support"], lead_event_id: "123e4567-e89b-42d3-a456-426614174000" };
   const requestFingerprint = await fingerprint(original);
   const changed = { ...original, service_ids: ["meta"] };
   const response = await handleProjectRequest(

@@ -152,6 +152,13 @@ jobs:
               exit 50
             }
           done
+          columns=$(curl --fail-with-body -sS -X POST "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${DATABASE_ID}/query" \
+            --data '{"sql":"PRAGMA table_info(project_requests)"}')
+          jq -e '[.result[].results[]?.name] | index("analytics_join_id") != null' <<<"$columns" >/dev/null || {
+            echo 'D1_SCHEMA_analytics_join_id=MISSING' >&2
+            exit 50
+          }
           echo 'D1_SCHEMA=PASS'
 
   deploy-worker:
@@ -353,6 +360,10 @@ jobs:
           revenue_code=$(curl -sS -o /tmp/revenue.json -w '%{http_code}'             "https://${API_HOST}/api/v1/admin/revenue-intelligence")
           test "$revenue_code" = 401 || { echo "REVENUE_INTELLIGENCE_ROUTE_CANARY=FAIL_HTTP_${revenue_code}" >&2; cat /tmp/revenue.json >&2; exit 53; }
           echo 'REVENUE_INTELLIGENCE_ROUTE_CANARY=PASS'
+
+          lifecycle_code=$(curl -sS -o /tmp/lifecycle.json -w '%{http_code}'             "https://${API_HOST}/api/v1/admin/lead-lifecycle")
+          test "$lifecycle_code" = 401 || { echo "LEAD_LIFECYCLE_ROUTE_CANARY=FAIL_HTTP_${lifecycle_code}" >&2; cat /tmp/lifecycle.json >&2; exit 55; }
+          echo 'LEAD_LIFECYCLE_ROUTE_CANARY=PASS'
 
           paypal_code=$(curl -sS -o /tmp/paypal.json -w '%{http_code}'             -X POST -H 'content-type: application/json' --data '{}'             "https://${API_HOST}/api/v1/paypal/webhooks")
           if [ "$paypal_code" = 403 ]; then

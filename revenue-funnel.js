@@ -6,7 +6,7 @@
   const serviceId = body?.dataset?.serviceId || "";
   const allowedKeys = new Set([
     "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
-    "offer_id", "service_id", "landing_path", "cta_id", "lead_source"
+    "offer_id", "service_id", "landing_path", "cta_id", "lead_source", "lead_event_id"
   ]);
   const prohibitedKeyPattern = /(email|phone|name|notes|message|company|payment|token|secret)/i;
 

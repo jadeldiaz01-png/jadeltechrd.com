@@ -50,6 +50,7 @@ jobs:
           done
           test "$(sqlite3 /tmp/jadel-commercial.db 'PRAGMA integrity_check;')" = "ok"
           sqlite3 /tmp/jadel-commercial.db ".schema project_requests" | grep -q 'idempotency_key'
+          sqlite3 /tmp/jadel-commercial.db ".schema project_requests" | grep -q 'analytics_join_id'
           sqlite3 /tmp/jadel-commercial.db ".schema dispatch_outbox" | grep -q 'workflow_instance_id'
           sqlite3 /tmp/jadel-commercial.db ".schema payment_events" | grep -q 'provider_event_id'
           sqlite3 /tmp/jadel-commercial.db ".schema payment_ledger" | grep -q 'ledger_state'

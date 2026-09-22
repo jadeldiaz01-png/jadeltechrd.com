@@ -1,0 +1,32 @@
+-- Freeze a point-in-time dataset after all gates in config/ml-dataset-freeze-policy-2026.json pass.
+-- Replace placeholders through a reviewed release step. The target table name must be versioned and immutable by IAM policy.
+CREATE TABLE `__GCP_PROJECT_ID__.jadel_ml_frozen.__FROZEN_TABLE__`
+OPTIONS(
+  description='Jadel Tech RD frozen lead propensity dataset; exact source/query/content hashes recorded in the freeze manifest.'
+) AS
+WITH source AS (
+  SELECT *
+  FROM `__GCP_PROJECT_ID__.jadel_features.lead_training_point_in_time_v1`
+  WHERE DATE(label_ts) <= DATE('__HOLDOUT_END_DATE__')
+)
+SELECT
+  *,
+  CASE
+    WHEN DATE(label_ts) <= DATE('__TRAIN_END_DATE__') THEN 'TRAIN'
+    ELSE 'HOLDOUT'
+  END AS split
+FROM source;
+
+-- Structural certification checks. Every query must return zero rows except class_counts.
+SELECT lead_event_id, COUNT(*) AS duplicates
+FROM `__GCP_PROJECT_ID__.jadel_ml_frozen.__FROZEN_TABLE__`
+GROUP BY lead_event_id
+HAVING COUNT(*) != 1;
+
+SELECT
+  COUNT(*) AS row_count,
+  COUNTIF(converted) AS positive_count,
+  COUNTIF(NOT converted) AS negative_count,
+  COUNTIF(split='TRAIN') AS train_count,
+  COUNTIF(split='HOLDOUT') AS holdout_count
+FROM `__GCP_PROJECT_ID__.jadel_ml_frozen.__FROZEN_TABLE__`;

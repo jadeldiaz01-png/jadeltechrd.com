@@ -1,5 +1,6 @@
 const API_ORIGIN = "https://intake.jadeltechrd.com";
 const APPROVALS_URL = `${API_ORIGIN}/api/v1/admin/approvals`;
+const LEAD_LIFECYCLE_URL = `${API_ORIGIN}/api/v1/admin/lead-lifecycle`;
 
 const form = document.getElementById("approval-auth");
 const tokenInput = document.getElementById("admin-token");
@@ -40,13 +41,30 @@ async function api(path, options = {}) {
   return body;
 }
 
-function render(data) {
-  const projects = data.projects || [];
-  const payments = data.payments || [];
+function leadActions(project) {
+  const latest = project.latest_stage || "";
+  const transitions = {
+    "": [["working_lead","Iniciar trabajo"]],
+    "working_lead": [["qualify_lead","Calificar"],["disqualify_lead","No califica"]],
+    "qualify_lead": [["close_convert_lead","Cerrar convertido"],["close_unconvert_lead","Cerrar no convertido"]],
+  };
+  const choices = transitions[latest] || [];
+  if (!choices.length) return "<small>Outcome terminal registrado.</small>";
+  return choices.map(([stage,label]) =>
+    `<button data-lead-stage="${stage}" data-project="${htmlEscape(project.project_id)}">${label}</button>`
+  ).join("");
+}
+
+function render(approvals, lifecycle) {
+  const projects = approvals.projects || [];
+  const payments = approvals.payments || [];
+  const lifecycleProjects = lifecycle.projects || [];
+  const summary = lifecycle.summary || {};
+
   resultsNode.innerHTML = `
     <div class="approval-list">
       <section>
-        <h3>Solicitudes</h3>
+        <h3>Solicitudes pendientes de política</h3>
         ${projects.length ? projects.map((project) => `
           <article>
             <strong>${htmlEscape(project.name)} · ${htmlEscape(project.email)}</strong>
@@ -60,6 +78,20 @@ function render(data) {
           </article>`).join("") : "<p>No hay solicitudes pendientes.</p>"}
       </section>
       <section>
+        <h3>Outcomes comerciales etiquetados</h3>
+        <p>
+          Positivos terminales: <strong>${Number(summary.positive_terminal_labels || 0)}</strong> ·
+          Negativos terminales: <strong>${Number(summary.negative_terminal_labels || 0)}</strong>
+        </p>
+        ${lifecycleProjects.length ? lifecycleProjects.map((project) => `
+          <article>
+            <strong>${htmlEscape(project.name)} · ${htmlEscape(project.email)}</strong>
+            <span>Lifecycle: ${htmlEscape(project.latest_stage || "sin etiqueta")}</span>
+            <small>${htmlEscape(project.service_ids_json)} · ${htmlEscape(project.created_at)}</small>
+            <div>${leadActions(project)}</div>
+          </article>`).join("") : "<p>No hay solicitudes para etiquetar.</p>"}
+      </section>
+      <section>
         <h3>Pagos por reconciliar</h3>
         ${payments.length ? payments.map((payment) => `
           <article>
@@ -71,14 +103,22 @@ function render(data) {
     </div>`;
 }
 
+async function loadAll() {
+  const [approvals, lifecycle] = await Promise.all([
+    api(APPROVALS_URL),
+    api(LEAD_LIFECYCLE_URL),
+  ]);
+  render(approvals, lifecycle);
+}
+
 form?.addEventListener("submit", async (event) => {
   event.preventDefault();
   token = tokenInput.value.trim();
   if (!token) return;
-  setStatus("Cargando pendientes...", "working");
+  setStatus("Cargando operación gobernada...", "working");
   try {
-    render(await api(APPROVALS_URL));
-    setStatus("Pendientes cargados.", "success");
+    await loadAll();
+    setStatus("Datos operativos cargados.", "success");
     tokenInput.value = "";
   } catch {
     setStatus("No se pudo cargar la consola. Verifica token y runtime.", "error");
@@ -86,22 +126,38 @@ form?.addEventListener("submit", async (event) => {
 });
 
 resultsNode?.addEventListener("click", async (event) => {
-  const button = event.target.closest("button[data-decision]");
-  if (!button) return;
-  setStatus("Registrando decisión...", "working");
+  const policyButton = event.target.closest("button[data-decision]");
+  const lifecycleButton = event.target.closest("button[data-lead-stage]");
+  if (!policyButton && !lifecycleButton) return;
+
   try {
-    await api(APPROVALS_URL, {
-      method: "POST",
-      body: JSON.stringify({
-        project_id: button.dataset.project,
-        approval_type: "policy",
-        decision: button.dataset.decision,
-        reason: "operator console decision",
-      }),
-    });
-    render(await api(APPROVALS_URL));
-    setStatus("Decisión registrada.", "success");
-  } catch {
-    setStatus("No se pudo registrar la decisión.", "error");
+    if (policyButton) {
+      setStatus("Registrando decisión de política...", "working");
+      await api(APPROVALS_URL, {
+        method: "POST",
+        body: JSON.stringify({
+          project_id: policyButton.dataset.project,
+          approval_type: "policy",
+          decision: policyButton.dataset.decision,
+          reason: "operator console decision",
+        }),
+      });
+    } else {
+      setStatus("Registrando outcome comercial...", "working");
+      await api(LEAD_LIFECYCLE_URL, {
+        method: "POST",
+        body: JSON.stringify({
+          project_id: lifecycleButton.dataset.project,
+          stage: lifecycleButton.dataset.leadStage,
+          source_event_id: crypto.randomUUID(),
+          reason_code: "OPERATOR_CONSOLE",
+        }),
+      });
+    }
+    await loadAll();
+    setStatus("Evidencia registrada.", "success");
+  } catch (error) {
+    const code = String(error?.message || "ACTION_FAILED");
+    setStatus(`No se pudo registrar la decisión (${code}).`, "error");
   }
 });

@@ -15,6 +15,7 @@
     "landing_path",
     "cta_id",
     "lead_source",
+    "lead_event_id",
     "utm_source",
     "utm_medium",
     "utm_campaign",

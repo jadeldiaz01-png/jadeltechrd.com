@@ -104,8 +104,17 @@
       "utm_content",
       "utm_term",
       "offer_id",
-      "service_id"
-    ]
+      "service_id",
+      "lead_event_id"
+    ],
+    "lead_event_id_policy": {
+      "purpose": "one-time join from successful generate_lead to governed D1 commercial outcome",
+      "pii": false,
+      "persistent_identity": false,
+      "ga4_custom_dimension": false,
+      "raw_bigquery_export_only": true
+    },
+    "real_ga4_evidence": "evidence/analytics/ga4-observed-2026-09-20.json"
   },
   "kpis": [
     {

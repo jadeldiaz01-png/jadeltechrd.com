@@ -1,0 +1,141 @@
+{
+  "schema_version": "2026.1",
+  "manifest_id": "jadeltechrd-ml-dataset-freeze-policy",
+  "status": "SEED_GA4_OBSERVED_BIGQUERY_AND_LABELS_PENDING",
+  "production_model_authorized": false,
+  "offline_training_authorized": false,
+  "shadow_scoring_authorized": false,
+  "evidence": {
+    "ga4_seed": "evidence/analytics/ga4-observed-2026-09-20.json",
+    "ga4_seed_verified": true,
+    "bigquery_daily_export_verified": false,
+    "terminal_commercial_labels_verified": false
+  },
+  "join_contract": {
+    "field": "lead_event_id",
+    "db_column": "analytics_join_id",
+    "format": "UUIDv4",
+    "scope": "single project-request submission",
+    "persistent_user_identifier": false,
+    "persistent_device_identifier": false,
+    "pii": false,
+    "sent_to_ga4_on": [
+      "generate_lead"
+    ],
+    "stored_in_d1": true,
+    "registered_as_ga4_custom_dimension": false,
+    "raw_bigquery_export_only": true,
+    "rationale": "Join one successful lead event to its governed commercial outcome without sending name, email, phone, free text or a durable cross-session identity to Analytics."
+  },
+  "source_of_truth": {
+    "behavioral": "GA4 BigQuery daily export",
+    "commercial_outcome": "Cloudflare D1 lead_lifecycle_events",
+    "payments": "Cloudflare D1 reconciled payment ledger",
+    "rule": "GA4 never certifies qualification, conversion or settled revenue."
+  },
+  "freeze_contract": {
+    "stable_ga4_daily_table_lag_days": 4,
+    "rationale": "Use only daily GA4 tables outside the normal late-arrival update window before freezing.",
+    "mandatory_fields": [
+      "freeze_id",
+      "source_sha",
+      "query_sha256",
+      "created_at",
+      "ga4_max_event_date",
+      "label_snapshot_observed_at",
+      "row_count",
+      "positive_count",
+      "negative_count",
+      "feature_schema_sha256",
+      "dataset_content_sha256"
+    ],
+    "mandatory_gates": [
+      "GA4_BIGQUERY_DAILY_EXPORT_OBSERVED",
+      "EVENTS_DAILY_TABLE_AT_LEAST_4_DAYS_OLD",
+      "LEAD_EVENT_JOIN_KEY_PRESENT",
+      "D1_TERMINAL_LABEL_SNAPSHOT_VERIFIED",
+      "POINT_IN_TIME_FEATURES_ONLY",
+      "NO_POST_OUTCOME_FEATURES",
+      "NO_PII_OR_FREE_TEXT_FEATURES",
+      "NO_DUPLICATE_LEAD_EVENT_ID",
+      "POSITIVE_CLASS_PRESENT",
+      "NEGATIVE_CLASS_PRESENT",
+      "EXACT_QUERY_REVISION_RECORDED",
+      "CONTENT_HASH_RECORDED",
+      "JOIN_COVERAGE_REPORTED",
+      "CONSENT_SELECTION_BIAS_REVIEW"
+    ],
+    "prohibited_features": [
+      "name",
+      "email",
+      "phone",
+      "company",
+      "notes",
+      "message",
+      "turnstile_token",
+      "idempotency_key",
+      "payment_identifier",
+      "authentication_token",
+      "secret"
+    ],
+    "permitted_initial_features": [
+      "offer_id",
+      "service_id",
+      "landing_path",
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_content",
+      "utm_term",
+      "event_hour_utc",
+      "event_day_of_week"
+    ],
+    "label_definition": {
+      "positive": "latest terminal lifecycle stage is close_convert_lead",
+      "negative": "latest terminal lifecycle stage is close_unconvert_lead or disqualify_lead",
+      "unresolved": "all non-terminal stages are excluded from supervised training"
+    },
+    "join_coverage": {
+      "denominator": "terminally labeled D1 projects with a non-empty analytics_join_id",
+      "numerator": "those labels matched to a GA4 generate_lead event by lead_event_id",
+      "unresolved_policy": "Unmatched leads are excluded from GA4-feature training, never imputed as negative.",
+      "promotion_rule": "Coverage and potential consent-selection bias must be reported before model evaluation can be interpreted."
+    }
+  },
+  "evaluation_contract": {
+    "order": [
+      "deterministic_base_rate",
+      "logistic_regression",
+      "boosted_tree",
+      "dnn_research_only"
+    ],
+    "split": "predeclared temporal train/holdout; no random split",
+    "metrics": [
+      "log_loss",
+      "roc_auc",
+      "precision",
+      "recall",
+      "f1_score",
+      "calibration_review",
+      "segment_stability"
+    ],
+    "challenger_rule": "A more complex model cannot advance unless it shows reproducible incremental value over the simpler preregistered baseline on the frozen holdout.",
+    "uncertainty": "Report metric uncertainty and class counts; do not promote from a point estimate alone.",
+    "dnn_gate": "Blocked until labeled sample size, stability and incremental-value gates justify complexity."
+  },
+  "shadow_contract": {
+    "external_side_effects": false,
+    "paid_spend": false,
+    "customer_contact": false,
+    "publication": false,
+    "payment_action": false,
+    "trading_or_capital_action": false,
+    "output": "Persist prediction plus model revision and later reconcile with outcome for evaluation only."
+  },
+  "current_decision": {
+    "dataset_freeze": "BLOCKED",
+    "offline_ml": "BLOCKED",
+    "shadow_ml": "BLOCKED",
+    "reason": "GA4 real activity is present; BigQuery export evidence and terminal labels are not yet certified."
+  }
+}
