@@ -1,0 +1,12 @@
+[Unit]
+Description=Watch Jadel public SLO dispatch freshness
+
+[Timer]
+OnCalendar=*-*-* *:08,18,28,38,48,58:00 UTC
+Persistent=true
+AccuracySec=30s
+RandomizedDelaySec=0
+Unit=jadel-site-slo-watchdog.service
+
+[Install]
+WantedBy=timers.target
