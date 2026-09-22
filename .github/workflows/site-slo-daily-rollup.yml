@@ -41,7 +41,7 @@ jobs:
           echo "target_date=$target" >> "$GITHUB_OUTPUT"
           echo "SLO_DAILY_TARGET_DATE=$target"
 
-      - name: Collect scheduled raw probe artifacts
+      - name: Collect authorized raw probe artifacts
         shell: bash
         env:
           TARGET_DATE: ${{ steps.day.outputs.target_date }}
@@ -54,9 +54,8 @@ jobs:
           gh api --paginate -X GET \
             "repos/$GITHUB_REPOSITORY/actions/workflows/site-slo-evidence.yml/runs" \
             -f per_page=100 \
-            -f event=schedule \
             -f created="$start..$end" \
-            --jq '.workflow_runs[].id' > /tmp/slo-run-ids.txt
+            --jq '.workflow_runs[] | select(.event == "schedule" or .event == "workflow_dispatch") | .id' > /tmp/slo-run-ids.txt
 
           sort -u /tmp/slo-run-ids.txt -o /tmp/slo-run-ids.txt
           count=$(grep -c . /tmp/slo-run-ids.txt || true)
@@ -84,7 +83,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          jq -e '.schema_version == "1.0" and .control_id == "SITE_SLO_DAILY_ROLLUP" and (.scheduled_sample_count >= 0) and (.expected_slots == 144)' evidence/slo-daily-summary.json >/dev/null
+          jq -e '.schema_version == "1.1" and .control_id == "SITE_SLO_DAILY_ROLLUP" and (.scheduled_sample_count >= 0) and (.expected_slots == 144)' evidence/slo-daily-summary.json >/dev/null
           echo "SLO_DAILY_ROLLUP_SCHEMA=PASS"
 
       - name: Retain daily SLO rollup

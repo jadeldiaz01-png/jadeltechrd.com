@@ -1,0 +1,13 @@
+[Unit]
+Description=Check freshness of Jadel external SLO dispatch
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/jadel/site-slo-watchdog.env
+ExecStart=/srv/jadeltechrd/current/ops/site-slo-external-watchdog.sh watchdog
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

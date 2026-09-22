@@ -1,4 +1,5 @@
 name: Site SLO evidence
+run-name: Site SLO evidence [${{ github.event_name == 'workflow_dispatch' && inputs.evidence_provider || github.event_name }}]
 
 on:
   schedule:
@@ -8,6 +9,15 @@ on:
     paths:
       - ".github/workflows/site-slo-evidence.yml"
   workflow_dispatch:
+    inputs:
+      evidence_provider:
+        description: Authorized evidence provider
+        required: true
+        default: external_watchdog
+        type: choice
+        options:
+          - external_watchdog
+          - diagnostic_manual
 
 permissions:
   contents: read
@@ -27,6 +37,7 @@ jobs:
       SITE_LATENCY_OBJECTIVE_MS: "1500"
       INTAKE_LATENCY_OBJECTIVE_MS: "1500"
       PROBE_INTERVAL_SECONDS: "600"
+      EVIDENCE_PROVIDER: ${{ github.event_name == 'schedule' && 'github_actions' || (github.event_name == 'workflow_dispatch' && inputs.evidence_provider || 'diagnostic') }}
 
     steps:
       - name: Probe first-attempt public SLI
@@ -110,6 +121,7 @@ jobs:
             --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
             --arg observed_at "$observed_at" \
             --arg event_name "$GITHUB_EVENT_NAME" \
+            --arg provider_id "$EVIDENCE_PROVIDER" \
             --arg measurement_model "first_attempt_no_retry" \
             --arg otel_metric "http.client.request.duration" \
             --argjson probe_interval_seconds "$PROBE_INTERVAL_SECONDS" \
@@ -117,7 +129,7 @@ jobs:
             --slurpfile intake evidence/commercial-intake.json \
             --argjson site_latency_objective_ms "$SITE_LATENCY_OBJECTIVE_MS" \
             --argjson intake_latency_objective_ms "$INTAKE_LATENCY_OBJECTIVE_MS" \
-            '{schema_version:"2.0",source_sha:$source_sha,workflow_run_id:$run_id,workflow_run_attempt:$run_attempt,observed_at:$observed_at,event_name:$event_name,measurement_model:$measurement_model,probe_interval_seconds:$probe_interval_seconds,otel_semantic_metric:$otel_metric,probes:{public_site:$site[0],commercial_intake:$intake[0]},objectives:{public_site_latency_ms:$site_latency_objective_ms,commercial_intake_latency_ms:$intake_latency_objective_ms}}' > evidence/slo-probe.json
+            '{schema_version:"2.1",source_sha:$source_sha,workflow_run_id:$run_id,workflow_run_attempt:$run_attempt,observed_at:$observed_at,event_name:$event_name,provider_id:$provider_id,measurement_model:$measurement_model,probe_interval_seconds:$probe_interval_seconds,otel_semantic_metric:$otel_metric,probes:{public_site:$site[0],commercial_intake:$intake[0]},objectives:{public_site_latency_ms:$site_latency_objective_ms,commercial_intake_latency_ms:$intake_latency_objective_ms}}' > evidence/slo-probe.json
 
           echo "site_good=$site_good" >> "$GITHUB_OUTPUT"
           echo "intake_good=$intake_good" >> "$GITHUB_OUTPUT"
