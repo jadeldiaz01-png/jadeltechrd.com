@@ -49,9 +49,18 @@ jobs:
           grep -Fq "if: inputs.confirmation == 'DEPLOY_SLO_EXTERNAL_WATCHDOG'" "$f"
           grep -Fq 'ref: ${{ inputs.expected_sha }}' "$f"
           grep -Fq 'SLO_GITHUB_ACTIONS_TOKEN' "$f"
+          grep -Fq '/usr/local/sbin/jadel-slo-deploy-helper' "$f"
+          grep -Fq 'RUNNER_GENERAL_SUDO=DENIED' "$f"
+          ! grep -Fq 'sudo -n true' "$f"
+          ! grep -Eq 'sudo[[:space:]]+(install|systemctl)' "$f"
           grep -Fq 'production_authorized=false' "$f"
           ! grep -Eq 'production_authorized[=:][[:space:]]*true' "$f"
           for unit in jadel-site-slo-dispatch.service jadel-site-slo-dispatch.timer jadel-site-slo-watchdog.service jadel-site-slo-watchdog.timer; do
             grep -Fq "$unit" "$f"
           done
+          bootstrap=ops/runner/bootstrap-self-hosted-runner.sh
+          grep -Fq 'NOPASSWD: /usr/local/sbin/jadel-slo-deploy-helper' "$bootstrap"
+          grep -Fq 'chown root:root /usr/local/sbin/jadel-slo-deploy-helper' "$bootstrap"
+          grep -Fq 'chmod 0440 /etc/sudoers.d/jadel-slo-deploy' "$bootstrap"
+          ! grep -Eq 'github-runner.*NOPASSWD:[[:space:]]*(ALL|/bin/(ba)?sh|/usr/bin/sudo)' "$bootstrap"
           echo SLO_VPS_DEPLOY_CONTRACT=PASS

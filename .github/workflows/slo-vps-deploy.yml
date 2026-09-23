@@ -64,60 +64,29 @@ jobs:
           echo DEPLOYMENT_SCOPE=PASS
           echo PROTECTED_MAIN_SHA_MATCH=PASS
 
-      - name: Host privilege and dependency preflight
+      - name: Verify narrow privileged boundary
         shell: bash
         run: |
           set -euo pipefail
-          command -v systemctl
-          command -v curl
-          command -v jq
-          command -v install
-          sudo -n true
-          echo SLO_VPS_PREFLIGHT=PASS
+          command -v sudo
+          test -x /usr/local/sbin/jadel-slo-deploy-helper
+          sudo -n -l /usr/local/sbin/jadel-slo-deploy-helper "$EXPECTED_SHA" >/dev/null
+          if sudo -n -- true 2>/dev/null; then
+            echo RUNNER_GENERAL_SUDO=FAIL
+            exit 60
+          fi
+          echo RUNNER_GENERAL_SUDO=DENIED
+          echo SLO_PRIVILEGE_BOUNDARY=PASS
 
-      - name: Install approved SLO files only
+      - name: Install and verify through allowlisted helper
         shell: bash
         env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
           SLO_GITHUB_TOKEN: ${{ secrets.SLO_GITHUB_ACTIONS_TOKEN }}
         run: |
           set -euo pipefail
           test -n "${SLO_GITHUB_TOKEN:-}"
           echo "::add-mask::$SLO_GITHUB_TOKEN"
-          sudo install -d -m 0755 /srv/jadeltechrd/current/ops
-          sudo install -d -m 0755 /etc/jadel
-          sudo install -m 0755 ops/site-slo-external-watchdog.sh /srv/jadeltechrd/current/ops/site-slo-external-watchdog.sh
-          for unit in jadel-site-slo-dispatch.service jadel-site-slo-dispatch.timer jadel-site-slo-watchdog.service jadel-site-slo-watchdog.timer; do
-            sudo install -m 0644 "ops/systemd/$unit" "/etc/systemd/system/$unit"
-          done
-          tmp="$(mktemp)"
-          trap 'rm -f "$tmp"' EXIT
-          umask 077
-          printf 'GH_TOKEN=%s\nSLO_REPOSITORY=%s\nSLO_REF=main\n' "$SLO_GITHUB_TOKEN" "$GITHUB_REPOSITORY" > "$tmp"
-          sudo install -m 0600 "$tmp" /etc/jadel/site-slo-watchdog.env
-          echo SLO_FILES_INSTALLED=PASS
-
-      - name: Activate only approved timers
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo systemctl daemon-reload
-          sudo systemctl enable --now jadel-site-slo-dispatch.timer
-          sudo systemctl enable --now jadel-site-slo-watchdog.timer
-          systemctl is-enabled --quiet jadel-site-slo-dispatch.timer
-          systemctl is-enabled --quiet jadel-site-slo-watchdog.timer
-          systemctl is-active --quiet jadel-site-slo-dispatch.timer
-          systemctl is-active --quiet jadel-site-slo-watchdog.timer
-          systemctl list-timers --all jadel-site-slo-dispatch.timer jadel-site-slo-watchdog.timer --no-pager
-          echo SLO_SYSTEMD_TIMERS=PASS
-
-      - name: Non-destructive freshness verification
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo systemctl start jadel-site-slo-dispatch.service
-          sleep 8
-          sudo systemctl start jadel-site-slo-watchdog.service
-          sudo systemctl is-failed --quiet jadel-site-slo-dispatch.service && exit 70 || true
-          sudo systemctl is-failed --quiet jadel-site-slo-watchdog.service && exit 71 || true
+          printf '%s\n' "$SLO_GITHUB_TOKEN" | sudo -n /usr/local/sbin/jadel-slo-deploy-helper "$EXPECTED_SHA"
           echo SLO_EXTERNAL_WATCHDOG_DEPLOYMENT=PASS
           echo production_authorized=false
