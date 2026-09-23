@@ -24,8 +24,27 @@ jobs:
         run: |
           set -euo pipefail
           f=.github/workflows/slo-vps-deploy.yml
-          grep -Fq 'workflow_dispatch:' "$f"
-          ! grep -Eq '(^|[[:space:]])(push|pull_request|schedule):' "$f"
+          python3 - "$f" <<'PY'
+          import re
+          import sys
+
+          lines = open(sys.argv[1], encoding="utf-8").read().splitlines()
+          try:
+              start = next(i for i, line in enumerate(lines) if line == "on:")
+          except StopIteration:
+              raise SystemExit("missing top-level on block")
+
+          triggers = []
+          for line in lines[start + 1:]:
+              if line and not line.startswith((" ", "\t")):
+                  break
+              match = re.match(r"^  ([A-Za-z0-9_-]+):(?:\s.*)?$", line)
+              if match:
+                  triggers.append(match.group(1))
+
+          if triggers != ["workflow_dispatch"]:
+              raise SystemExit(f"deployment triggers must be exactly workflow_dispatch, got {triggers!r}")
+          PY
           grep -Fq 'runs-on: [self-hosted, linux, x64, jadel-agent-runtime]' "$f"
           grep -Fq "if: inputs.confirmation == 'DEPLOY_SLO_EXTERNAL_WATCHDOG'" "$f"
           grep -Fq 'ref: ${{ inputs.expected_sha }}' "$f"
