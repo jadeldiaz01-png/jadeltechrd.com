@@ -22,7 +22,7 @@ case "$RUNNER_LABELS" in
   *[!A-Za-z0-9,._-]*|'') echo "RUNNER_LABELS_FORMAT=FAIL"; exit 12 ;;
 esac
 
-for cmd in curl tar sha256sum systemctl; do
+for cmd in curl tar sha256sum systemctl install; do
   command -v "$cmd" >/dev/null || { echo "MISSING_COMMAND=$cmd"; exit 13; }
 done
 
