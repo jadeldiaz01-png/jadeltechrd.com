@@ -1,0 +1,66 @@
+name: SLO VPS deploy contract
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/slo-vps-deploy.yml'
+      - '.github/workflows/slo-vps-deploy-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Enforce deployment boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          f=.github/workflows/slo-vps-deploy.yml
+          python3 - "$f" <<'PY'
+          import re
+          import sys
+
+          lines = open(sys.argv[1], encoding="utf-8").read().splitlines()
+          try:
+              start = next(i for i, line in enumerate(lines) if line == "on:")
+          except StopIteration:
+              raise SystemExit("missing top-level on block")
+
+          triggers = []
+          for line in lines[start + 1:]:
+              if line and not line.startswith((" ", "\t")):
+                  break
+              match = re.match(r"^  ([A-Za-z0-9_-]+):(?:\s.*)?$", line)
+              if match:
+                  triggers.append(match.group(1))
+
+          if triggers != ["workflow_dispatch"]:
+              raise SystemExit(f"deployment triggers must be exactly workflow_dispatch, got {triggers!r}")
+          PY
+          grep -Fq 'runs-on: [self-hosted, linux, x64, jadel-agent-runtime]' "$f"
+          grep -Fq "if: inputs.confirmation == 'DEPLOY_SLO_EXTERNAL_WATCHDOG'" "$f"
+          grep -Fq 'ref: ${{ inputs.expected_sha }}' "$f"
+          grep -Fq 'SLO_GITHUB_ACTIONS_TOKEN' "$f"
+          grep -Fq '/usr/local/sbin/jadel-slo-deploy-helper' "$f"
+          grep -Fq 'RUNNER_GENERAL_SUDO=DENIED' "$f"
+          ! grep -Fq 'sudo -n true' "$f"
+          ! grep -Eq 'sudo[[:space:]]+(install|systemctl)' "$f"
+          grep -Fq 'production_authorized=false' "$f"
+          ! grep -Eq 'production_authorized[=:][[:space:]]*true' "$f"
+          for unit in jadel-site-slo-dispatch.service jadel-site-slo-dispatch.timer jadel-site-slo-watchdog.service jadel-site-slo-watchdog.timer; do
+            grep -Fq "$unit" "$f"
+          done
+          bootstrap=ops/runner/bootstrap-self-hosted-runner.sh
+          grep -Fq 'NOPASSWD: /usr/local/sbin/jadel-slo-deploy-helper' "$bootstrap"
+          grep -Fq 'chown root:root /usr/local/sbin/jadel-slo-deploy-helper' "$bootstrap"
+          grep -Fq 'chmod 0440 /etc/sudoers.d/jadel-slo-deploy' "$bootstrap"
+          ! grep -Eq 'github-runner.*NOPASSWD:[[:space:]]*(ALL|/bin/(ba)?sh|/usr/bin/sudo)' "$bootstrap"
+          echo SLO_VPS_DEPLOY_CONTRACT=PASS
