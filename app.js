@@ -451,14 +451,14 @@
 
       <section class="section-block benchmark-section">
         <div class="section-heading reveal">
-          <div><div class="eyebrow">Posicionamiento</div><h2>Diseñado para competir en 2026 sin copiar a nadie.</h2></div>
-          <p>Tomamos los patrones que convierten en SaaS modernos —valor inmediato, producto visible, pricing, prueba social verificable y demos— y los combinamos con una diferenciación fuerte: gobernanza y madurez explícita.</p>
+          <div><div class="eyebrow">Diferenciación verificable</div><h2>Menos promesas. Más claridad, control y resultados que se pueden comprobar.</h2></div>
+          <p>Cada solución muestra qué resuelve, qué incluye, cuánto puede costar y qué controles intervienen. Así puedes evaluar el servicio antes de iniciar una conversación comercial.</p>
         </div>
         <div class="benchmark-grid">
-          <div class="benchmark-card reveal"><span>01</span><strong>Producto visible</strong><p>El visitante entiende qué hace cada agente antes de hablar con ventas.</p></div>
-          <div class="benchmark-card reveal"><span>02</span><strong>Pricing orientativo</strong><p>Reduce fricción sin prometer un alcance que todavía no fue descubierto.</p></div>
-          <div class="benchmark-card reveal"><span>03</span><strong>Interacción útil</strong><p>Filtros y configurador convierten la web en una mini experiencia de producto.</p></div>
-          <div class="benchmark-card reveal"><span>04</span><strong>Confianza verificable</strong><p>Sin logos inventados, ROI fabricado ni estados de producción falsos.</p></div>
+          <div class="benchmark-card reveal"><span>01</span><strong>Valor comprensible</strong><p>Explicamos el resultado esperado y el alcance técnico sin obligarte a descifrar una lista de tecnologías.</p></div>
+          <div class="benchmark-card reveal"><span>02</span><strong>Coste con contexto</strong><p>Los precios orientativos ayudan a decidir sin convertir una estimación inicial en una promesa de alcance.</p></div>
+          <div class="benchmark-card reveal"><span>03</span><strong>Exploración útil</strong><p>Filtros y configurador permiten comparar capacidades y preparar un alcance inicial con menos fricción.</p></div>
+          <div class="benchmark-card reveal"><span>04</span><strong>Confianza verificable</strong><p>Estados, límites y evidencias se comunican sin testimonios inventados, métricas fabricadas ni capacidades presentadas como terminadas antes de estarlo.</p></div>
         </div>
       </section>
 
