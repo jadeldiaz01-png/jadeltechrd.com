@@ -158,6 +158,10 @@ function adminConfigured(env) {
   return Boolean(env?.DB && env?.ADMIN_API_TOKEN);
 }
 
+function revenueAgentConfigured(env) {
+  return Boolean(env?.DB && env?.REVENUE_AGENT_API_TOKEN);
+}
+
 async function lookupByIdempotency(env, key) {
   return env.DB.prepare(
     "SELECT project_id,state,policy_status,request_fingerprint FROM project_requests WHERE idempotency_key = ? LIMIT 1"
@@ -356,6 +360,10 @@ async function requireAdmin(request, env) {
   return adminConfigured(env) && await constantTimeEqual(bearerToken(request), env.ADMIN_API_TOKEN);
 }
 
+async function requireRevenueAgent(request, env) {
+  return revenueAgentConfigured(env) && await constantTimeEqual(bearerToken(request), env.REVENUE_AGENT_API_TOKEN);
+}
+
 export async function handleAdminApprovals(request, env) {
   if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
   if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
@@ -456,9 +464,9 @@ export async function handleAdminPaymentReconciliation(request, env) {
   }, 200);
 }
 
-export async function handleAdminRevenueAgentOpportunities(request, env) {
-  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
-  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+export async function handleRevenueAgentOpportunities(request, env) {
+  if (!revenueAgentConfigured(env)) return json({ error: "REVENUE_AGENT_NOT_CONFIGURED" }, 503);
+  if (!await requireRevenueAgent(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
   if (request.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
 
   try {
@@ -475,9 +483,9 @@ export async function handleAdminRevenueAgentOpportunities(request, env) {
   }
 }
 
-export async function handleAdminRevenueRuntimeAuthorization(request, env) {
-  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
-  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+export async function handleRevenueRuntimeAuthorization(request, env) {
+  if (!revenueAgentConfigured(env)) return json({ error: "REVENUE_AGENT_NOT_CONFIGURED" }, 503);
+  if (!await requireRevenueAgent(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
   if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
   if (!env.REVENUE_RUNTIME_HMAC_KEY) return json({ error: "REVENUE_RUNTIME_SIGNING_NOT_CONFIGURED" }, 503);
 
@@ -583,11 +591,11 @@ export default {
     if (url.pathname === "/api/v1/admin/payments/reconcile") {
       return handleAdminPaymentReconciliation(request, env);
     }
-    if (url.pathname === "/api/v1/admin/revenue-agent/opportunities") {
-      return handleAdminRevenueAgentOpportunities(request, env);
+    if (url.pathname === "/api/v1/revenue-agent/opportunities") {
+      return handleRevenueAgentOpportunities(request, env);
     }
-    if (url.pathname === "/api/v1/admin/revenue-agent/authorization") {
-      return handleAdminRevenueRuntimeAuthorization(request, env);
+    if (url.pathname === "/api/v1/revenue-agent/authorization") {
+      return handleRevenueRuntimeAuthorization(request, env);
     }
     if (url.pathname === "/api/v1/admin/revenue-intelligence") {
       return handleAdminRevenueIntelligence(request, env);
