@@ -399,6 +399,63 @@ export async function handleAdminApprovals(request, env) {
   return json({ approval_id: approvalId, project_id: projectId, state: nextState, policy_status: nextPolicy });
 }
 
+export async function handleAdminPaymentReconciliation(request, env) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+  if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  let input;
+  try { input = await readJsonWithLimit(request); } catch { return json({ error: "INVALID_RECONCILIATION_REQUEST" }, 400); }
+  const projectId = typeof input.project_id === "string" && /^[0-9a-f-]{36}$/i.test(input.project_id) ? input.project_id : null;
+  const ledgerId = typeof input.ledger_id === "string" && /^[0-9a-f-]{36}$/i.test(input.ledger_id) ? input.ledger_id : null;
+  const decision = typeof input.decision === "string" ? input.decision.toUpperCase() : "";
+  const reason = typeof input.reason === "string" ? input.reason.slice(0, 500) : "";
+  if (!projectId || !ledgerId || !new Set(["MATCHED","REJECTED"]).has(decision)) {
+    return json({ error: "INVALID_RECONCILIATION_REQUEST" }, 400);
+  }
+
+  const project = await env.DB.prepare(
+    "SELECT project_id FROM project_requests WHERE project_id=? LIMIT 1"
+  ).bind(projectId).first();
+  if (!project) return json({ error: "PROJECT_NOT_FOUND" }, 404);
+
+  const ledger = await env.DB.prepare(
+    "SELECT l.ledger_id,l.project_id,l.ledger_state,l.provider_event_id,e.verification_status FROM payment_ledger l JOIN payment_events e ON e.provider_event_id=l.provider_event_id WHERE l.ledger_id=? LIMIT 1"
+  ).bind(ledgerId).first();
+  if (!ledger) return json({ error: "PAYMENT_LEDGER_NOT_FOUND" }, 404);
+  if (ledger.verification_status !== "VERIFIED") return json({ error: "PAYMENT_EVENT_NOT_VERIFIED" }, 409);
+
+  if (ledger.ledger_state === "MATCHED") {
+    if (decision === "MATCHED" && ledger.project_id === projectId) {
+      return json({ ledger_id:ledgerId, project_id:projectId, ledger_state:"MATCHED", replayed:true }, 200);
+    }
+    return json({ error: "PAYMENT_LEDGER_ALREADY_MATCHED" }, 409);
+  }
+  if (ledger.ledger_state === "REJECTED") {
+    return json({ error: "PAYMENT_LEDGER_TERMINAL" }, 409);
+  }
+
+  const now = new Date().toISOString();
+  const approvalId = crypto.randomUUID();
+  const approvalDecision = decision === "MATCHED" ? "APPROVED" : "DENIED";
+  await env.DB.batch([
+    env.DB.prepare(INSERT_APPROVAL_SQL).bind(
+      approvalId,projectId,"payment_reconciliation",approvalDecision,"admin",reason,
+      JSON.stringify({ ledger_id:ledgerId, provider_event_id:ledger.provider_event_id, source:"approval_console" }),now,
+    ),
+    env.DB.prepare(
+      "UPDATE payment_ledger SET project_id=?,ledger_state=?,notes=?,updated_at=? WHERE ledger_id=?"
+    ).bind(projectId,decision,reason,now,ledgerId),
+  ]);
+  return json({
+    reconciliation_approval_id:approvalId,
+    ledger_id:ledgerId,
+    project_id:projectId,
+    ledger_state:decision,
+    replayed:false,
+  }, 200);
+}
+
 export async function handleAdminRevenueAgentOpportunities(request, env) {
   if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
   if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
@@ -522,6 +579,9 @@ export default {
     }
     if (url.pathname === "/api/v1/admin/approvals") {
       return handleAdminApprovals(request, env);
+    }
+    if (url.pathname === "/api/v1/admin/payments/reconcile") {
+      return handleAdminPaymentReconciliation(request, env);
     }
     if (url.pathname === "/api/v1/admin/revenue-agent/opportunities") {
       return handleAdminRevenueAgentOpportunities(request, env);
