@@ -1,5 +1,6 @@
 import { validateIdempotencyKey, validateProjectRequest } from "./validation.mjs";
 import { buildRuntimeRevenueView } from "./revenue-intelligence.mjs";
+import { loadApprovedOpportunityFeed } from "./revenue-agent-bridge.mjs";
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_WEBHOOK_BYTES = 64 * 1024;
@@ -397,6 +398,25 @@ export async function handleAdminApprovals(request, env) {
   return json({ approval_id: approvalId, project_id: projectId, state: nextState, policy_status: nextPolicy });
 }
 
+export async function handleAdminRevenueAgentOpportunities(request, env) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+  if (request.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  try {
+    const url = new URL(request.url);
+    const limit = Number(url.searchParams.get("limit") || "50");
+    const feed = await loadApprovedOpportunityFeed(env.DB, limit);
+    return json({
+      ...feed,
+      generated_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("revenue_agent_opportunity_feed_failed", { error: String(error?.name || "Error") });
+    return json({ error: "REVENUE_AGENT_FEED_UNAVAILABLE" }, 503);
+  }
+}
+
 export async function handleAdminRevenueIntelligence(request, env) {
   if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
   if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
@@ -469,6 +489,9 @@ export default {
     }
     if (url.pathname === "/api/v1/admin/approvals") {
       return handleAdminApprovals(request, env);
+    }
+    if (url.pathname === "/api/v1/admin/revenue-agent/opportunities") {
+      return handleAdminRevenueAgentOpportunities(request, env);
     }
     if (url.pathname === "/api/v1/admin/revenue-intelligence") {
       return handleAdminRevenueIntelligence(request, env);
