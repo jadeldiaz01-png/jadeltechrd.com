@@ -52,7 +52,7 @@ jobs:
         run: node scripts/validate-revenue-intelligence-control-plane.mjs
 
       - name: Test deterministic decision engine
-        run: node --test scripts/test-revenue-decision-engine.mjs commercial-runtime/test/revenue-intelligence.test.mjs commercial-runtime/test/revenue-admin.test.mjs commercial-runtime/test/revenue-agent-bridge.test.mjs commercial-runtime/test/revenue-agent-authorization.test.mjs commercial-runtime/test/payment-reconciliation.test.mjs
+        run: node --test scripts/test-revenue-decision-engine.mjs commercial-runtime/test/revenue-intelligence.test.mjs commercial-runtime/test/revenue-admin.test.mjs commercial-runtime/test/revenue-agent-bridge.test.mjs commercial-runtime/test/revenue-agent-authorization.test.mjs commercial-runtime/test/payment-reconciliation.test.mjs commercial-runtime/test/revenue-agent-access.test.mjs
 
       - name: Validate runtime syntax
         run: |
