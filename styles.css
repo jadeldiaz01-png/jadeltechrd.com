@@ -683,3 +683,107 @@ h1, h2, h3 {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
   .reveal { opacity: 1; transform: none; }
 }
+
+
+/* Phase 2: decision-path, accessibility and responsive refinements */
+html {
+  scroll-padding-top: 6rem;
+}
+
+.nav .nav-cta {
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: .55rem .85rem;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.button,
+.mini-action,
+.filter-chip,
+.selected-chip,
+.nav a {
+  min-height: 44px;
+}
+
+.hero-copy .lead {
+  max-width: 68ch;
+}
+
+@media (max-width: 760px) {
+  .header-inner {
+    align-items: flex-start;
+    gap: .75rem;
+  }
+
+  .nav {
+    width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+    padding-bottom: .35rem;
+  }
+
+  .nav a {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .hero-v2 {
+    padding-top: 2.5rem;
+  }
+
+  .hero-copy .actions,
+  .final-cta .actions {
+    align-items: stretch;
+  }
+
+  .hero-copy .actions .button,
+  .final-cta .actions .button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .signal-strip {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .signal-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-trust {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
