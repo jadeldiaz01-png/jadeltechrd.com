@@ -1,6 +1,7 @@
 import { validateIdempotencyKey, validateProjectRequest } from "./validation.mjs";
 import { buildRuntimeRevenueView } from "./revenue-intelligence.mjs";
 import { loadApprovedOpportunityFeed } from "./revenue-agent-bridge.mjs";
+import { buildRevenueRuntimeAuthorization } from "./revenue-agent-authorization.mjs";
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_WEBHOOK_BYTES = 64 * 1024;
@@ -417,6 +418,38 @@ export async function handleAdminRevenueAgentOpportunities(request, env) {
   }
 }
 
+export async function handleAdminRevenueRuntimeAuthorization(request, env) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+  if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+  if (!env.REVENUE_RUNTIME_HMAC_KEY) return json({ error: "REVENUE_RUNTIME_SIGNING_NOT_CONFIGURED" }, 503);
+
+  let input;
+  try {
+    input = await readJsonWithLimit(request);
+    const envelope = await buildRevenueRuntimeAuthorization(
+      env.DB,
+      input,
+      env.REVENUE_RUNTIME_HMAC_KEY,
+    );
+    return json({
+      authorization: envelope,
+      authority: "PREPARE_ONLY",
+      generated_at: new Date().toISOString(),
+    }, 201);
+  } catch (error) {
+    const code = String(error?.message || "REVENUE_AUTHORIZATION_FAILED");
+    const denied = new Set([
+      "PROJECT_POLICY_NOT_ALLOWED",
+      "APPROVAL_EVIDENCE_MISSING",
+      "MATCHED_PAYMENT_OR_ESCROW_REQUIRED",
+    ]);
+    const invalid = code.startsWith("INVALID_");
+    const status = denied.has(code) ? 409 : invalid ? 400 : code === "REVENUE_RUNTIME_HMAC_KEY_NOT_CONFIGURED" ? 503 : 400;
+    return json({ error: code }, status);
+  }
+}
+
 export async function handleAdminRevenueIntelligence(request, env) {
   if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
   if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
@@ -492,6 +525,9 @@ export default {
     }
     if (url.pathname === "/api/v1/admin/revenue-agent/opportunities") {
       return handleAdminRevenueAgentOpportunities(request, env);
+    }
+    if (url.pathname === "/api/v1/admin/revenue-agent/authorization") {
+      return handleAdminRevenueRuntimeAuthorization(request, env);
     }
     if (url.pathname === "/api/v1/admin/revenue-intelligence") {
       return handleAdminRevenueIntelligence(request, env);
