@@ -95,3 +95,109 @@ test("admin approval rejects missing project ids before recording evidence", asy
   }), envWithDb(db));
   assert.equal(response.status, 404);
 });
+
+test("admin approval reconciles verified payment ledger to a project", async () => {
+  const ledgerId = "123e4567-e89b-12d3-a456-426614174111";
+  const projectId = "123e4567-e89b-12d3-a456-426614174000";
+  const bound = [];
+  const db = {
+    prepare(sql) {
+      return {
+        bind(...values) {
+          bound.push({ sql, values });
+          return {
+            first: async () => {
+              if (sql.includes("FROM payment_ledger")) {
+                return { ledger_id: ledgerId, provider_event_id: "WH-456", ledger_state: "REQUIRES_HUMAN" };
+              }
+              if (sql.includes("FROM project_requests")) {
+                return { project_id: projectId };
+              }
+              return null;
+            }
+          };
+        }
+      };
+    },
+    batch: async (items) => {
+      assert.equal(items.length, 2);
+    }
+  };
+  const response = await handleAdminApprovals(new Request("https://intake.jadeltechrd.com/api/v1/admin/approvals", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer admin-secret-token",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      ledger_id: ledgerId,
+      project_id: projectId,
+      approval_type: "payment_reconciliation",
+      decision: "approved",
+      reason: "PayPal event and client scope reviewed"
+    }),
+  }), envWithDb(db));
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.ledger_state, "MATCHED");
+  assert.equal(bound.some((entry) => entry.values.includes("MATCHED")), true);
+});
+
+test("admin approval requires project id before matching payment ledger", async () => {
+  const response = await handleAdminApprovals(new Request("https://intake.jadeltechrd.com/api/v1/admin/approvals", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer admin-secret-token",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      ledger_id: "123e4567-e89b-12d3-a456-426614174111",
+      approval_type: "payment_reconciliation",
+      decision: "approved",
+    }),
+  }), envWithDb({
+    batch: async () => {
+      throw new Error("batch should not run without a project");
+    }
+  }));
+  assert.equal(response.status, 400);
+});
+
+test("admin approval rejects terminal payment ledger states", async () => {
+  const db = {
+    prepare(sql) {
+      return {
+        bind() {
+          return {
+            first: async () => {
+              if (sql.includes("FROM payment_ledger")) {
+                return {
+                  ledger_id: "123e4567-e89b-12d3-a456-426614174111",
+                  provider_event_id: "WH-456",
+                  ledger_state: "MATCHED",
+                };
+              }
+              return { project_id: "123e4567-e89b-12d3-a456-426614174000" };
+            }
+          };
+        }
+      };
+    },
+    batch: async () => {
+      throw new Error("batch should not run for terminal ledger states");
+    }
+  };
+  const response = await handleAdminApprovals(new Request("https://intake.jadeltechrd.com/api/v1/admin/approvals", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer admin-secret-token",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      ledger_id: "123e4567-e89b-12d3-a456-426614174111",
+      project_id: "123e4567-e89b-12d3-a456-426614174000",
+      decision: "approved",
+    }),
+  }), envWithDb(db));
+  assert.equal(response.status, 409);
+});

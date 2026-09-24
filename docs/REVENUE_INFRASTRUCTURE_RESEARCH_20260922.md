@@ -45,3 +45,22 @@ The homepage now includes a dedicated commercial infrastructure section that com
 4. Persist webhook, intake and approval evidence in D1 or Postgres.
 5. Add an owner-only approval console with access logs and expiring approvals.
 6. Export ledger and work-order status into an operational dashboard.
+
+## 2026-09-24 P1 runtime hardening
+
+Implemented backend hardening for the PayPal and approval path:
+
+- PayPal webhook processing remains disabled unless `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` and D1 are configured.
+- Incoming PayPal events are verified through PayPal's official webhook signature verification API before any D1 write.
+- PayPal certificate URLs are constrained to official PayPal API hosts before the verification request is attempted.
+- Unsupported verified webhook event types are acknowledged and ignored; they do not create revenue ledger records.
+- Supported payment events map to conservative ledger states: completed sales/captures require human reconciliation; pending captures stay reconciling; denied, refunded and reversed events are rejected.
+- Owner-only admin approval can reconcile a verified payment ledger row to an existing project, but this only marks evidence as matched. It does not authorize fulfillment, refunds, payouts, contracts, publication, infrastructure changes or trading.
+
+Validated locally:
+
+- `node --check commercial-runtime/src/worker.mjs`
+- `node --test commercial-runtime/test/*.test.mjs`
+- `node scripts/validate-site-production-readiness.mjs`
+- `node scripts/validate-agent-manifest.mjs`
+- `node scripts/validate-institutional-production-manifest.mjs`

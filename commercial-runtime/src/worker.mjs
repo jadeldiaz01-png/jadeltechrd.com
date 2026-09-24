@@ -7,6 +7,17 @@ const MAX_BODY_BYTES = 16 * 1024;
 const MAX_WEBHOOK_BYTES = 64 * 1024;
 const TURNSTILE_SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const PAYPAL_API_BASE = "https://api-m.paypal.com";
+const PAYPAL_CERT_HOSTS = new Set(["api-m.paypal.com", "api-m.sandbox.paypal.com"]);
+const PAYPAL_LEDGER_EVENT_STATES = new Map([
+  ["PAYMENT.CAPTURE.COMPLETED", "REQUIRES_HUMAN"],
+  ["PAYMENT.CAPTURE.PENDING", "RECONCILING"],
+  ["PAYMENT.CAPTURE.DENIED", "REJECTED"],
+  ["PAYMENT.CAPTURE.REFUNDED", "REJECTED"],
+  ["PAYMENT.CAPTURE.REVERSED", "REJECTED"],
+  ["PAYMENT.SALE.COMPLETED", "REQUIRES_HUMAN"],
+  ["PAYMENT.SALE.REFUNDED", "REJECTED"],
+  ["PAYMENT.SALE.REVERSED", "REJECTED"],
+]);
 const TURNSTILE_ACTION = "project_request";
 const INSERT_REQUEST_SQL = `INSERT INTO project_requests
 (project_id,idempotency_key,request_fingerprint,name,email,company,service_ids_json,notes,locale,state,policy_status,created_at,updated_at)
@@ -268,9 +279,10 @@ async function paypalAccessToken(env, fetchImpl = fetch) {
 }
 
 async function verifyPayPalWebhook(headers, webhookEvent, env, fetchImpl = fetch) {
+  const certUrl = headers.get("paypal-cert-url");
   const required = {
     auth_algo: headers.get("paypal-auth-algo"),
-    cert_url: headers.get("paypal-cert-url"),
+    cert_url: certUrl,
     transmission_id: headers.get("paypal-transmission-id"),
     transmission_sig: headers.get("paypal-transmission-sig"),
     transmission_time: headers.get("paypal-transmission-time"),
@@ -279,6 +291,14 @@ async function verifyPayPalWebhook(headers, webhookEvent, env, fetchImpl = fetch
   };
   if (Object.entries(required).some(([key, value]) => key !== "webhook_event" && !value)) {
     return { ok: false, reason: "PAYPAL_HEADERS_MISSING" };
+  }
+  try {
+    const parsedCertUrl = new URL(certUrl);
+    if (parsedCertUrl.protocol !== "https:" || !PAYPAL_CERT_HOSTS.has(parsedCertUrl.hostname)) {
+      return { ok: false, reason: "PAYPAL_CERT_URL_REJECTED" };
+    }
+  } catch {
+    return { ok: false, reason: "PAYPAL_CERT_URL_REJECTED" };
   }
   const token = await paypalAccessToken(env, fetchImpl);
   const response = await fetchImpl(`${PAYPAL_API_BASE}/v1/notifications/verify-webhook-signature`, {
@@ -311,6 +331,7 @@ function paymentFacts(event) {
 }
 
 export async function handlePayPalWebhook(request, env, deps = {}) {
+  if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
   if (!paypalWebhookConfigured(env)) return json({ error: "PAYPAL_WEBHOOK_NOT_CONFIGURED" }, 503);
   let raw;
   let event;
@@ -322,7 +343,13 @@ export async function handlePayPalWebhook(request, env, deps = {}) {
     return json({ error: code }, code === "REQUEST_TOO_LARGE" ? 413 : 400);
   }
 
-  const verified = await verifyPayPalWebhook(request.headers, event, env, deps.fetchImpl);
+  let verified;
+  try {
+    verified = await verifyPayPalWebhook(request.headers, event, env, deps.fetchImpl);
+  } catch (error) {
+    console.warn("paypal_webhook_verify_unavailable", { error: String(error?.message || "PAYPAL_VERIFY_UNAVAILABLE") });
+    return json({ error: "PAYPAL_VERIFY_UNAVAILABLE" }, 503);
+  }
   if (!verified.ok) {
     console.warn("paypal_webhook_rejected", { reason: verified.reason });
     return json({ error: "PAYPAL_WEBHOOK_REJECTED" }, 403);
@@ -330,6 +357,10 @@ export async function handlePayPalWebhook(request, env, deps = {}) {
 
   const facts = paymentFacts(event);
   if (!facts.providerEventId || !facts.eventType) return json({ error: "PAYPAL_EVENT_INVALID" }, 400);
+  const ledgerState = PAYPAL_LEDGER_EVENT_STATES.get(facts.eventType);
+  if (!ledgerState) {
+    return json({ received: true, ignored: true, event_type: facts.eventType }, 202);
+  }
 
   const now = new Date().toISOString();
   const ledgerId = crypto.randomUUID();
@@ -340,8 +371,8 @@ export async function handlePayPalWebhook(request, env, deps = {}) {
         facts.grossAmount,facts.currencyCode,raw,"VERIFIED",now,
       ),
       env.DB.prepare(INSERT_PAYMENT_LEDGER_SQL).bind(
-        ledgerId,facts.providerEventId,null,"paypal","REQUIRES_HUMAN",facts.grossAmount,
-        facts.currencyCode,"Webhook verified; project match and fulfillment require human reconciliation.",now,now,
+        ledgerId,facts.providerEventId,null,"paypal",ledgerState,facts.grossAmount,
+        facts.currencyCode,"Webhook verified; project match and fulfillment require owner reconciliation.",now,now,
       ),
     ]);
   } catch (error) {
@@ -353,7 +384,7 @@ export async function handlePayPalWebhook(request, env, deps = {}) {
     return json({ error: "PAYMENT_WRITE_FAILED" }, 503);
   }
 
-  return json({ received: true, provider_event_id: facts.providerEventId, ledger_state: "REQUIRES_HUMAN" }, 202);
+  return json({ received: true, provider_event_id: facts.providerEventId, ledger_state: ledgerState }, 202);
 }
 
 async function requireAdmin(request, env) {
@@ -381,12 +412,50 @@ export async function handleAdminApprovals(request, env) {
   let input;
   try { input = await readJsonWithLimit(request); } catch { return json({ error: "INVALID_APPROVAL_REQUEST" }, 400); }
   const projectId = typeof input.project_id === "string" && /^[0-9a-f-]{36}$/i.test(input.project_id) ? input.project_id : null;
+  const ledgerId = typeof input.ledger_id === "string" && /^[0-9a-f-]{36}$/i.test(input.ledger_id) ? input.ledger_id : null;
   const decision = typeof input.decision === "string" ? input.decision.toUpperCase() : "";
   const approvalType = typeof input.approval_type === "string" ? input.approval_type.slice(0, 80) : "policy";
   const reason = typeof input.reason === "string" ? input.reason.slice(0, 500) : "";
-  if (!projectId || !new Set(["APPROVED","DENIED","NEEDS_INFO"]).has(decision)) {
+  if ((!projectId && !ledgerId) || !new Set(["APPROVED","DENIED","NEEDS_INFO"]).has(decision)) {
     return json({ error: "INVALID_APPROVAL_REQUEST" }, 400);
   }
+  if (ledgerId) {
+    if (decision === "APPROVED" && !projectId) return json({ error: "PROJECT_REQUIRED_FOR_PAYMENT_MATCH" }, 400);
+    const ledger = await env.DB.prepare(
+      "SELECT ledger_id,provider_event_id,ledger_state FROM payment_ledger WHERE ledger_id=? LIMIT 1"
+    ).bind(ledgerId).first();
+    if (!ledger) return json({ error: "LEDGER_NOT_FOUND" }, 404);
+    if (!new Set(["RECEIVED","RECONCILING","REQUIRES_HUMAN"]).has(ledger.ledger_state)) {
+      return json({ error: "LEDGER_STATE_NOT_RECONCILABLE" }, 409);
+    }
+    if (projectId) {
+      const project = await env.DB.prepare(
+        "SELECT project_id FROM project_requests WHERE project_id=? LIMIT 1"
+      ).bind(projectId).first();
+      if (!project) return json({ error: "PROJECT_NOT_FOUND" }, 404);
+    }
+
+    const now = new Date().toISOString();
+    const approvalId = crypto.randomUUID();
+    const nextLedgerState = decision === "APPROVED" ? "MATCHED" : decision === "DENIED" ? "REJECTED" : "REQUIRES_HUMAN";
+    const ledgerNote = decision === "APPROVED"
+      ? "Owner reconciled PayPal payment with project. Fulfillment still requires delivery controls."
+      : decision === "DENIED"
+        ? "Owner rejected PayPal payment reconciliation."
+        : "Owner requested more payment reconciliation evidence.";
+    const ledgerApprovalType = approvalType === "policy" ? "payment_reconciliation" : approvalType;
+    await env.DB.batch([
+      env.DB.prepare(INSERT_APPROVAL_SQL).bind(
+        approvalId,projectId,ledgerApprovalType,decision,"admin",reason,
+        JSON.stringify({ source: "approval_console", ledger_id: ledgerId, provider_event_id: ledger.provider_event_id }),now,
+      ),
+      env.DB.prepare("UPDATE payment_ledger SET project_id=?,ledger_state=?,notes=?,updated_at=? WHERE ledger_id=?").bind(
+        projectId,nextLedgerState,ledgerNote,now,ledgerId,
+      ),
+    ]);
+    return json({ approval_id: approvalId, project_id: projectId, ledger_id: ledgerId, ledger_state: nextLedgerState });
+  }
+
   const existingProject = await env.DB.prepare(
     "SELECT project_id FROM project_requests WHERE project_id=? LIMIT 1"
   ).bind(projectId).first();
