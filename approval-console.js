@@ -44,6 +44,7 @@ async function api(path, options = {}) {
 function render(data) {
   const projects = data.projects || [];
   const payments = data.payments || [];
+  const paymentOrders = data.payment_orders || [];
   resultsNode.innerHTML = `
     <div class="approval-list">
       <section>
@@ -61,6 +62,15 @@ function render(data) {
           </article>`).join("") : "<p>No hay solicitudes pendientes.</p>"}
       </section>
       <section>
+        <h3>Órdenes internas pendientes</h3>
+        ${paymentOrders.length ? paymentOrders.map((order) => `
+          <article>
+            <strong>${htmlEscape(order.payment_order_id)}</strong>
+            <span>${htmlEscape(order.status)} · ${htmlEscape(order.amount_minor)} minor units ${htmlEscape(order.currency_code)}</span>
+            <small>Proyecto: ${htmlEscape(order.project_id)} · Quote: ${htmlEscape(order.quote_id)}</small>
+          </article>`).join("") : "<p>No hay órdenes internas pendientes.</p>"}
+      </section>
+      <section>
         <h3>Pagos por reconciliar</h3>
         ${payments.length ? payments.map((payment) => `
           <article>
@@ -76,7 +86,15 @@ function render(data) {
                 placeholder="Project ID verificado"
                 aria-label="Project ID para reconciliar"
               >
-              <button data-payment-decision="MATCHED" data-ledger="${htmlEscape(payment.ledger_id)}">Vincular pago</button>
+              <input
+                type="text"
+                inputmode="text"
+                autocomplete="off"
+                data-payment-order="${htmlEscape(payment.ledger_id)}"
+                placeholder="Payment Order ID"
+                aria-label="Payment Order ID para liquidar"
+              >
+              <button data-payment-decision="MATCHED" data-ledger="${htmlEscape(payment.ledger_id)}">Liquidar pago</button>
               <button data-payment-decision="REJECTED" data-ledger="${htmlEscape(payment.ledger_id)}">Rechazar pago</button>
             </div>
           </article>`).join("") : "<p>No hay pagos pendientes.</p>"}
@@ -104,9 +122,16 @@ resultsNode?.addEventListener("click", async (event) => {
     const ledgerId = paymentButton.dataset.ledger;
     const projectInput = [...resultsNode.querySelectorAll("input[data-payment-project]")]
       .find((node) => node.dataset.paymentProject === ledgerId);
+    const orderInput = [...resultsNode.querySelectorAll("input[data-payment-order]")]
+      .find((node) => node.dataset.paymentOrder === ledgerId);
     const projectId = projectInput?.value.trim() || "";
+    const paymentOrderId = orderInput?.value.trim() || "";
     if (!projectId) {
       setStatus("Indica el Project ID antes de reconciliar el pago.", "error");
+      return;
+    }
+    if (paymentButton.dataset.paymentDecision === "MATCHED" && !paymentOrderId) {
+      setStatus("Indica el Payment Order ID antes de liquidar el pago.", "error");
       return;
     }
     setStatus("Reconciliando pago con evidencia verificada...", "working");
@@ -116,6 +141,7 @@ resultsNode?.addEventListener("click", async (event) => {
         body:JSON.stringify({
           project_id:projectId,
           ledger_id:ledgerId,
+          payment_order_id:paymentOrderId || undefined,
           decision:paymentButton.dataset.paymentDecision,
           reason:"operator console payment reconciliation",
         }),
