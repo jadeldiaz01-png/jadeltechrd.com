@@ -310,11 +310,42 @@ async function duplicatePaymentOrderFailsClosed() {
   assert.equal((await acceptQuote(adapter, quote.quote_id)).response.status, 200);
   const first = await createPaymentOrder(adapter, quote.quote_id);
   assert.equal(first.response.status, 201);
+
   const second = await createPaymentOrder(adapter, quote.quote_id);
   assert.equal(second.response.status, 409);
-  assert.equal(second.body.error, "PAYMENT_ORDER_ALREADY_EXISTS");
+  assert.equal(second.body.error, "QUOTE_NOT_READY_FOR_PAYMENT");
+
+  const firstRow = sqlite.prepare(
+    "SELECT project_id,provider,amount_minor,currency_code FROM payment_orders WHERE payment_order_id=?"
+  ).get(first.body.payment_order_id);
+  let uniquenessRejected = false;
+  try {
+    const now = new Date().toISOString();
+    sqlite.prepare(
+      "INSERT INTO payment_orders (payment_order_id,quote_id,project_id,provider,provider_order_id,status,amount_minor,currency_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)"
+    ).run(
+      crypto.randomUUID(),
+      quote.quote_id,
+      firstRow.project_id,
+      firstRow.provider,
+      "",
+      "PENDING",
+      firstRow.amount_minor,
+      firstRow.currency_code,
+      now,
+      now,
+    );
+  } catch (error) {
+    uniquenessRejected = String(error?.message || error).includes("UNIQUE");
+  }
+  assert.equal(uniquenessRejected, true);
   assert.equal(Number(sqlite.prepare("SELECT COUNT(*) AS count FROM payment_orders WHERE quote_id=?").get(quote.quote_id).count), 1);
-  return { status: "PASS", rejected_with: second.body.error, row_count: 1 };
+  return {
+    status: "PASS",
+    api_rejected_with: second.body.error,
+    db_unique_quote_invariant: true,
+    row_count: 1,
+  };
 }
 
 const scenarios = {
