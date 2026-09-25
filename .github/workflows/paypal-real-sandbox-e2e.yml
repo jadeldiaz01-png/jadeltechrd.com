@@ -1,0 +1,140 @@
+name: PayPal real sandbox sales-to-cash E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Prepare a sandbox order or capture an approved sandbox order and certify settlement
+        required: true
+        type: choice
+        options:
+          - prepare
+          - capture_certify
+      paypal_order_id:
+        description: Required only for capture_certify; use the sandbox order id from prepare
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  attestations: write
+  id-token: write
+
+env:
+  SANDBOX_D1_NAME: jadel-commercial-paypal-sandbox
+  SANDBOX_WORKER_NAME: jadel-commercial-paypal-sandbox
+  WRANGLER_VERSION: 4.127.1
+  PAYPAL_SANDBOX_API: https://api-m.sandbox.paypal.com
+
+jobs:
+  prepare-sandbox-d1:
+    environment:
+      name: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      database_id: \${{ steps.d1.outputs.database_id }}
+      project_id: \${{ steps.d1.outputs.project_id }}
+    env:
+      PHASE: \${{ inputs.phase }}
+      CLOUDFLARE_D1_API_TOKEN_RAW: \${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: \${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout immutable source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Use Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Resolve, migrate and optionally seed isolated sandbox D1
+        id: d1
+        shell: bash
+        run: bash scripts/paypal-sandbox-d1.sh
+
+  paypal-sandbox-phase:
+    needs: prepare-sandbox-d1
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    outputs:
+      paypal_order_id: \${{ steps.provider.outputs.paypal_order_id }}
+      project_id: \${{ steps.provider.outputs.project_id }}
+      payment_order_id: \${{ steps.provider.outputs.payment_order_id }}
+      ledger_id: \${{ steps.provider.outputs.ledger_id }}
+      settlement_id: \${{ steps.provider.outputs.settlement_id }}
+      capture_id: \${{ steps.provider.outputs.capture_id }}
+    env:
+      PHASE: \${{ inputs.phase }}
+      INPUT_PAYPAL_ORDER_ID: \${{ inputs.paypal_order_id }}
+      DATABASE_ID: \${{ needs.prepare-sandbox-d1.outputs.database_id }}
+      PROJECT_ID: \${{ needs.prepare-sandbox-d1.outputs.project_id }}
+      CLOUDFLARE_API_TOKEN_RAW: \${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: \${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      PAYPAL_SANDBOX_CLIENT_ID_RAW: \${{ secrets.PAYPAL_SANDBOX_CLIENT_ID }}
+      PAYPAL_SANDBOX_CLIENT_SECRET_RAW: \${{ secrets.PAYPAL_SANDBOX_CLIENT_SECRET }}
+      PAYPAL_SANDBOX_ADMIN_TOKEN_RAW: \${{ secrets.PAYPAL_SANDBOX_ADMIN_TOKEN }}
+    steps:
+      - name: Checkout immutable source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Use Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Execute isolated real PayPal sandbox phase
+        id: provider
+        shell: bash
+        run: bash scripts/paypal-sandbox-provider.sh
+
+  certify-sandbox-result:
+    if: \${{ inputs.phase == 'capture_certify' }}
+    needs:
+      - prepare-sandbox-d1
+      - paypal-sandbox-phase
+    environment:
+      name: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      DATABASE_ID: \${{ needs.prepare-sandbox-d1.outputs.database_id }}
+      PROJECT_ID: \${{ needs.paypal-sandbox-phase.outputs.project_id }}
+      PAYMENT_ORDER_ID: \${{ needs.paypal-sandbox-phase.outputs.payment_order_id }}
+      LEDGER_ID: \${{ needs.paypal-sandbox-phase.outputs.ledger_id }}
+      SETTLEMENT_ID: \${{ needs.paypal-sandbox-phase.outputs.settlement_id }}
+      PAYPAL_ORDER_ID: \${{ needs.paypal-sandbox-phase.outputs.paypal_order_id }}
+      CAPTURE_ID: \${{ needs.paypal-sandbox-phase.outputs.capture_id }}
+      CLOUDFLARE_D1_API_TOKEN_RAW: \${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: \${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout immutable source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Verify authoritative sandbox D1 state and create evidence
+        shell: bash
+        run: bash scripts/paypal-sandbox-certify.sh
+
+      - name: Attest real sandbox certification evidence
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: evidence/paypal-real-sandbox-sales-to-cash.json
+
+      - name: Upload real sandbox certification evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: paypal-real-sandbox-sales-to-cash-\${{ github.run_id }}-\${{ github.run_attempt }}
+          path: |
+            evidence/paypal-real-sandbox-sales-to-cash.json
+            evidence/paypal-real-sandbox-sales-to-cash.sha256
+          if-no-files-found: error
+          retention-days: 30
