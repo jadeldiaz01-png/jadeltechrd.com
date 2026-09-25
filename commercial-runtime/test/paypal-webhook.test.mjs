@@ -147,3 +147,62 @@ test("verified PayPal webhook stores event and ledger as human-reconciled", asyn
   assert.equal(body.ledger_state, "REQUIRES_HUMAN");
   assert.equal(statements.some((entry) => entry.values.includes("REQUIRES_HUMAN")), true);
 });
+
+
+test("sandbox webhook verification uses only PayPal sandbox REST endpoints", async () => {
+  const seen = [];
+  const db = {
+    prepare() {
+      return {
+        bind() {
+          return { first: async () => null };
+        }
+      };
+    },
+    batch: async (items) => {
+      assert.equal(items.length, 2);
+    }
+  };
+  const sandboxHeaders = {
+    ...headers,
+    "paypal-cert-url": "https://api-m.sandbox.paypal.com/certs/test.pem",
+  };
+  const response = await handlePayPalWebhook(new Request("https://sandbox-worker.example/api/v1/paypal/webhooks", {
+    method: "POST",
+    headers: sandboxHeaders,
+    body: eventBody("WH-SANDBOX"),
+  }), {
+    ...paypalEnv(db),
+    PAYPAL_ENVIRONMENT: "sandbox",
+  }, {
+    fetchImpl: async (url) => {
+      seen.push(String(url));
+      if (String(url).endsWith("/v1/oauth2/token")) return Response.json({ access_token: "sandbox-token" });
+      return Response.json({ verification_status: "SUCCESS" });
+    }
+  });
+  assert.equal(response.status, 202);
+  assert.equal(seen.length, 2);
+  assert.equal(seen.every((url) => url.startsWith("https://api-m.sandbox.paypal.com/")), true);
+});
+
+test("unknown PayPal environment fails closed", async () => {
+  let wrote = false;
+  let fetched = false;
+  const response = await handlePayPalWebhook(new Request("https://sandbox-worker.example/api/v1/paypal/webhooks", {
+    method: "POST",
+    headers,
+    body: eventBody("WH-INVALID-ENV"),
+  }), {
+    ...paypalEnv({ batch: async () => { wrote = true; } }),
+    PAYPAL_ENVIRONMENT: "invalid",
+  }, {
+    fetchImpl: async () => {
+      fetched = true;
+      return Response.json({});
+    }
+  });
+  assert.equal(response.status, 503);
+  assert.equal(wrote, false);
+  assert.equal(fetched, false);
+});

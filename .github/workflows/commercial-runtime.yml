@@ -5,12 +5,16 @@ on:
     branches: [main]
     paths:
       - 'commercial-runtime/**'
+      - 'scripts/paypal-sandbox-*.sh'
+      - '.github/workflows/paypal-real-sandbox-e2e.yml'
       - 'security/api-security-manifest.json'
       - '.github/workflows/commercial-runtime.yml'
   push:
     branches: [main]
     paths:
       - 'commercial-runtime/**'
+      - 'scripts/paypal-sandbox-*.sh'
+      - '.github/workflows/paypal-real-sandbox-e2e.yml'
       - 'security/api-security-manifest.json'
       - '.github/workflows/commercial-runtime.yml'
   workflow_dispatch:
@@ -39,6 +43,10 @@ jobs:
           node --check commercial-runtime/src/worker.mjs
           node --check commercial-runtime/src/project-workflow.mjs
           node --check commercial-runtime/src/revenue-intelligence.mjs
+          for script in scripts/paypal-sandbox-*.sh; do
+            [ -e "$script" ] || continue
+            bash -n "$script"
+          done
 
       - name: Run adversarial and contract tests
         run: node --test commercial-runtime/test/*.test.mjs

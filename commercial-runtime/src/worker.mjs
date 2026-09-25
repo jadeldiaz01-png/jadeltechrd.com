@@ -6,8 +6,18 @@ import { buildRevenueRuntimeAuthorization } from "./revenue-agent-authorization.
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_WEBHOOK_BYTES = 64 * 1024;
 const TURNSTILE_SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-const PAYPAL_API_BASE = "https://api-m.paypal.com";
+const PAYPAL_API_BASES = new Map([
+  ["live", "https://api-m.paypal.com"],
+  ["sandbox", "https://api-m.sandbox.paypal.com"],
+]);
 const PAYPAL_CERT_HOSTS = new Set(["api-m.paypal.com", "api-m.sandbox.paypal.com"]);
+
+function paypalApiBase(env) {
+  const mode = String(env?.PAYPAL_ENVIRONMENT || "live").trim().toLowerCase();
+  const base = PAYPAL_API_BASES.get(mode);
+  if (!base) throw new Error("PAYPAL_ENVIRONMENT_INVALID");
+  return base;
+}
 const PAYPAL_LEDGER_EVENT_STATES = new Map([
   ["PAYMENT.CAPTURE.COMPLETED", "REQUIRES_HUMAN"],
   ["PAYMENT.CAPTURE.PENDING", "RECONCILING"],
@@ -262,8 +272,9 @@ export async function handleProjectRequest(request, env, deps = {}) {
 }
 
 async function paypalAccessToken(env, fetchImpl = fetch) {
+  const apiBase = paypalApiBase(env);
   const credentials = btoa(`${env.PAYPAL_CLIENT_ID}:${env.PAYPAL_CLIENT_SECRET}`);
-  const response = await fetchImpl(`${PAYPAL_API_BASE}/v1/oauth2/token`, {
+  const response = await fetchImpl(`${apiBase}/v1/oauth2/token`, {
     method: "POST",
     headers: {
       "authorization": `Basic ${credentials}`,
@@ -300,8 +311,9 @@ async function verifyPayPalWebhook(headers, webhookEvent, env, fetchImpl = fetch
   } catch {
     return { ok: false, reason: "PAYPAL_CERT_URL_REJECTED" };
   }
+  const apiBase = paypalApiBase(env);
   const token = await paypalAccessToken(env, fetchImpl);
-  const response = await fetchImpl(`${PAYPAL_API_BASE}/v1/notifications/verify-webhook-signature`, {
+  const response = await fetchImpl(`${apiBase}/v1/notifications/verify-webhook-signature`, {
     method: "POST",
     headers: {
       "authorization": `Bearer ${token}`,
@@ -403,7 +415,7 @@ export async function handleAdminApprovals(request, env) {
       "SELECT project_id,name,email,company,service_ids_json,state,policy_status,created_at,updated_at FROM project_requests WHERE policy_status IN ('PENDING','REQUIRES_HUMAN') ORDER BY created_at DESC LIMIT 50"
     ).all();
     const payments = await env.DB.prepare(
-      "SELECT ledger_id,provider_event_id,ledger_state,amount_usd,currency_code,created_at FROM payment_ledger WHERE ledger_state IN ('RECEIVED','RECONCILING','REQUIRES_HUMAN') ORDER BY created_at DESC LIMIT 50"
+      "SELECT l.ledger_id,l.provider_event_id,l.ledger_state,l.amount_usd,l.currency_code,l.created_at,e.resource_id,e.event_type,e.resource_status FROM payment_ledger l JOIN payment_events e ON e.provider_event_id=l.provider_event_id WHERE l.ledger_state IN ('RECEIVED','RECONCILING','REQUIRES_HUMAN') ORDER BY l.created_at DESC LIMIT 50"
     ).all();
     const paymentOrders = await env.DB.prepare(
       "SELECT payment_order_id,quote_id,project_id,status,amount_minor,currency_code,created_at FROM payment_orders WHERE status='PENDING' ORDER BY created_at DESC LIMIT 50"
