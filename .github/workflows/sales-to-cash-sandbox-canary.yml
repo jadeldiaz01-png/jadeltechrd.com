@@ -1,0 +1,65 @@
+name: Sales-to-cash sandbox canary
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'commercial-runtime/**'
+      - 'scripts/sales-to-cash-sandbox-canary.mjs'
+      - '.github/workflows/sales-to-cash-sandbox-canary.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'commercial-runtime/**'
+      - 'scripts/sales-to-cash-sandbox-canary.mjs'
+      - '.github/workflows/sales-to-cash-sandbox-canary.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sales-to-cash-sandbox-canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout immutable revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Setup Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Syntax check canary
+        run: node --check scripts/sales-to-cash-sandbox-canary.mjs
+
+      - name: Run isolated sales-to-cash canary
+        run: node --no-warnings=ExperimentalWarning scripts/sales-to-cash-sandbox-canary.mjs
+
+      - name: Validate machine-readable evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=evidence/sales-to-cash-sandbox-canary.json
+          test -s "$file"
+          jq -e '.status == "PASS"' "$file" >/dev/null
+          jq -e '.authority.production_mutation == false' "$file" >/dev/null
+          jq -e '.authority.provider_network_calls == false' "$file" >/dev/null
+          jq -e '.authority.paypal_credentials_used == false' "$file" >/dev/null
+          jq -e '.authority.money_movement == false' "$file" >/dev/null
+          jq -e '.scenarios | to_entries | all(.value.status == "PASS")' "$file" >/dev/null
+          sha256sum "$file" | tee evidence/sales-to-cash-sandbox-canary.sha256
+          echo 'SALES_TO_CASH_SANDBOX_EVIDENCE=PASS'
+
+      - name: Upload canary evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sales-to-cash-sandbox-canary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            evidence/sales-to-cash-sandbox-canary.json
+            evidence/sales-to-cash-sandbox-canary.sha256
+          if-no-files-found: error
+          retention-days: 30
