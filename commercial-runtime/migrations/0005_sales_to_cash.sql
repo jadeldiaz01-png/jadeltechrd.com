@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS payment_orders (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY(quote_id) REFERENCES quotes(quote_id) ON DELETE RESTRICT,
-  FOREIGN KEY(project_id) REFERENCES project_requests(project_id) ON DELETE RESTRICT
+  FOREIGN KEY(project_id) REFERENCES project_requests(project_id) ON DELETE RESTRICT,
+  UNIQUE(quote_id)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_orders_provider_order

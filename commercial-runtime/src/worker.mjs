@@ -611,7 +611,7 @@ export async function handleAdminQuoteAcceptance(request, env) {
   if (!quoteId || !evidence) return json({ error: "QUOTE_ACCEPTANCE_EVIDENCE_REQUIRED" }, 400);
 
   const quote = await env.DB.prepare(
-    "SELECT q.quote_id,q.project_id,q.status,p.state AS project_state,p.policy_status FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.quote_id=? LIMIT 1"
+    "SELECT q.quote_id,q.project_id,q.status,q.expires_at,p.state AS project_state,p.policy_status FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.quote_id=? LIMIT 1"
   ).bind(quoteId).first();
   if (!quote) return json({ error: "QUOTE_NOT_FOUND" }, 404);
   if (quote.status !== "ISSUED" || quote.policy_status !== "ALLOWED" || !new Set(["QUOTED","POLICY_ALLOWED"]).has(quote.project_state)) {
@@ -619,6 +619,12 @@ export async function handleAdminQuoteAcceptance(request, env) {
   }
 
   const now = new Date().toISOString();
+  if (quote.expires_at && Date.parse(quote.expires_at) <= Date.parse(now)) {
+    await env.DB.prepare(
+      "UPDATE quotes SET status='EXPIRED',updated_at=? WHERE quote_id=? AND status='ISSUED'"
+    ).bind(now,quoteId).run();
+    return json({ error: "QUOTE_EXPIRED" }, 409);
+  }
   const approvalId = crypto.randomUUID();
   await env.DB.batch([
     env.DB.prepare(INSERT_APPROVAL_SQL).bind(
@@ -666,13 +672,23 @@ export async function handleAdminPaymentOrderCreate(request, env) {
 
   const paymentOrderId = crypto.randomUUID();
   const now = new Date().toISOString();
-  await env.DB.batch([
-    env.DB.prepare(
-      "INSERT INTO payment_orders (payment_order_id,quote_id,project_id,provider,provider_order_id,status,amount_minor,currency_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)"
-    ).bind(paymentOrderId,quoteId,quote.project_id,"paypal","", "PENDING",quote.total_amount_minor,quote.currency_code,now,now),
-    env.DB.prepare("UPDATE project_requests SET state='PAYMENT_PENDING',updated_at=? WHERE project_id=?")
-      .bind(now,quote.project_id),
-  ]);
+  try {
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO payment_orders (payment_order_id,quote_id,project_id,provider,provider_order_id,status,amount_minor,currency_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)"
+      ).bind(paymentOrderId,quoteId,quote.project_id,"paypal","", "PENDING",quote.total_amount_minor,quote.currency_code,now,now),
+      env.DB.prepare("UPDATE project_requests SET state='PAYMENT_PENDING',updated_at=? WHERE project_id=?")
+        .bind(now,quote.project_id),
+    ]);
+  } catch (error) {
+    const raced = await env.DB.prepare(
+      "SELECT payment_order_id,status FROM payment_orders WHERE quote_id=? LIMIT 1"
+    ).bind(quoteId).first();
+    if (raced) {
+      return json({ error:"PAYMENT_ORDER_ALREADY_EXISTS", payment_order_id:raced.payment_order_id }, 409);
+    }
+    throw error;
+  }
 
   return json({
     payment_order_id:paymentOrderId,
