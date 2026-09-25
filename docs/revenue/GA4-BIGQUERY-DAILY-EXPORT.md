@@ -1,6 +1,6 @@
 # GA4 -> BigQuery Daily Export
 
-Status: **READY_FOR_EXTERNAL_LINK**
+Status: **LINK_CREATED_PENDING_FIRST_EXPORT**
 
 ## Verified source
 
@@ -72,3 +72,18 @@ Render them only after the real GCP project ID exists:
 For later automated BigQuery checks, use GitHub OIDC -> Google Cloud Workload Identity Federation. Do **not** store a Google service-account JSON private key in GitHub or the repository.
 
 The post-link observer should be enabled only after the GCP project, GA4 link and dataset are verified.
+
+
+## Post-link verification
+
+The GA4 BigQuery Links page now shows the project `jadeltechrd-analytics-prod` with project number `527094364974`. This proves the product link exists.
+
+Do not mark the export fully active until all of the following are observed:
+
+1. Dataset `analytics_555066228` exists in BigQuery.
+2. Daily export is enabled in the link details.
+3. Streaming remains disabled.
+4. Web Stream `15812262707` is included.
+5. The first `events_YYYYMMDD` table appears.
+
+The right-arrow on the GA4 BigQuery Links row should be used to inspect link details before declaring the export complete.

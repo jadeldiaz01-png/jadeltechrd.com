@@ -57,7 +57,11 @@
       "gcp_project_id": "jadeltechrd-analytics-prod",
       "activation_gate": "GOOGLE_CLOUD_PROJECT_AND_GA4_EDITOR_ACCESS_REQUIRED",
       "cost_guard": "daily export first; streaming requires explicit cost approval",
-      "project_id_confirmed": true
+      "project_id_confirmed": true,
+      "link_created": true,
+      "project_number": "527094364974",
+      "dataset_verified": false,
+      "first_daily_table_verified": false
     },
     "windsor": {
       "mode": "read_only_observability",
