@@ -163,6 +163,52 @@ test("admin approval requires project id before matching payment ledger", async 
   assert.equal(response.status, 400);
 });
 
+test("admin approval cannot match a reconciling payment ledger", async () => {
+  const ledgerId = "123e4567-e89b-12d3-a456-426614174111";
+  const projectId = "123e4567-e89b-12d3-a456-426614174000";
+  let batched = false;
+  const db = {
+    prepare(sql) {
+      return {
+        bind() {
+          return {
+            first: async () => {
+              if (sql.includes("FROM payment_ledger")) {
+                return {
+                  ledger_id: ledgerId,
+                  provider_event_id: "WH-PENDING",
+                  ledger_state: "RECONCILING",
+                };
+              }
+              throw new Error("project lookup should not run for a non-matchable ledger state");
+            }
+          };
+        }
+      };
+    },
+    batch: async () => {
+      batched = true;
+    }
+  };
+  const response = await handleAdminApprovals(new Request("https://intake.jadeltechrd.com/api/v1/admin/approvals", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer admin-secret-token",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      ledger_id: ledgerId,
+      project_id: projectId,
+      approval_type: "payment_reconciliation",
+      decision: "approved",
+    }),
+  }), envWithDb(db));
+  const body = await response.json();
+  assert.equal(response.status, 409);
+  assert.equal(body.error, "LEDGER_STATE_NOT_MATCHABLE");
+  assert.equal(batched, false);
+});
+
 test("admin approval rejects terminal payment ledger states", async () => {
   const db = {
     prepare(sql) {

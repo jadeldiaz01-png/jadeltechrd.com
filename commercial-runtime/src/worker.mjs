@@ -428,6 +428,9 @@ export async function handleAdminApprovals(request, env) {
     if (!new Set(["RECEIVED","RECONCILING","REQUIRES_HUMAN"]).has(ledger.ledger_state)) {
       return json({ error: "LEDGER_STATE_NOT_RECONCILABLE" }, 409);
     }
+    if (decision === "APPROVED" && ledger.ledger_state !== "REQUIRES_HUMAN") {
+      return json({ error: "LEDGER_STATE_NOT_MATCHABLE" }, 409);
+    }
     if (projectId) {
       const project = await env.DB.prepare(
         "SELECT project_id FROM project_requests WHERE project_id=? LIMIT 1"
