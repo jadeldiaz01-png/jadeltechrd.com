@@ -57,6 +57,10 @@ jobs:
           sqlite3 /tmp/jadel-commercial.db ".schema lead_lifecycle_events" | grep -q 'stage'
           sqlite3 /tmp/jadel-commercial.db ".schema revenue_intelligence_snapshots" | grep -q 'authority'
           sqlite3 /tmp/jadel-commercial.db ".schema revenue_action_proposals" | grep -q 'requires_human'
+          sqlite3 /tmp/jadel-commercial.db ".schema quotes" | grep -q 'total_amount_minor'
+          sqlite3 /tmp/jadel-commercial.db ".schema quote_items" | grep -q 'line_amount_minor'
+          sqlite3 /tmp/jadel-commercial.db ".schema payment_orders" | grep -q 'payment_order_id'
+          sqlite3 /tmp/jadel-commercial.db ".schema sales_settlements" | grep -q 'ledger_id'
 
       - name: Validate security manifest
         run: |
