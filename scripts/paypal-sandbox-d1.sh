@@ -6,7 +6,8 @@ account_id=$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID_RAW" | tr -d '\r\n[:space:]')
 test -n "$token" || { echo 'CLOUDFLARE_D1_TOKEN_PRESENT=NO' >&2; exit 2; }
 test -n "$account_id" || { echo 'CLOUDFLARE_ACCOUNT_ID_PRESENT=NO' >&2; exit 2; }
 echo "::add-mask::$token"
-echo "::add-mask::$account_id"
+# CLOUDFLARE_ACCOUNT_ID is a non-secret resource identifier. Do not mask it:
+# GitHub suppresses masked values from cross-job outputs.
 export CLOUDFLARE_API_TOKEN="$token"
 export CLOUDFLARE_ACCOUNT_ID="$account_id"
 
@@ -35,7 +36,9 @@ else
 fi
 
 test -n "$database_id" && test "$database_id" != null
+echo "account_id=$account_id" >> "$GITHUB_OUTPUT"
 echo "database_id=$database_id" >> "$GITHUB_OUTPUT"
+echo "PAYPAL_SANDBOX_ACCOUNT_ID_OUTPUT=PASS"
 echo "PAYPAL_SANDBOX_D1=PASS action=$action"
 
 jq -n --arg db "$database_id" --arg name "$SANDBOX_D1_NAME" '{
