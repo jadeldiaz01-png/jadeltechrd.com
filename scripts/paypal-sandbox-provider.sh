@@ -100,15 +100,41 @@ echo "PAYPAL_SANDBOX_WEBHOOK=PASS action=$webhook_action"
 
 health=$(curl --fail-with-body -sS "$worker_url/health")
 test "$(jq -r '.status' <<<"$health")" = ok
-invalid_code=$(curl -sS -o /tmp/invalid-paypal-webhook.json -w '%{http_code}' \
-  -X POST -H 'content-type: application/json' --data '{}' \
-  "$worker_url/api/v1/paypal/webhooks")
-test "$invalid_code" = 403 || {
-  echo "PAYPAL_SANDBOX_LISTENER_FAIL_HTTP_$invalid_code" >&2
+
+listener_ready=false
+for attempt in $(seq 1 12); do
+  invalid_code=$(curl -sS -o /tmp/invalid-paypal-webhook.json -w '%{http_code}' \
+    -X POST -H 'content-type: application/json' --data '{}' \
+    "$worker_url/api/v1/paypal/webhooks")
+  invalid_error=$(jq -r '.error // empty' /tmp/invalid-paypal-webhook.json 2>/dev/null || true)
+
+  if [ "$invalid_code" = 403 ] && [ "$invalid_error" = PAYPAL_WEBHOOK_REJECTED ]; then
+    listener_ready=true
+    echo "PAYPAL_SANDBOX_LISTENER=PASS attempt=$attempt"
+    break
+  fi
+
+  if [ "$invalid_code" = 503 ] && [ "$invalid_error" = PAYPAL_WEBHOOK_NOT_CONFIGURED ]; then
+    if [ "$attempt" -lt 12 ]; then
+      echo "PAYPAL_SANDBOX_LISTENER_PROPAGATION_WAIT attempt=$attempt"
+      sleep 5
+      continue
+    fi
+
+    echo 'PAYPAL_SANDBOX_LISTENER_FAIL_PERSISTENT_NOT_CONFIGURED' >&2
+    cat /tmp/invalid-paypal-webhook.json >&2
+    exit 22
+  fi
+
+  echo "PAYPAL_SANDBOX_LISTENER_FAIL_HTTP_$invalid_code error=${invalid_error:-UNKNOWN}" >&2
   cat /tmp/invalid-paypal-webhook.json >&2
   exit 22
+done
+
+test "$listener_ready" = true || {
+  echo 'PAYPAL_SANDBOX_LISTENER_FAIL_NOT_READY' >&2
+  exit 22
 }
-echo 'PAYPAL_SANDBOX_LISTENER=PASS'
 
 api() {
   curl --fail-with-body -sS \
