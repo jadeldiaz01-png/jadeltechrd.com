@@ -249,18 +249,18 @@
     <section class="commercial-home" data-view="home">
       <section class="hero-v2" id="inicio">
         <div class="hero-copy reveal">
-          <div class="eyebrow"><span class="live-dot"></span> Agentic Systems Studio · 2026</div>
-          <h1>Agentes de IA que <span>trabajan con controles reales.</span></h1>
-          <p class="lead">Diseñamos automatización, agentes, media intelligence, integraciones y sistemas de decisión con ingeniería, seguridad y aprobación humana donde importa.</p>
+          <div class="eyebrow"><span class="live-dot"></span> Automatización e IA aplicada para operaciones reales</div>
+          <h1>Convierte trabajo repetitivo en <span>sistemas de IA que puedes controlar.</span></h1>
+          <p class="lead">Diseñamos e integramos agentes y automatizaciones para soporte, ventas, datos y operaciones, con alcance claro, supervisión humana y controles verificables desde el inicio.</p>
           <div class="actions">
-            <a class="button primary" href="#servicios">Explorar servicios <span aria-hidden="true">↘</span></a>
-            <a class="button secondary" href="#configurador">Configurar una solución</a>
+            <a class="button primary" href="/solicitar-proyecto.html">Cuéntanos qué quieres automatizar <span aria-hidden="true">↗</span></a>
+            <a class="button secondary" href="#servicios">Ver soluciones y precios</a>
           </div>
           <div class="hero-trust" aria-label="Principios de operación">
-            <span>✓ Human-in-the-loop</span>
-            <span>✓ Fail-closed</span>
-            <span>✓ APIs oficiales</span>
-            <span>✓ Evidencia auditable</span>
+            <span>✓ Alcance antes de implementar</span>
+            <span>✓ Supervisión humana</span>
+            <span>✓ Integraciones oficiales</span>
+            <span>✓ Trazabilidad técnica</span>
           </div>
         </div>
 
@@ -268,7 +268,7 @@
           <div class="console-bar">
             <span class="console-dot"></span><span class="console-dot"></span><span class="console-dot"></span>
             <span class="console-title">Jadel Agent Control Plane</span>
-            <span class="console-state">ONLINE</span>
+            <span class="console-state">CONTROLLED</span>
           </div>
           <div class="agent-core">
             <div class="core-orbit orbit-a"><span>Media</span><span>Data</span><span>Sales</span></div>
@@ -283,11 +283,11 @@
         </div>
       </section>
 
-      <section class="signal-strip reveal" aria-label="Capacidades verificables">
-        <div><strong>4</strong><span>plataformas sociales en conectores CineForge</span></div>
-        <div><strong>3</strong><span>niveles de madurez visibles en el catálogo</span></div>
-        <div><strong>0</strong><span>acciones críticas autónomas sin gates</span></div>
-        <div><strong>24/7</strong><span>arquitectura preparada para observabilidad</span></div>
+      <section class="signal-strip reveal" aria-label="Cómo reducimos el riesgo de implementación">
+        <div><strong>01</strong><span>alcance y entregables definidos antes de construir</span></div>
+        <div><strong>02</strong><span>estado de madurez visible por cada servicio</span></div>
+        <div><strong>03</strong><span>aprobación humana para acciones sensibles</span></div>
+        <div><strong>04</strong><span>evidencia y observabilidad incorporadas al diseño</span></div>
       </section>
 
       <section class="section-block" id="servicios">
@@ -518,11 +518,11 @@
   if (headerNav) {
     headerNav.innerHTML = `
       <a href="/" data-nav="home">Inicio</a>
-      <a href="/#servicios" data-home-nav>Servicios</a>
+      <a href="/#servicios" data-home-nav>Soluciones</a>
+      <a href="/#metodo" data-home-nav>Método</a>
       <a href="/#precios" data-home-nav>Precios</a>
-      <a href="/#pagos" data-home-nav>Pagos</a>
-      <a href="/#gobernanza" data-home-nav>Seguridad</a>
-      <a href="/solicitar-proyecto.html" data-intake-nav="true">Solicitar proyecto</a>
+      <a href="/#gobernanza" data-home-nav>Confianza</a>
+      <a class="nav-cta" href="/solicitar-proyecto.html" data-intake-nav="true">Solicitar proyecto</a>
       <a href="/?view=privacy" data-nav="privacy">Privacidad</a>
       <a href="/?view=terms" data-nav="terms">Condiciones</a>
       <a href="${DATA_DELETION_URL}" data-nav="data-deletion">Eliminar datos</a>`;

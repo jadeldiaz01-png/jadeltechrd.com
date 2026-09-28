@@ -89,7 +89,7 @@ jobs:
           test -n "$browser"
           "$browser" --headless=new --no-sandbox --disable-gpu --virtual-time-budget=2500 \
             --dump-dom http://127.0.0.1:8765/ >/tmp/dom.html
-          grep -Fq 'Agentes de IA que' /tmp/dom.html
+          grep -Fq 'Convierte trabajo repetitivo en' /tmp/dom.html
           grep -Fq 'Multi-Agent Orchestration' /tmp/dom.html
-          grep -Fq 'Human-in-the-loop' /tmp/dom.html
+          grep -Fq 'Supervisión humana' /tmp/dom.html
           echo 'CSP_BROWSER_SMOKE=PASS'
