@@ -31,7 +31,8 @@ test("admin approvals list pending projects and payment ledger with bearer token
   assert.equal(response.status, 200);
   assert.deepEqual(body.projects, []);
   assert.deepEqual(body.payments, []);
-  assert.equal(queries.length, 2);
+  assert.deepEqual(body.payment_orders, []);
+  assert.equal(queries.length, 3);
 });
 
 test("admin approval records evidence and promotes only to policy allowed", async () => {
@@ -94,4 +95,52 @@ test("admin approval rejects missing project ids before recording evidence", asy
     }),
   }), envWithDb(db));
   assert.equal(response.status, 404);
+});
+
+test("generic admin approval cannot bypass the sales-to-cash settlement contract", async () => {
+  let touchedDb = false;
+  const db = {
+    prepare() {
+      touchedDb = true;
+      throw new Error("payment approval must not query the ledger");
+    },
+    batch: async () => {
+      touchedDb = true;
+      throw new Error("payment approval must not write the ledger");
+    }
+  };
+  const response = await handleAdminApprovals(new Request("https://intake.jadeltechrd.com/api/v1/admin/approvals", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer admin-secret-token",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      ledger_id: "123e4567-e89b-12d3-a456-426614174111",
+      project_id: "123e4567-e89b-12d3-a456-426614174000",
+      approval_type: "payment_reconciliation",
+      decision: "approved",
+    }),
+  }), envWithDb(db));
+  const body = await response.json();
+  assert.equal(response.status, 409);
+  assert.equal(body.error, "USE_PAYMENT_RECONCILIATION_CONTRACT");
+  assert.equal(touchedDb, false);
+});
+
+test("generic admin approval still requires a project before a payment match attempt", async () => {
+  const response = await handleAdminApprovals(new Request("https://intake.jadeltechrd.com/api/v1/admin/approvals", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer admin-secret-token",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      ledger_id: "123e4567-e89b-12d3-a456-426614174111",
+      approval_type: "payment_reconciliation",
+      decision: "approved",
+    }),
+  }), envWithDb({}));
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, "PROJECT_REQUIRED_FOR_PAYMENT_MATCH");
 });

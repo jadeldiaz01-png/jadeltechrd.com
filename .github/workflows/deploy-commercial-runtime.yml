@@ -146,7 +146,7 @@ jobs:
           auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
           schema=$(curl --fail-with-body -sS -X POST "${auth[@]}"             "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${DATABASE_ID}/query"             --data '{"sql":"SELECT name FROM sqlite_master WHERE type=\"table\" ORDER BY name"}')
           test "$(jq -r '.success' <<<"$schema")" = true
-          for table in project_requests evidence_events dispatch_outbox payment_events payment_ledger approval_events lead_lifecycle_events revenue_intelligence_snapshots revenue_action_proposals; do
+          for table in project_requests evidence_events dispatch_outbox payment_events payment_ledger approval_events lead_lifecycle_events revenue_intelligence_snapshots revenue_action_proposals quotes quote_items payment_orders sales_settlements; do
             jq -e --arg t "$table" '[.result[].results[]?.name] | index($t) != null' <<<"$schema" >/dev/null || {
               echo "D1_SCHEMA_${table}=MISSING" >&2
               exit 50

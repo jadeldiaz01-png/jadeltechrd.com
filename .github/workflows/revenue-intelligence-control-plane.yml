@@ -13,6 +13,7 @@ on:
       - 'scripts/validate-revenue-intelligence-control-plane.mjs'
       - 'analytics/bigquery/1*.sql.tmpl'
       - 'commercial-runtime/**'
+      - 'approval-console.js'
       - 'docs/revenue/REVENUE-INTELLIGENCE-CONTROL-PLANE-2026.md'
       - '.github/workflows/revenue-intelligence-control-plane.yml'
   push:
@@ -25,6 +26,7 @@ on:
       - 'scripts/validate-revenue-intelligence-control-plane.mjs'
       - 'analytics/bigquery/1*.sql.tmpl'
       - 'commercial-runtime/**'
+      - 'approval-console.js'
       - '.github/workflows/revenue-intelligence-control-plane.yml'
   workflow_dispatch:
 
@@ -50,13 +52,16 @@ jobs:
         run: node scripts/validate-revenue-intelligence-control-plane.mjs
 
       - name: Test deterministic decision engine
-        run: node --test scripts/test-revenue-decision-engine.mjs commercial-runtime/test/revenue-intelligence.test.mjs commercial-runtime/test/revenue-admin.test.mjs
+        run: node --test scripts/test-revenue-decision-engine.mjs commercial-runtime/test/revenue-intelligence.test.mjs commercial-runtime/test/revenue-admin.test.mjs commercial-runtime/test/revenue-agent-bridge.test.mjs commercial-runtime/test/revenue-agent-authorization.test.mjs commercial-runtime/test/payment-reconciliation.test.mjs commercial-runtime/test/revenue-agent-access.test.mjs
 
       - name: Validate runtime syntax
         run: |
           node --check commercial-runtime/src/revenue-intelligence.mjs
+          node --check commercial-runtime/src/revenue-agent-bridge.mjs
+          node --check commercial-runtime/src/revenue-agent-authorization.mjs
           node --check commercial-runtime/src/worker.mjs
           node --check commercial-runtime/src/telemetry.mjs
+          node --check approval-console.js
 
       - name: Validate SQL research contracts
         shell: bash
