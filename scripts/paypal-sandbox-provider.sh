@@ -171,8 +171,23 @@ if [ "$PHASE" = prepare ]; then
   payment_order_id=$(jq -r '.payment_order_id' <<<"$order")
   test "$(jq -r '.amount_minor' <<<"$order")" = 100
 
-  provider_payload=$(jq -n --arg po "$payment_order_id" --arg quote "$quote_id" '{
+  return_url="$worker_url/health?paypal_sandbox=approved"
+  cancel_url="$worker_url/health?paypal_sandbox=cancelled"
+  provider_payload=$(jq -n \
+    --arg po "$payment_order_id" \
+    --arg quote "$quote_id" \
+    --arg return_url "$return_url" \
+    --arg cancel_url "$cancel_url" '{
     intent:"CAPTURE",
+    payment_source:{
+      paypal:{
+        experience_context:{
+          user_action:"PAY_NOW",
+          return_url:$return_url,
+          cancel_url:$cancel_url
+        }
+      }
+    },
     purchase_units:[{
       reference_id:$po,
       custom_id:$po,
