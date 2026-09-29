@@ -4,14 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       phase:
-        description: Prepare a sandbox order or capture an approved sandbox order and certify settlement
+        description: Prepare, capture, or recover an already completed sandbox capture and certify settlement
         required: true
         type: choice
         options:
           - prepare
           - capture_certify
+          - recover_certify
       paypal_order_id:
-        description: Required only for capture_certify; use the sandbox order id from prepare
+        description: Required for capture_certify or recover_certify; use the sandbox order id from prepare
         required: false
         type: string
 
@@ -96,7 +97,7 @@ jobs:
         run: bash scripts/paypal-sandbox-provider.sh
 
   certify-sandbox-result:
-    if: ${{ inputs.phase == 'capture_certify' }}
+    if: ${{ inputs.phase == 'capture_certify' || inputs.phase == 'recover_certify' }}
     needs:
       - prepare-sandbox-d1
       - paypal-sandbox-phase
