@@ -229,30 +229,78 @@ if [ "$PHASE" = prepare ]; then
   exit 0
 fi
 
-test "$PHASE" = capture_certify
 paypal_order_id=$(printf '%s' "$INPUT_PAYPAL_ORDER_ID" | tr -d '\r\n[:space:]')
 test -n "$paypal_order_id" || { echo 'PAYPAL_SANDBOX_ORDER_ID_REQUIRED=YES' >&2; exit 31; }
 
-before=$(curl --fail-with-body -sS -H "Authorization: Bearer $paypal_token" \
-  "$PAYPAL_SANDBOX_API/v2/checkout/orders/$paypal_order_id")
-status=$(jq -r '.status' <<<"$before")
-test "$status" = APPROVED || { echo "PAYPAL_SANDBOX_ORDER_NOT_APPROVED status=$status" >&2; exit 32; }
-payment_order_id=$(jq -r '.purchase_units[0].custom_id // empty' <<<"$before")
-test -n "$payment_order_id" || { echo 'PAYPAL_SANDBOX_CUSTOM_ID_MISSING=YES' >&2; exit 33; }
+if [ "$PHASE" = recover_certify ]; then
+  recovered=$(curl --fail-with-body -sS -H "Authorization: Bearer $paypal_token" \
+    "$PAYPAL_SANDBOX_API/v2/checkout/orders/$paypal_order_id")
+  status=$(jq -r '.status' <<<"$recovered")
+  test "$status" = COMPLETED || { echo "PAYPAL_SANDBOX_RECOVERY_ORDER_NOT_COMPLETED status=$status" >&2; exit 37; }
 
-captured=$(curl --fail-with-body -sS -X POST \
-  -H "Authorization: Bearer $paypal_token" \
-  -H 'Content-Type: application/json' \
-  -H "PayPal-Request-Id: jadel-capture-$paypal_order_id" \
-  --data '{}' \
-  "$PAYPAL_SANDBOX_API/v2/checkout/orders/$paypal_order_id/capture")
-capture_status=$(jq -r '.purchase_units[0].payments.captures[0].status // .status' <<<"$captured")
-test "$capture_status" = COMPLETED || {
-  echo "PAYPAL_SANDBOX_CAPTURE_NOT_COMPLETED status=$capture_status" >&2
-  exit 34
-}
-capture_id=$(jq -r '.purchase_units[0].payments.captures[0].id' <<<"$captured")
-test -n "$capture_id" && test "$capture_id" != null
+  payment_order_id=$(jq -r '.purchase_units[0].custom_id // empty' <<<"$recovered")
+  capture_id=$(jq -r '.purchase_units[0].payments.captures[0].id // empty' <<<"$recovered")
+  capture_status=$(jq -r '.purchase_units[0].payments.captures[0].status // empty' <<<"$recovered")
+  test -n "$payment_order_id" || { echo 'PAYPAL_SANDBOX_RECOVERY_CUSTOM_ID_MISSING=YES' >&2; exit 38; }
+  test -n "$capture_id" || { echo 'PAYPAL_SANDBOX_RECOVERY_CAPTURE_ID_MISSING=YES' >&2; exit 39; }
+  test "$capture_status" = COMPLETED || {
+    echo "PAYPAL_SANDBOX_RECOVERY_CAPTURE_NOT_COMPLETED status=$capture_status" >&2
+    exit 40
+  }
+
+  pending=$(api "$worker_url/api/v1/admin/approvals")
+  existing_ledger_id=$(jq -r --arg capture "$capture_id" \
+    '.payments[]? | select(.resource_id==$capture and .event_type=="PAYMENT.CAPTURE.COMPLETED") | .ledger_id' <<<"$pending" | head -n1)
+
+  if [ -z "$existing_ledger_id" ]; then
+    events=$(curl --fail-with-body -sS --get \
+      -H "Authorization: Bearer $paypal_token" \
+      --data-urlencode "transaction_id=$capture_id" \
+      --data-urlencode "event_type=PAYMENT.CAPTURE.COMPLETED" \
+      --data-urlencode "page_size=20" \
+      "$PAYPAL_SANDBOX_API/v1/notifications/webhooks-events")
+    event_count=$(jq -r --arg capture "$capture_id" --arg order "$paypal_order_id" \
+      '[.events[]? | select(.event_type=="PAYMENT.CAPTURE.COMPLETED" and .resource.id==$capture and .resource.supplementary_data.related_ids.order_id==$order)] | length' <<<"$events")
+    test "$event_count" = 1 || {
+      echo "PAYPAL_SANDBOX_RECOVERY_EVENT_COUNT=$event_count" >&2
+      exit 41
+    }
+    event_id=$(jq -r --arg capture "$capture_id" --arg order "$paypal_order_id" \
+      '.events[] | select(.event_type=="PAYMENT.CAPTURE.COMPLETED" and .resource.id==$capture and .resource.supplementary_data.related_ids.order_id==$order) | .id' <<<"$events")
+    test -n "$event_id" && test "$event_id" != null
+
+    curl --fail-with-body -sS -X POST \
+      -H "Authorization: Bearer $paypal_token" \
+      "$PAYPAL_SANDBOX_API/v1/notifications/webhooks-events/$event_id/resend" >/dev/null
+    echo 'PAYPAL_SANDBOX_WEBHOOK_RECOVERY_RESEND=PASS'
+  else
+    echo 'PAYPAL_SANDBOX_WEBHOOK_RECOVERY_RESEND=SKIPPED_ALREADY_OBSERVED'
+  fi
+elif [ "$PHASE" = capture_certify ]; then
+  before=$(curl --fail-with-body -sS -H "Authorization: Bearer $paypal_token" \
+    "$PAYPAL_SANDBOX_API/v2/checkout/orders/$paypal_order_id")
+  status=$(jq -r '.status' <<<"$before")
+  test "$status" = APPROVED || { echo "PAYPAL_SANDBOX_ORDER_NOT_APPROVED status=$status" >&2; exit 32; }
+  payment_order_id=$(jq -r '.purchase_units[0].custom_id // empty' <<<"$before")
+  test -n "$payment_order_id" || { echo 'PAYPAL_SANDBOX_CUSTOM_ID_MISSING=YES' >&2; exit 33; }
+
+  captured=$(curl --fail-with-body -sS -X POST \
+    -H "Authorization: Bearer $paypal_token" \
+    -H 'Content-Type: application/json' \
+    -H "PayPal-Request-Id: jadel-capture-$paypal_order_id" \
+    --data '{}' \
+    "$PAYPAL_SANDBOX_API/v2/checkout/orders/$paypal_order_id/capture")
+  capture_status=$(jq -r '.purchase_units[0].payments.captures[0].status // .status' <<<"$captured")
+  test "$capture_status" = COMPLETED || {
+    echo "PAYPAL_SANDBOX_CAPTURE_NOT_COMPLETED status=$capture_status" >&2
+    exit 34
+  }
+  capture_id=$(jq -r '.purchase_units[0].payments.captures[0].id' <<<"$captured")
+  test -n "$capture_id" && test "$capture_id" != null
+else
+  echo "PAYPAL_SANDBOX_PHASE_INVALID=$PHASE" >&2
+  exit 30
+fi
 
 ledger_id=""
 project_id=""
@@ -275,7 +323,7 @@ settle_payload=$(jq -n \
   --arg project "$project_id" \
   --arg ledger "$ledger_id" \
   --arg order "$payment_order_id" \
-  '{project_id:$project,ledger_id:$ledger,payment_order_id:$order,decision:"MATCHED",reason:"real PayPal sandbox completed webhook certified"}')
+  '{project_id:$project,ledger_id:$ledger,payment_order_id:$order,decision:"MATCHED",reason:"real PayPal sandbox completed webhook certified or recovered"}')
 settlement=$(api -X POST --data "$settle_payload" "$worker_url/api/v1/admin/payments/reconcile")
 test "$(jq -r '.project_state' <<<"$settlement")" = PAID
 test "$(jq -r '.ledger_state' <<<"$settlement")" = MATCHED
@@ -288,4 +336,8 @@ echo "payment_order_id=$payment_order_id" >> "$GITHUB_OUTPUT"
 echo "ledger_id=$ledger_id" >> "$GITHUB_OUTPUT"
 echo "settlement_id=$settlement_id" >> "$GITHUB_OUTPUT"
 echo "capture_id=$capture_id" >> "$GITHUB_OUTPUT"
-echo 'PAYPAL_SANDBOX_CAPTURE_WEBHOOK_SETTLEMENT=PASS'
+if [ "$PHASE" = recover_certify ]; then
+  echo 'PAYPAL_SANDBOX_WEBHOOK_RECOVERY_SETTLEMENT=PASS'
+else
+  echo 'PAYPAL_SANDBOX_CAPTURE_WEBHOOK_SETTLEMENT=PASS'
+fi
