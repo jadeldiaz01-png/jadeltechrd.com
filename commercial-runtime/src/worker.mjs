@@ -411,6 +411,27 @@ export async function handleAdminApprovals(request, env) {
   if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
   if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
   if (request.method === "GET") {
+    const url = new URL(request.url);
+    const captureId = url.searchParams.get("capture_id");
+    const paymentOrderId = url.searchParams.get("payment_order_id");
+    if (captureId || paymentOrderId) {
+      if (!captureId || !/^[A-Z0-9]{1,128}$/i.test(captureId) ||
+          !paymentOrderId || !/^[0-9a-f-]{36}$/i.test(paymentOrderId)) {
+        return json({ error: "INVALID_PAYMENT_LOOKUP" }, 400);
+      }
+      const payments = await env.DB.prepare(
+        "SELECT l.ledger_id,l.provider_event_id,l.ledger_state,l.amount_usd,l.currency_code,l.created_at,e.resource_id,e.event_type,e.resource_status FROM payment_ledger l JOIN payment_events e ON e.provider_event_id=l.provider_event_id WHERE e.resource_id=? AND e.event_type='PAYMENT.CAPTURE.COMPLETED' ORDER BY l.created_at DESC LIMIT 2"
+      ).bind(captureId).all();
+      const paymentOrders = await env.DB.prepare(
+        "SELECT payment_order_id,quote_id,project_id,status,amount_minor,currency_code,created_at FROM payment_orders WHERE payment_order_id=? LIMIT 2"
+      ).bind(paymentOrderId).all();
+      return json({
+        projects: [],
+        payments: payments.results || [],
+        payment_orders: paymentOrders.results || [],
+      });
+    }
+
     const pending = await env.DB.prepare(
       "SELECT project_id,name,email,company,service_ids_json,state,policy_status,created_at,updated_at FROM project_requests WHERE policy_status IN ('PENDING','REQUIRES_HUMAN') ORDER BY created_at DESC LIMIT 50"
     ).all();
