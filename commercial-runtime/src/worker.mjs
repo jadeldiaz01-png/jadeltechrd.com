@@ -10,7 +10,7 @@ const PAYPAL_API_BASES = new Map([
   ["live", "https://api-m.paypal.com"],
   ["sandbox", "https://api-m.sandbox.paypal.com"],
 ]);
-const PAYPAL_CERT_HOSTS = new Set(["api-m.paypal.com", "api-m.sandbox.paypal.com"]);
+const PAYPAL_CERT_HOSTS = new Set(["api-m.paypal.com", "api-m.sandbox.paypal.com", "api.paypal.com", "api.sandbox.paypal.com"]);
 
 function paypalApiBase(env) {
   const mode = String(env?.PAYPAL_ENVIRONMENT || "live").trim().toLowerCase();
