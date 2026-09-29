@@ -35,6 +35,70 @@ test("admin approvals list pending projects and payment ledger with bearer token
   assert.equal(queries.length, 3);
 });
 
+test("admin approvals can query an exact payment and order including terminal states", async () => {
+  const CAPTURE_ID = "7AB12345CD678901E";
+  const ORDER_ID = "323e4567-e89b-12d3-a456-426614174000";
+  const seen = [];
+  const db = {
+    prepare(sql) {
+      return {
+        bind(...values) {
+          seen.push({ sql, values });
+          return {
+            all: async () => {
+              if (sql.includes("FROM payment_ledger")) {
+                return { results: [{
+                  ledger_id:"223e4567-e89b-12d3-a456-426614174000",
+                  provider_event_id:"paypal-event-1",
+                  ledger_state:"MATCHED",
+                  resource_id:CAPTURE_ID,
+                  event_type:"PAYMENT.CAPTURE.COMPLETED",
+                }] };
+              }
+              if (sql.includes("FROM payment_orders")) {
+                return { results: [{
+                  payment_order_id:ORDER_ID,
+                  project_id:"123e4567-e89b-12d3-a456-426614174000",
+                  status:"COMPLETED",
+                }] };
+              }
+              return { results: [] };
+            },
+          };
+        },
+      };
+    },
+  };
+  const response = await handleAdminApprovals(new Request(
+    `https://intake.jadeltechrd.com/api/v1/admin/approvals?capture_id=${CAPTURE_ID}&payment_order_id=${ORDER_ID}`,
+    { headers: { authorization: "Bearer admin-secret-token" } },
+  ), envWithDb(db));
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.payments[0].ledger_state, "MATCHED");
+  assert.equal(body.payment_orders[0].status, "COMPLETED");
+  assert.equal(seen.length, 2);
+  assert.deepEqual(seen[0].values, [CAPTURE_ID]);
+  assert.deepEqual(seen[1].values, [ORDER_ID]);
+});
+
+test("admin exact payment lookup fails closed on partial or malformed identifiers", async () => {
+  let touchedDb = false;
+  const db = {
+    prepare() {
+      touchedDb = true;
+      throw new Error("invalid lookup must not query");
+    },
+  };
+  const response = await handleAdminApprovals(new Request(
+    "https://intake.jadeltechrd.com/api/v1/admin/approvals?capture_id=bad!",
+    { headers: { authorization: "Bearer admin-secret-token" } },
+  ), envWithDb(db));
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, "INVALID_PAYMENT_LOOKUP");
+  assert.equal(touchedDb, false);
+});
+
 test("admin approval records evidence and promotes only to policy allowed", async () => {
   const bound = [];
   const db = {
