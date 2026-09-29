@@ -142,6 +142,13 @@ api() {
     -H 'Content-Type: application/json' "$@"
 }
 
+payment_snapshot() {
+  api --get \
+    --data-urlencode "capture_id=$capture_id" \
+    --data-urlencode "payment_order_id=$payment_order_id" \
+    "$worker_url/api/v1/admin/approvals"
+}
+
 if [ "$PHASE" = prepare ]; then
   test -n "$PROJECT_ID" || { echo 'PAYPAL_SANDBOX_PROJECT_ID_REQUIRED=YES' >&2; exit 30; }
 
@@ -248,7 +255,7 @@ if [ "$PHASE" = recover_certify ]; then
     exit 40
   }
 
-  pending=$(api "$worker_url/api/v1/admin/approvals")
+  pending=$(payment_snapshot)
   existing_ledger_id=$(jq -r --arg capture "$capture_id" \
     '.payments[]? | select(.resource_id==$capture and .event_type=="PAYMENT.CAPTURE.COMPLETED") | .ledger_id' <<<"$pending" | head -n1)
 
@@ -269,8 +276,11 @@ if [ "$PHASE" = recover_certify ]; then
       '.events[] | select(.event_type=="PAYMENT.CAPTURE.COMPLETED" and .resource.id==$capture and .resource.supplementary_data.related_ids.order_id==$order) | .id' <<<"$events")
     test -n "$event_id" && test "$event_id" != null
 
+    resend_payload=$(jq -n --arg webhook "$webhook_id" '{webhook_ids:[$webhook]}')
     curl --fail-with-body -sS -X POST \
       -H "Authorization: Bearer $paypal_token" \
+      -H 'Content-Type: application/json' \
+      --data "$resend_payload" \
       "$PAYPAL_SANDBOX_API/v1/notifications/webhooks-events/$event_id/resend" >/dev/null
     echo 'PAYPAL_SANDBOX_WEBHOOK_RECOVERY_RESEND=PASS'
   else
@@ -305,7 +315,7 @@ fi
 ledger_id=""
 project_id=""
 for attempt in $(seq 1 30); do
-  pending=$(api "$worker_url/api/v1/admin/approvals")
+  pending=$(payment_snapshot)
   ledger_id=$(jq -r --arg capture "$capture_id" \
     '.payments[]? | select(.resource_id==$capture and .event_type=="PAYMENT.CAPTURE.COMPLETED") | .ledger_id' <<<"$pending" | head -n1)
   project_id=$(jq -r --arg po "$payment_order_id" \
