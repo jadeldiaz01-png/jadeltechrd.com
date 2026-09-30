@@ -71,6 +71,7 @@ jobs:
           sqlite3 /tmp/jadel-commercial.db ".schema quote_items" | grep -q 'price_component'
           sqlite3 /tmp/jadel-commercial.db ".schema quote_items" | grep -q 'catalog_version'
           sqlite3 /tmp/jadel-commercial.db ".schema payment_orders" | grep -q 'payment_order_id'
+          sqlite3 /tmp/jadel-commercial.db ".schema payment_orders" | grep -q 'provider_approval_url'
           sqlite3 /tmp/jadel-commercial.db ".schema sales_settlements" | grep -q 'ledger_id'
 
       - name: Validate security manifest
