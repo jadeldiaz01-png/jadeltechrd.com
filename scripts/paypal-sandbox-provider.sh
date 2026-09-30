@@ -31,7 +31,7 @@ jq -n --arg db "$DATABASE_ID" --arg d1 "$SANDBOX_D1_NAME" --arg worker "$SANDBOX
   compatibility_date:"2026-08-31",
   workers_dev:true,
   observability:{enabled:true,head_sampling_rate:1},
-  vars:{PAYPAL_ENVIRONMENT:"sandbox"},
+  vars:{PAYPAL_ENVIRONMENT:"sandbox",PAYPAL_ORDER_CREATION_ENABLED:"true"},
   d1_databases:[{
     binding:"DB",
     database_name:$d1,
