@@ -152,17 +152,7 @@ payment_snapshot() {
 if [ "$PHASE" = prepare ]; then
   test -n "$PROJECT_ID" || { echo 'PAYPAL_SANDBOX_PROJECT_ID_REQUIRED=YES' >&2; exit 30; }
 
-  quote_payload=$(jq -n --arg project "$PROJECT_ID" '{
-    project_id:$project,
-    currency_code:"USD",
-    items:[{
-      service_id:"architecture",
-      description:"PayPal sandbox E2E certification",
-      quantity:1,
-      unit_amount_minor:100
-    }]
-  }')
-  quote=$(api -X POST --data "$quote_payload" "$worker_url/api/v1/admin/quotes")
+  quote=$(api -X POST --data "$(jq -n --arg project "$PROJECT_ID" '{project_id:$project}')"     "$worker_url/api/v1/admin/quotes/from-catalog")
   quote_id=$(jq -r '.quote_id' <<<"$quote")
   test -n "$quote_id" && test "$quote_id" != null
 
@@ -176,7 +166,7 @@ if [ "$PHASE" = prepare ]; then
   order=$(api -X POST --data "$(jq -n --arg quote "$quote_id" '{quote_id:$quote}')" \
     "$worker_url/api/v1/admin/payment-orders")
   payment_order_id=$(jq -r '.payment_order_id' <<<"$order")
-  test "$(jq -r '.amount_minor' <<<"$order")" = 100
+  test "$(jq -r '.amount_minor' <<<"$order")" = 25000
 
   return_url="$worker_url/health?paypal_sandbox=approved"
   cancel_url="$worker_url/health?paypal_sandbox=cancelled"
