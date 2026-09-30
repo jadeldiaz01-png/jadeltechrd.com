@@ -41,6 +41,7 @@ jobs:
         run: |
           node --check commercial-runtime/src/validation.mjs
           node --check commercial-runtime/src/worker.mjs
+          node --check commercial-runtime/src/service-pricing.mjs
           node --check commercial-runtime/src/project-workflow.mjs
           node --check commercial-runtime/src/revenue-intelligence.mjs
           for script in scripts/paypal-sandbox-*.sh; do
@@ -67,7 +68,10 @@ jobs:
           sqlite3 /tmp/jadel-commercial.db ".schema revenue_action_proposals" | grep -q 'requires_human'
           sqlite3 /tmp/jadel-commercial.db ".schema quotes" | grep -q 'total_amount_minor'
           sqlite3 /tmp/jadel-commercial.db ".schema quote_items" | grep -q 'line_amount_minor'
+          sqlite3 /tmp/jadel-commercial.db ".schema quote_items" | grep -q 'price_component'
+          sqlite3 /tmp/jadel-commercial.db ".schema quote_items" | grep -q 'catalog_version'
           sqlite3 /tmp/jadel-commercial.db ".schema payment_orders" | grep -q 'payment_order_id'
+          sqlite3 /tmp/jadel-commercial.db ".schema payment_orders" | grep -q 'provider_approval_url'
           sqlite3 /tmp/jadel-commercial.db ".schema sales_settlements" | grep -q 'ledger_id'
 
       - name: Validate security manifest

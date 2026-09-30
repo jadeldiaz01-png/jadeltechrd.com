@@ -233,3 +233,131 @@ test("concurrent payment-order insert race returns existing order instead of dup
   assert.equal(body.error, "PAYMENT_ORDER_ALREADY_EXISTS");
   assert.equal(body.payment_order_id, existingOrderId);
 });
+
+
+test("sandbox-gated payment order creates a PayPal order without capture", async () => {
+  const batches = [];
+  const updates = [];
+  const seen = [];
+  const db = {
+    prepare(sql) {
+      return {
+        bind(...values) {
+          return {
+            async first() {
+              if (sql.includes("FROM quotes q JOIN project_requests")) {
+                return {
+                  quote_id:QUOTE_ID,
+                  project_id:PROJECT_ID,
+                  status:"ACCEPTED",
+                  currency_code:"USD",
+                  total_amount_minor:25000,
+                  project_state:"CUSTOMER_APPROVED",
+                  policy_status:"ALLOWED",
+                };
+              }
+              if (sql.includes("FROM payment_orders")) return null;
+              return null;
+            },
+            async run() {
+              updates.push({ sql, values });
+              return {};
+            },
+          };
+        },
+      };
+    },
+    async batch(items) { batches.push(items); return []; },
+  };
+
+  const response = await handleAdminPaymentOrderCreate(adminRequest("/api/v1/admin/payment-orders", {
+    quote_id:QUOTE_ID,
+  }), {
+    ADMIN_API_TOKEN:"admin-secret-token",
+    DB:db,
+    PAYPAL_ORDER_CREATION_ENABLED:"true",
+    PAYPAL_ENVIRONMENT:"sandbox",
+    PAYPAL_CLIENT_ID:"sandbox-client",
+    PAYPAL_CLIENT_SECRET:"sandbox-secret",
+  }, {
+    fetchImpl: async (url, options = {}) => {
+      seen.push({ url:String(url), options });
+      if (String(url).endsWith("/v1/oauth2/token")) {
+        return Response.json({ access_token:"sandbox-token" });
+      }
+      if (String(url).endsWith("/v2/checkout/orders")) {
+        const body = JSON.parse(options.body);
+        assert.equal(body.intent, "CAPTURE");
+        assert.equal(body.purchase_units[0].amount.value, "250.00");
+        assert.equal(body.purchase_units[0].amount.currency_code, "USD");
+        return Response.json({
+          id:"PAYPAL-ORDER-123",
+          status:"CREATED",
+          links:[{
+            rel:"payer-action",
+            href:"https://www.sandbox.paypal.com/checkoutnow?token=PAYPAL-ORDER-123",
+          }],
+        }, { status:201 });
+      }
+      throw new Error("unexpected provider URL");
+    },
+  });
+
+  const body = await response.json();
+  assert.equal(response.status, 201);
+  assert.equal(body.provider_order_id, "PAYPAL-ORDER-123");
+  assert.equal(body.provider_call_performed, true);
+  assert.equal(body.provider_environment, "sandbox");
+  assert.equal(body.capture_performed, false);
+  assert.equal(body.financial_execution_authorized, false);
+  assert.match(body.approval_url, /^https:\/\/www\.sandbox\.paypal\.com\//);
+  assert.equal(batches.length, 1);
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].values[0], "PAYPAL-ORDER-123");
+  assert.equal(seen.some((entry) => entry.url.endsWith("/v2/checkout/orders")), true);
+  const orderRequest = seen.find((entry) => entry.url.endsWith("/v2/checkout/orders"));
+  assert.match(orderRequest.options.headers["paypal-request-id"], /^[0-9a-f-]{36}$/i);
+});
+
+test("PayPal order creation flag cannot be enabled against live environment", async () => {
+  let wrote = false;
+  const db = {
+    prepare(sql) {
+      return {
+        bind() {
+          return {
+            async first() {
+              if (sql.includes("FROM quotes q JOIN project_requests")) {
+                return {
+                  quote_id:QUOTE_ID,
+                  project_id:PROJECT_ID,
+                  status:"ACCEPTED",
+                  currency_code:"USD",
+                  total_amount_minor:25000,
+                  project_state:"CUSTOMER_APPROVED",
+                  policy_status:"ALLOWED",
+                };
+              }
+              return null;
+            },
+          };
+        },
+      };
+    },
+    async batch() { wrote = true; return []; },
+  };
+  const response = await handleAdminPaymentOrderCreate(adminRequest("/api/v1/admin/payment-orders", {
+    quote_id:QUOTE_ID,
+  }), {
+    ADMIN_API_TOKEN:"admin-secret-token",
+    DB:db,
+    PAYPAL_ORDER_CREATION_ENABLED:"true",
+    PAYPAL_ENVIRONMENT:"live",
+    PAYPAL_CLIENT_ID:"live-client",
+    PAYPAL_CLIENT_SECRET:"live-secret",
+  });
+  const body = await response.json();
+  assert.equal(response.status, 409);
+  assert.equal(body.error, "PAYPAL_ORDER_CREATION_SANDBOX_ONLY");
+  assert.equal(wrote, false);
+});

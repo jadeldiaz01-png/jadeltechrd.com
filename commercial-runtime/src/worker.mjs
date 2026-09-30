@@ -2,6 +2,7 @@ import { validateIdempotencyKey, validateProjectRequest } from "./validation.mjs
 import { buildRuntimeRevenueView } from "./revenue-intelligence.mjs";
 import { loadApprovedOpportunityFeed } from "./revenue-agent-bridge.mjs";
 import { buildRevenueRuntimeAuthorization } from "./revenue-agent-authorization.mjs";
+import { resolveCatalogPrice } from "./service-pricing.mjs";
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_WEBHOOK_BYTES = 64 * 1024;
@@ -289,6 +290,100 @@ async function paypalAccessToken(env, fetchImpl = fetch) {
   return body.access_token;
 }
 
+function paypalOrderCreationEnabled(env) {
+  return String(env?.PAYPAL_ORDER_CREATION_ENABLED || "").trim().toLowerCase() === "true";
+}
+
+function validateSandboxPayPalOrderCreation(env) {
+  if (!paypalOrderCreationEnabled(env)) return false;
+  const mode = String(env?.PAYPAL_ENVIRONMENT || "").trim().toLowerCase();
+  if (mode !== "sandbox") throw new Error("PAYPAL_ORDER_CREATION_SANDBOX_ONLY");
+  if (!env?.PAYPAL_CLIENT_ID || !env?.PAYPAL_CLIENT_SECRET) {
+    throw new Error("PAYPAL_ORDER_CREATION_NOT_CONFIGURED");
+  }
+  return true;
+}
+
+function paypalCheckoutRedirectUrl(value, fallbackPath) {
+  const candidate = String(value || `https://jadeltechrd.com/${fallbackPath}`).trim();
+  let parsed;
+  try { parsed = new URL(candidate); }
+  catch { throw new Error("PAYPAL_CHECKOUT_REDIRECT_INVALID"); }
+  if (parsed.protocol !== "https:" || !new Set(["jadeltechrd.com", "www.jadeltechrd.com"]).has(parsed.hostname)) {
+    throw new Error("PAYPAL_CHECKOUT_REDIRECT_INVALID");
+  }
+  return parsed.toString();
+}
+
+function minorToPayPalAmount(value) {
+  if (!Number.isSafeInteger(value) || value < 0 || value > MAX_MINOR_AMOUNT) {
+    throw new Error("PAYMENT_AMOUNT_INVALID");
+  }
+  return (value / 100).toFixed(2);
+}
+
+async function createSandboxPayPalOrder(env, paymentOrderId, quote, fetchImpl = fetch) {
+  validateSandboxPayPalOrderCreation(env);
+  const apiBase = paypalApiBase(env);
+  const token = await paypalAccessToken(env, fetchImpl);
+  const returnUrl = paypalCheckoutRedirectUrl(env.PAYPAL_RETURN_URL, "?paypal=approved");
+  const cancelUrl = paypalCheckoutRedirectUrl(env.PAYPAL_CANCEL_URL, "?paypal=cancelled");
+  const response = await fetchImpl(`${apiBase}/v2/checkout/orders`, {
+    method: "POST",
+    headers: {
+      "authorization": `Bearer ${token}`,
+      "content-type": "application/json",
+      "paypal-request-id": paymentOrderId,
+      "prefer": "return=representation",
+    },
+    body: JSON.stringify({
+      intent: "CAPTURE",
+      payment_source: {
+        paypal: {
+          experience_context: {
+            payment_method_preference: "IMMEDIATE_PAYMENT_REQUIRED",
+            shipping_preference: "NO_SHIPPING",
+            user_action: "PAY_NOW",
+            return_url: returnUrl,
+            cancel_url: cancelUrl,
+          },
+        },
+      },
+      purchase_units: [{
+        reference_id: paymentOrderId,
+        custom_id: quote.project_id,
+        invoice_id: quote.quote_id,
+        description: "Jadel Tech RD service quote",
+        amount: {
+          currency_code: quote.currency_code,
+          value: minorToPayPalAmount(quote.total_amount_minor),
+        },
+      }],
+    }),
+    signal: AbortSignal.timeout(8000),
+  });
+  let body = null;
+  try { body = await response.json(); } catch {}
+  if (!response.ok) throw new Error("PAYPAL_ORDER_CREATE_FAILED");
+  const providerOrderId = String(body?.id || "").trim();
+  if (!providerOrderId || providerOrderId.length > 128) throw new Error("PAYPAL_ORDER_RESPONSE_INVALID");
+  const approvalUrl = String(
+    body?.links?.find((link) => link?.rel === "payer-action" || link?.rel === "approve")?.href || ""
+  ).trim();
+  if (!approvalUrl) throw new Error("PAYPAL_APPROVAL_URL_MISSING");
+  let approval;
+  try { approval = new URL(approvalUrl); }
+  catch { throw new Error("PAYPAL_APPROVAL_URL_INVALID"); }
+  if (approval.protocol !== "https:" || !approval.hostname.endsWith("paypal.com")) {
+    throw new Error("PAYPAL_APPROVAL_URL_INVALID");
+  }
+  return {
+    providerOrderId,
+    approvalUrl: approval.toString(),
+    providerStatus: String(body?.status || "").slice(0, 32),
+  };
+}
+
 async function verifyPayPalWebhook(headers, webhookEvent, env, fetchImpl = fetch) {
   const certUrl = headers.get("paypal-cert-url");
   const required = {
@@ -547,13 +642,26 @@ function normalizeQuoteItems(items) {
     if (!Number.isSafeInteger(unitAmountMinor) || unitAmountMinor < 0 || unitAmountMinor > MAX_MINOR_AMOUNT) {
       throw new Error("INVALID_QUOTE_ITEM_AMOUNT");
     }
+    const pricing = resolveCatalogPrice({
+      serviceId,
+      priceComponent: item?.price_component,
+      unitAmountMinor,
+    });
     const lineAmountMinor = quantity * unitAmountMinor;
     if (!Number.isSafeInteger(lineAmountMinor) || lineAmountMinor > MAX_MINOR_AMOUNT) {
       throw new Error("INVALID_QUOTE_TOTAL");
     }
     total += lineAmountMinor;
     if (!Number.isSafeInteger(total) || total > MAX_MINOR_AMOUNT) throw new Error("INVALID_QUOTE_TOTAL");
-    return { serviceId, description, quantity, unitAmountMinor, lineAmountMinor };
+    return {
+      serviceId,
+      priceComponent: pricing.priceComponent,
+      catalogVersion: pricing.catalogVersion,
+      description,
+      quantity,
+      unitAmountMinor,
+      lineAmountMinor,
+    };
   });
   return { items: normalized, totalAmountMinor: total };
 }
@@ -613,8 +721,11 @@ export async function handleAdminQuoteCreate(request, env) {
       "INSERT INTO quotes (quote_id,project_id,version,status,currency_code,total_amount_minor,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)"
     ).bind(quoteId,projectId,version,"ISSUED",currency,normalized.totalAmountMinor,expiresAt,now,now),
     ...normalized.items.map((item) => env.DB.prepare(
-      "INSERT INTO quote_items (quote_item_id,quote_id,service_id,description,quantity,unit_amount_minor,line_amount_minor,created_at) VALUES (?,?,?,?,?,?,?,?)"
-    ).bind(crypto.randomUUID(),quoteId,item.serviceId,item.description,item.quantity,item.unitAmountMinor,item.lineAmountMinor,now)),
+      "INSERT INTO quote_items (quote_item_id,quote_id,service_id,price_component,catalog_version,description,quantity,unit_amount_minor,line_amount_minor,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)"
+    ).bind(
+      crypto.randomUUID(),quoteId,item.serviceId,item.priceComponent,item.catalogVersion,
+      item.description,item.quantity,item.unitAmountMinor,item.lineAmountMinor,now,
+    )),
     env.DB.prepare(
       "UPDATE project_requests SET state='QUOTED',updated_at=? WHERE project_id=? AND policy_status='ALLOWED'"
     ).bind(now,projectId),
@@ -679,7 +790,7 @@ export async function handleAdminQuoteAcceptance(request, env) {
   }, 200);
 }
 
-export async function handleAdminPaymentOrderCreate(request, env) {
+export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
   if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
   if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
   if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
@@ -698,29 +809,132 @@ export async function handleAdminPaymentOrderCreate(request, env) {
     return json({ error: "QUOTE_NOT_READY_FOR_PAYMENT" }, 409);
   }
 
-  const existing = await env.DB.prepare(
-    "SELECT payment_order_id,status FROM payment_orders WHERE quote_id=? AND status IN ('PENDING','COMPLETED') ORDER BY created_at DESC LIMIT 1"
-  ).bind(quoteId).first();
-  if (existing) return json({ error: "PAYMENT_ORDER_ALREADY_EXISTS", payment_order_id:existing.payment_order_id }, 409);
-
-  const paymentOrderId = crypto.randomUUID();
-  const now = new Date().toISOString();
+  let providerEnabled = false;
   try {
-    await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO payment_orders (payment_order_id,quote_id,project_id,provider,provider_order_id,status,amount_minor,currency_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)"
-      ).bind(paymentOrderId,quoteId,quote.project_id,"paypal","", "PENDING",quote.total_amount_minor,quote.currency_code,now,now),
-      env.DB.prepare("UPDATE project_requests SET state='PAYMENT_PENDING',updated_at=? WHERE project_id=?")
-        .bind(now,quote.project_id),
-    ]);
+    providerEnabled = validateSandboxPayPalOrderCreation(env);
   } catch (error) {
-    const raced = await env.DB.prepare(
-      "SELECT payment_order_id,status FROM payment_orders WHERE quote_id=? LIMIT 1"
-    ).bind(quoteId).first();
-    if (raced) {
-      return json({ error:"PAYMENT_ORDER_ALREADY_EXISTS", payment_order_id:raced.payment_order_id }, 409);
+    const code = String(error?.message || "PAYPAL_ORDER_CREATION_NOT_CONFIGURED");
+    const status = code === "PAYPAL_ORDER_CREATION_SANDBOX_ONLY" ? 409 : 503;
+    return json({ error: code }, status);
+  }
+
+  let existing = await env.DB.prepare(
+    "SELECT payment_order_id,status,provider_order_id,provider_approval_url,amount_minor,currency_code,project_id FROM payment_orders WHERE quote_id=? AND status IN ('PENDING','COMPLETED') ORDER BY created_at DESC LIMIT 1"
+  ).bind(quoteId).first();
+
+  if (existing?.status === "COMPLETED") {
+    return json({ error:"PAYMENT_ORDER_ALREADY_COMPLETED", payment_order_id:existing.payment_order_id }, 409);
+  }
+  if (existing && !providerEnabled) {
+    return json({ error:"PAYMENT_ORDER_ALREADY_EXISTS", payment_order_id:existing.payment_order_id }, 409);
+  }
+  if (existing?.provider_order_id) {
+    return json({
+      payment_order_id:existing.payment_order_id,
+      quote_id:quoteId,
+      project_id:quote.project_id,
+      status:"PENDING",
+      amount_minor:existing.amount_minor,
+      currency_code:existing.currency_code,
+      provider:"paypal",
+      provider_order_id:existing.provider_order_id,
+      approval_url:existing.provider_approval_url || null,
+      provider_environment:"sandbox",
+      provider_call_performed:false,
+      capture_performed:false,
+      financial_execution_authorized:false,
+      replayed:true,
+    }, 200);
+  }
+
+  let paymentOrderId = existing?.payment_order_id || crypto.randomUUID();
+  let replayedInternal = Boolean(existing);
+  const now = new Date().toISOString();
+
+  if (!existing) {
+    try {
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO payment_orders (payment_order_id,quote_id,project_id,provider,provider_order_id,status,amount_minor,currency_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)"
+        ).bind(paymentOrderId,quoteId,quote.project_id,"paypal","", "PENDING",quote.total_amount_minor,quote.currency_code,now,now),
+        env.DB.prepare("UPDATE project_requests SET state='PAYMENT_PENDING',updated_at=? WHERE project_id=?")
+          .bind(now,quote.project_id),
+      ]);
+    } catch (error) {
+      const raced = await env.DB.prepare(
+        "SELECT payment_order_id,status,provider_order_id,provider_approval_url,amount_minor,currency_code,project_id FROM payment_orders WHERE quote_id=? LIMIT 1"
+      ).bind(quoteId).first();
+      if (!raced) throw error;
+      if (!providerEnabled || raced.status !== "PENDING") {
+        return json({ error:"PAYMENT_ORDER_ALREADY_EXISTS", payment_order_id:raced.payment_order_id }, 409);
+      }
+      if (raced.provider_order_id) {
+        return json({
+          payment_order_id:raced.payment_order_id,
+          quote_id:quoteId,
+          project_id:quote.project_id,
+          status:"PENDING",
+          amount_minor:raced.amount_minor,
+          currency_code:raced.currency_code,
+          provider:"paypal",
+          provider_order_id:raced.provider_order_id,
+          approval_url:raced.provider_approval_url || null,
+          provider_environment:"sandbox",
+          provider_call_performed:false,
+          capture_performed:false,
+          financial_execution_authorized:false,
+          replayed:true,
+        }, 200);
+      }
+      paymentOrderId = raced.payment_order_id;
+      existing = raced;
+      replayedInternal = true;
     }
-    throw error;
+  }
+
+  if (!providerEnabled) {
+    return json({
+      payment_order_id:paymentOrderId,
+      quote_id:quoteId,
+      project_id:quote.project_id,
+      status:"PENDING",
+      amount_minor:quote.total_amount_minor,
+      currency_code:quote.currency_code,
+      provider:"paypal",
+      provider_call_performed:false,
+      capture_performed:false,
+      financial_execution_authorized:false,
+    }, 201);
+  }
+
+  let provider;
+  try {
+    provider = await createSandboxPayPalOrder(env, paymentOrderId, quote, deps.fetchImpl);
+  } catch (error) {
+    return json({
+      error:String(error?.message || "PAYPAL_ORDER_CREATE_FAILED"),
+      payment_order_id:paymentOrderId,
+      retryable:true,
+      provider_environment:"sandbox",
+      capture_performed:false,
+      financial_execution_authorized:false,
+    }, 502);
+  }
+
+  try {
+    await env.DB.prepare(
+      "UPDATE payment_orders SET provider_order_id=?,provider_approval_url=?,updated_at=? WHERE payment_order_id=? AND provider_order_id=''"
+    ).bind(provider.providerOrderId,provider.approvalUrl,new Date().toISOString(),paymentOrderId).run();
+  } catch {
+    return json({
+      error:"PAYPAL_ORDER_PERSIST_FAILED",
+      payment_order_id:paymentOrderId,
+      provider_order_id:provider.providerOrderId,
+      retryable:true,
+      provider_environment:"sandbox",
+      capture_performed:false,
+      financial_execution_authorized:false,
+    }, 503);
   }
 
   return json({
@@ -731,9 +945,15 @@ export async function handleAdminPaymentOrderCreate(request, env) {
     amount_minor:quote.total_amount_minor,
     currency_code:quote.currency_code,
     provider:"paypal",
-    provider_call_performed:false,
+    provider_order_id:provider.providerOrderId,
+    approval_url:provider.approvalUrl,
+    provider_status:provider.providerStatus,
+    provider_environment:"sandbox",
+    provider_call_performed:true,
+    capture_performed:false,
     financial_execution_authorized:false,
-  }, 201);
+    replayed:replayedInternal,
+  }, replayedInternal ? 200 : 201);
 }
 
 export async function handleAdminPaymentReconciliation(request, env) {
