@@ -2,7 +2,7 @@ import { validateIdempotencyKey, validateProjectRequest } from "./validation.mjs
 import { buildRuntimeRevenueView } from "./revenue-intelligence.mjs";
 import { loadApprovedOpportunityFeed } from "./revenue-agent-bridge.mjs";
 import { buildRevenueRuntimeAuthorization } from "./revenue-agent-authorization.mjs";
-import { resolveCatalogPrice } from "./service-pricing.mjs";
+import { buildCatalogPrimaryQuoteItems, resolveCatalogPrice } from "./service-pricing.mjs";
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_WEBHOOK_BYTES = 64 * 1024;
@@ -677,6 +677,41 @@ function providerAmountToMinor(value) {
   return minor;
 }
 
+
+async function persistIssuedQuote(env, { projectId, currency, normalized, expiresAt = null }) {
+  const versionRow = await env.DB.prepare(
+    "SELECT COALESCE(MAX(version),0) AS version FROM quotes WHERE project_id=?"
+  ).bind(projectId).first();
+  const version = Number(versionRow?.version || 0) + 1;
+  const quoteId = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  const statements = [
+    env.DB.prepare(
+      "INSERT INTO quotes (quote_id,project_id,version,status,currency_code,total_amount_minor,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)"
+    ).bind(quoteId,projectId,version,"ISSUED",currency,normalized.totalAmountMinor,expiresAt,now,now),
+    ...normalized.items.map((item) => env.DB.prepare(
+      "INSERT INTO quote_items (quote_item_id,quote_id,service_id,price_component,catalog_version,description,quantity,unit_amount_minor,line_amount_minor,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)"
+    ).bind(
+      crypto.randomUUID(),quoteId,item.serviceId,item.priceComponent,item.catalogVersion,
+      item.description,item.quantity,item.unitAmountMinor,item.lineAmountMinor,now,
+    )),
+    env.DB.prepare(
+      "UPDATE project_requests SET state='QUOTED',updated_at=? WHERE project_id=? AND policy_status='ALLOWED'"
+    ).bind(now,projectId),
+  ];
+  await env.DB.batch(statements);
+  return {
+    quote_id:quoteId,
+    project_id:projectId,
+    version,
+    status:"ISSUED",
+    currency_code:currency,
+    total_amount_minor:normalized.totalAmountMinor,
+    external_side_effect:false,
+  };
+}
+
 export async function handleAdminQuoteCreate(request, env) {
   if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
   if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
@@ -706,39 +741,55 @@ export async function handleAdminQuoteCreate(request, env) {
     return json({ error: "PROJECT_NOT_QUOTABLE" }, 409);
   }
 
-  const versionRow = await env.DB.prepare(
-    "SELECT COALESCE(MAX(version),0) AS version FROM quotes WHERE project_id=?"
-  ).bind(projectId).first();
-  const version = Number(versionRow?.version || 0) + 1;
-  const quoteId = crypto.randomUUID();
-  const now = new Date().toISOString();
   const expiresAt = typeof input.expires_at === "string" && !Number.isNaN(Date.parse(input.expires_at))
     ? new Date(input.expires_at).toISOString()
     : null;
+  return json(await persistIssuedQuote(env, {
+    projectId,
+    currency,
+    normalized,
+    expiresAt,
+  }), 201);
+}
 
-  const statements = [
-    env.DB.prepare(
-      "INSERT INTO quotes (quote_id,project_id,version,status,currency_code,total_amount_minor,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)"
-    ).bind(quoteId,projectId,version,"ISSUED",currency,normalized.totalAmountMinor,expiresAt,now,now),
-    ...normalized.items.map((item) => env.DB.prepare(
-      "INSERT INTO quote_items (quote_item_id,quote_id,service_id,price_component,catalog_version,description,quantity,unit_amount_minor,line_amount_minor,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)"
-    ).bind(
-      crypto.randomUUID(),quoteId,item.serviceId,item.priceComponent,item.catalogVersion,
-      item.description,item.quantity,item.unitAmountMinor,item.lineAmountMinor,now,
-    )),
-    env.DB.prepare(
-      "UPDATE project_requests SET state='QUOTED',updated_at=? WHERE project_id=? AND policy_status='ALLOWED'"
-    ).bind(now,projectId),
-  ];
-  await env.DB.batch(statements);
+export async function handleAdminCatalogQuoteCreate(request, env) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+  if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  let input;
+  try { input = await readJsonWithLimit(request); }
+  catch { return json({ error: "INVALID_CATALOG_QUOTE_REQUEST" }, 400); }
+
+  const projectId = typeof input.project_id === "string" && QUOTE_ID_RE.test(input.project_id) ? input.project_id : null;
+  if (!projectId) return json({ error: "INVALID_PROJECT_ID" }, 400);
+
+  const project = await env.DB.prepare(
+    "SELECT project_id,service_ids_json,state,policy_status FROM project_requests WHERE project_id=? LIMIT 1"
+  ).bind(projectId).first();
+  if (!project) return json({ error: "PROJECT_NOT_FOUND" }, 404);
+  if (project.policy_status !== "ALLOWED" || project.state !== "POLICY_ALLOWED") {
+    return json({ error: "PROJECT_NOT_READY_FOR_CATALOG_QUOTE" }, 409);
+  }
+
+  let serviceIds;
+  let normalized;
+  try {
+    serviceIds = JSON.parse(project.service_ids_json);
+    normalized = normalizeQuoteItems(buildCatalogPrimaryQuoteItems(serviceIds));
+  } catch (error) {
+    return json({ error: String(error?.message || "INVALID_PROJECT_SERVICE_IDS") }, 400);
+  }
+
+  const result = await persistIssuedQuote(env, {
+    projectId,
+    currency:"USD",
+    normalized,
+    expiresAt:null,
+  });
   return json({
-    quote_id:quoteId,
-    project_id:projectId,
-    version,
-    status:"ISSUED",
-    currency_code:currency,
-    total_amount_minor:normalized.totalAmountMinor,
-    external_side_effect:false,
+    ...result,
+    quote_source:"CANONICAL_SERVICE_CATALOG",
   }, 201);
 }
 
@@ -1223,6 +1274,9 @@ export default {
     }
     if (url.pathname === "/api/v1/admin/quotes") {
       return handleAdminQuoteCreate(request, env);
+    }
+    if (url.pathname === "/api/v1/admin/quotes/from-catalog") {
+      return handleAdminCatalogQuoteCreate(request, env);
     }
     if (url.pathname === "/api/v1/admin/quotes/accept") {
       return handleAdminQuoteAcceptance(request, env);
