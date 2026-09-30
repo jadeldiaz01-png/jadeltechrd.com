@@ -1,5 +1,19 @@
 export const SERVICE_PRICING_CATALOG_VERSION = "2026-09-30.1";
 
+export const SERVICE_DISPLAY_NAMES = Object.freeze({
+  architecture: "Arquitectura Agentic & Automatización",
+  support: "Agente de Soporte & Tickets",
+  sales: "Sales & Lead Intelligence",
+  social: "Social Trend Intelligence",
+  cineforge: "CineForge · Video Premium",
+  meta: "Meta/Facebook Integration & App Review",
+  analytics: "Dashboards & Decision Intelligence",
+  revenue: "Revenue Opportunity Intelligence",
+  quant: "Quant Research & Trading Risk Systems",
+  governance: "AI Governance & Production Readiness",
+  multiagent: "Multi-Agent Orchestration",
+});
+
 export const SERVICE_PRICING_CATALOG = Object.freeze({
   architecture: Object.freeze({
     setup: Object.freeze({ amount_minor: 25000, mode: "minimum" }),
@@ -87,5 +101,32 @@ export function resolveCatalogPrice({ serviceId, priceComponent, unitAmountMinor
     catalogVersion: SERVICE_PRICING_CATALOG_VERSION,
     baselineAmountMinor: rule.amount_minor,
     mode: rule.mode,
+  });
+}
+
+
+export function buildCatalogPrimaryQuoteItems(serviceIds) {
+  if (!Array.isArray(serviceIds) || serviceIds.length < 1 || serviceIds.length > 8) {
+    fail("INVALID_PROJECT_SERVICE_IDS");
+  }
+  const unique = [...new Set(serviceIds)];
+  if (unique.length !== serviceIds.length) fail("INVALID_PROJECT_SERVICE_IDS");
+
+  return unique.map((serviceId) => {
+    const service = SERVICE_PRICING_CATALOG[serviceId];
+    const description = SERVICE_DISPLAY_NAMES[serviceId];
+    if (!service || !description) fail("UNKNOWN_SERVICE_ID");
+
+    const priceComponent = service.setup ? "setup" : service.unit ? "unit" : "";
+    if (!priceComponent) fail("PRIMARY_PRICE_COMPONENT_MISSING");
+    const rule = service[priceComponent];
+
+    return Object.freeze({
+      service_id: serviceId,
+      description,
+      quantity: 1,
+      price_component: priceComponent,
+      unit_amount_minor: rule.amount_minor,
+    });
   });
 }

@@ -30,9 +30,11 @@ test("admin approvals list pending projects and payment ledger with bearer token
   const body = await response.json();
   assert.equal(response.status, 200);
   assert.deepEqual(body.projects, []);
+  assert.deepEqual(body.quotable_projects, []);
+  assert.deepEqual(body.quotes, []);
   assert.deepEqual(body.payments, []);
   assert.deepEqual(body.payment_orders, []);
-  assert.equal(queries.length, 3);
+  assert.equal(queries.length, 5);
 });
 
 test("admin approvals can query an exact payment and order including terminal states", async () => {

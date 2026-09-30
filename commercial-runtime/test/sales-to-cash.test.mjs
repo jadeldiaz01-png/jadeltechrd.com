@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   handleAdminQuoteCreate,
+  handleAdminCatalogQuoteCreate,
   handleAdminQuoteAcceptance,
   handleAdminPaymentOrderCreate,
 } from "../src/worker.mjs";
@@ -55,6 +56,43 @@ test("quote creation is server-priced and promotes only an allowed project to QU
   assert.equal(response.status, 201);
   assert.equal(body.status, "ISSUED");
   assert.equal(body.total_amount_minor, 115000);
+  assert.equal(body.external_side_effect, false);
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].length, 4);
+});
+
+test("catalog quote derives amounts from selected project services", async () => {
+  const batches = [];
+  const db = {
+    prepare(sql) {
+      return {
+        bind() {
+          return {
+            async first() {
+              if (sql.includes("service_ids_json")) {
+                return {
+                  project_id:PROJECT_ID,
+                  service_ids_json:'["architecture","analytics"]',
+                  state:"POLICY_ALLOWED",
+                  policy_status:"ALLOWED",
+                };
+              }
+              if (sql.includes("MAX(version)")) return { version:0 };
+              return null;
+            },
+          };
+        },
+      };
+    },
+    async batch(items) { batches.push(items); return []; },
+  };
+  const response = await handleAdminCatalogQuoteCreate(adminRequest("/api/v1/admin/quotes/from-catalog", {
+    project_id:PROJECT_ID,
+  }), { ADMIN_API_TOKEN:"admin-secret-token", DB:db });
+  const body = await response.json();
+  assert.equal(response.status, 201);
+  assert.equal(body.quote_source, "CANONICAL_SERVICE_CATALOG");
+  assert.equal(body.total_amount_minor, 90000);
   assert.equal(body.external_side_effect, false);
   assert.equal(batches.length, 1);
   assert.equal(batches[0].length, 4);
@@ -290,6 +328,8 @@ test("sandbox-gated payment order creates a PayPal order without capture", async
         assert.equal(body.intent, "CAPTURE");
         assert.equal(body.purchase_units[0].amount.value, "250.00");
         assert.equal(body.purchase_units[0].amount.currency_code, "USD");
+        assert.equal(body.purchase_units[0].custom_id, options.headers["paypal-request-id"]);
+        assert.equal(body.purchase_units[0].invoice_id, QUOTE_ID);
         return Response.json({
           id:"PAYPAL-ORDER-123",
           status:"CREATED",
