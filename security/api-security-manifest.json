@@ -29,11 +29,11 @@
     "authz": "project intake is intentionally public; admin approval requires Bearer token; payment webhook must verify PayPal signature",
     "csrf": "no cookie/session credentials accepted; exact Origin match when Origin is present",
     "secrets": "TURNSTILE_SECRET_KEY is an environment secret; never serialized to responses",
-    "idempotency": "Idempotency-Key required; unique D1 constraint; deterministic replay response",
+    "idempotency": "Idempotency-Key protects intake; PayPal sandbox Orders v2 creation uses the internal payment_order_id as PayPal-Request-Id so retries do not create duplicate provider orders.",
     "audit": "correlation_id plus immutable-style evidence event inserted in same D1 batch",
-    "ssrf": "only server egress in intake is a compile-time constant Turnstile Siteverify URL",
+    "ssrf": "Server egress is restricted to compile-time Cloudflare Turnstile and allowlisted PayPal API bases; dynamic PayPal order creation is sandbox-only and redirects are restricted to HTTPS jadeltechrd.com.",
     "durability": "D1 transactional batch writes project + evidence + dispatch outbox before asynchronous workflow dispatch",
-    "payments": "verified PayPal webhooks write payment_events plus payment_ledger in REQUIRES_HUMAN; no automatic PAID transition",
+    "payments": "Verified PayPal webhooks write payment_events plus payment_ledger in REQUIRES_HUMAN. Dynamic Orders v2 creation is feature-gated, sandbox-only, idempotent and never captures funds; production financial execution remains unauthorized.",
     "approvals": "admin approval endpoint records approval_events and can promote only policy status, not payment, deployment or ACTIVE state",
     "revenue_intelligence": "Authenticated GET-only aggregate endpoint; no PII fields, no write verb, no paid-media/publication/payment/trading authority; advanced ML/LLM/multimodal paths remain not activated."
   },
@@ -45,7 +45,9 @@
     "paypal_webhook": "commercial-runtime/test/paypal-webhook.test.mjs",
     "approvals": "commercial-runtime/test/approvals.test.mjs",
     "revenue_intelligence": "commercial-runtime/test/revenue-intelligence.test.mjs",
-    "revenue_intelligence_admin": "commercial-runtime/test/revenue-admin.test.mjs"
+    "revenue_intelligence_admin": "commercial-runtime/test/revenue-admin.test.mjs",
+    "service_pricing": "commercial-runtime/test/service-pricing.test.mjs",
+    "sales_to_cash": "commercial-runtime/test/sales-to-cash.test.mjs"
   },
   "promotion_blockers": [
     "Cloudflare Worker not deployed",
@@ -56,6 +58,7 @@
     "frontend submit form not enabled",
     "PayPal webhook deployed credentials and webhook ID not provisioned",
     "payment-provider-to-project matching and quote reconciliation not fully automated",
-    "production SLO and alert evidence not collected"
+    "production SLO and alert evidence not collected",
+    "PayPal dynamic order creation is sandbox-only and production activation requires a separate human gate"
   ]
 }
