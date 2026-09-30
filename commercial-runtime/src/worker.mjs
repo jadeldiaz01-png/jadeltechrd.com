@@ -2,6 +2,7 @@ import { validateIdempotencyKey, validateProjectRequest } from "./validation.mjs
 import { buildRuntimeRevenueView } from "./revenue-intelligence.mjs";
 import { loadApprovedOpportunityFeed } from "./revenue-agent-bridge.mjs";
 import { buildRevenueRuntimeAuthorization } from "./revenue-agent-authorization.mjs";
+import { resolveCatalogPrice } from "./service-pricing.mjs";
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_WEBHOOK_BYTES = 64 * 1024;
@@ -547,13 +548,26 @@ function normalizeQuoteItems(items) {
     if (!Number.isSafeInteger(unitAmountMinor) || unitAmountMinor < 0 || unitAmountMinor > MAX_MINOR_AMOUNT) {
       throw new Error("INVALID_QUOTE_ITEM_AMOUNT");
     }
+    const pricing = resolveCatalogPrice({
+      serviceId,
+      priceComponent: item?.price_component,
+      unitAmountMinor,
+    });
     const lineAmountMinor = quantity * unitAmountMinor;
     if (!Number.isSafeInteger(lineAmountMinor) || lineAmountMinor > MAX_MINOR_AMOUNT) {
       throw new Error("INVALID_QUOTE_TOTAL");
     }
     total += lineAmountMinor;
     if (!Number.isSafeInteger(total) || total > MAX_MINOR_AMOUNT) throw new Error("INVALID_QUOTE_TOTAL");
-    return { serviceId, description, quantity, unitAmountMinor, lineAmountMinor };
+    return {
+      serviceId,
+      priceComponent: pricing.priceComponent,
+      catalogVersion: pricing.catalogVersion,
+      description,
+      quantity,
+      unitAmountMinor,
+      lineAmountMinor,
+    };
   });
   return { items: normalized, totalAmountMinor: total };
 }
@@ -613,8 +627,11 @@ export async function handleAdminQuoteCreate(request, env) {
       "INSERT INTO quotes (quote_id,project_id,version,status,currency_code,total_amount_minor,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)"
     ).bind(quoteId,projectId,version,"ISSUED",currency,normalized.totalAmountMinor,expiresAt,now,now),
     ...normalized.items.map((item) => env.DB.prepare(
-      "INSERT INTO quote_items (quote_item_id,quote_id,service_id,description,quantity,unit_amount_minor,line_amount_minor,created_at) VALUES (?,?,?,?,?,?,?,?)"
-    ).bind(crypto.randomUUID(),quoteId,item.serviceId,item.description,item.quantity,item.unitAmountMinor,item.lineAmountMinor,now)),
+      "INSERT INTO quote_items (quote_item_id,quote_id,service_id,price_component,catalog_version,description,quantity,unit_amount_minor,line_amount_minor,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)"
+    ).bind(
+      crypto.randomUUID(),quoteId,item.serviceId,item.priceComponent,item.catalogVersion,
+      item.description,item.quantity,item.unitAmountMinor,item.lineAmountMinor,now,
+    )),
     env.DB.prepare(
       "UPDATE project_requests SET state='QUOTED',updated_at=? WHERE project_id=? AND policy_status='ALLOWED'"
     ).bind(now,projectId),
