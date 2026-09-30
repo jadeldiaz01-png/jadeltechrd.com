@@ -518,7 +518,7 @@ export async function handleAdminApprovals(request, env) {
         "SELECT l.ledger_id,l.provider_event_id,l.ledger_state,l.amount_usd,l.currency_code,l.created_at,e.resource_id,e.event_type,e.resource_status FROM payment_ledger l JOIN payment_events e ON e.provider_event_id=l.provider_event_id WHERE e.resource_id=? AND e.event_type='PAYMENT.CAPTURE.COMPLETED' ORDER BY l.created_at DESC LIMIT 2"
       ).bind(captureId).all();
       const paymentOrders = await env.DB.prepare(
-        "SELECT payment_order_id,quote_id,project_id,status,amount_minor,currency_code,created_at FROM payment_orders WHERE payment_order_id=? LIMIT 2"
+        "SELECT payment_order_id,quote_id,project_id,status,amount_minor,currency_code,provider_order_id,provider_approval_url,created_at FROM payment_orders WHERE payment_order_id=? LIMIT 2"
       ).bind(paymentOrderId).all();
       return json({
         projects: [],
@@ -530,14 +530,22 @@ export async function handleAdminApprovals(request, env) {
     const pending = await env.DB.prepare(
       "SELECT project_id,name,email,company,service_ids_json,state,policy_status,created_at,updated_at FROM project_requests WHERE policy_status IN ('PENDING','REQUIRES_HUMAN') ORDER BY created_at DESC LIMIT 50"
     ).all();
+    const quotable = await env.DB.prepare(
+      "SELECT project_id,name,email,company,service_ids_json,state,policy_status,created_at,updated_at FROM project_requests WHERE policy_status='ALLOWED' AND state='POLICY_ALLOWED' ORDER BY updated_at DESC LIMIT 50"
+    ).all();
+    const quotes = await env.DB.prepare(
+      "SELECT q.quote_id,q.project_id,q.version,q.status,q.currency_code,q.total_amount_minor,q.expires_at,q.created_at,p.name,p.email FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.status IN ('ISSUED','ACCEPTED') ORDER BY q.created_at DESC LIMIT 50"
+    ).all();
     const payments = await env.DB.prepare(
       "SELECT l.ledger_id,l.provider_event_id,l.ledger_state,l.amount_usd,l.currency_code,l.created_at,e.resource_id,e.event_type,e.resource_status FROM payment_ledger l JOIN payment_events e ON e.provider_event_id=l.provider_event_id WHERE l.ledger_state IN ('RECEIVED','RECONCILING','REQUIRES_HUMAN') ORDER BY l.created_at DESC LIMIT 50"
     ).all();
     const paymentOrders = await env.DB.prepare(
-      "SELECT payment_order_id,quote_id,project_id,status,amount_minor,currency_code,created_at FROM payment_orders WHERE status='PENDING' ORDER BY created_at DESC LIMIT 50"
+      "SELECT payment_order_id,quote_id,project_id,status,amount_minor,currency_code,provider_order_id,provider_approval_url,created_at FROM payment_orders WHERE status='PENDING' ORDER BY created_at DESC LIMIT 50"
     ).all();
     return json({
       projects: pending.results || [],
+      quotable_projects: quotable.results || [],
+      quotes: quotes.results || [],
       payments: payments.results || [],
       payment_orders: paymentOrders.results || [],
     });
