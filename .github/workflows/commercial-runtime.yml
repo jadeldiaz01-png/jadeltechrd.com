@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'commercial-runtime/**'
+      - 'approval-console.js'
       - 'scripts/paypal-sandbox-*.sh'
       - '.github/workflows/paypal-real-sandbox-e2e.yml'
       - 'security/api-security-manifest.json'
@@ -13,6 +14,7 @@ on:
     branches: [main]
     paths:
       - 'commercial-runtime/**'
+      - 'approval-console.js'
       - 'scripts/paypal-sandbox-*.sh'
       - '.github/workflows/paypal-real-sandbox-e2e.yml'
       - 'security/api-security-manifest.json'
@@ -43,6 +45,7 @@ jobs:
           node --check commercial-runtime/src/worker.mjs
           node --check commercial-runtime/src/service-pricing.mjs
           node --check commercial-runtime/src/project-workflow.mjs
+          node --check approval-console.js
           node --check commercial-runtime/src/revenue-intelligence.mjs
           for script in scripts/paypal-sandbox-*.sh; do
             [ -e "$script" ] || continue
