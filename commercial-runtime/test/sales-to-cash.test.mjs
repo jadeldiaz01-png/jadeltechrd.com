@@ -332,7 +332,7 @@ test("sandbox-gated payment order creates a PayPal order without capture", async
         assert.equal(body.purchase_units[0].invoice_id, QUOTE_ID);
         return Response.json({
           id:"PAYPAL-ORDER-123",
-          status:"CREATED",
+          status:"PAYER_ACTION_REQUIRED",
           links:[{
             rel:"payer-action",
             href:"https://www.sandbox.paypal.com/checkoutnow?token=PAYPAL-ORDER-123",
@@ -346,6 +346,7 @@ test("sandbox-gated payment order creates a PayPal order without capture", async
   const body = await response.json();
   assert.equal(response.status, 201);
   assert.equal(body.provider_order_id, "PAYPAL-ORDER-123");
+  assert.equal(body.provider_status, "PAYER_ACTION_REQUIRED");
   assert.equal(body.provider_call_performed, true);
   assert.equal(body.provider_environment, "sandbox");
   assert.equal(body.capture_performed, false);

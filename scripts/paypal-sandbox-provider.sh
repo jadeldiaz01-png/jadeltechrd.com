@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(dirname "$0")/paypal-sandbox-provider-status.sh"
 
 cf_token=$(printf '%s' "$CLOUDFLARE_API_TOKEN_RAW" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
 account_id=$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID_RAW" | tr -d '\r\n[:space:]')
@@ -180,10 +181,13 @@ if [ "$PHASE" = prepare ]; then
   provider_snapshot=$(curl --fail-with-body -sS \
     -H "Authorization: Bearer $paypal_token" \
     "$PAYPAL_SANDBOX_API/v2/checkout/orders/$paypal_order_id")
-  test "$(jq -r '.status' <<<"$provider_snapshot")" = CREATED
+  provider_status=$(jq -r '.status // empty' <<<"$provider_snapshot")
+  paypal_require_prepare_provider_status "$provider_status"
   test "$(jq -r '.purchase_units[0].custom_id' <<<"$provider_snapshot")" = "$payment_order_id"
   test "$(jq -r '.purchase_units[0].invoice_id' <<<"$provider_snapshot")" = "$quote_id"
   test "$(jq -r '.purchase_units[0].amount.value' <<<"$provider_snapshot")" = 250.00
+  echo "PAYPAL_SANDBOX_LINKAGE=PASS quote_id=$quote_id payment_order_id=$payment_order_id provider_order_id=$paypal_order_id"
+  echo "PAYPAL_SANDBOX_PREPARE_ASSERTIONS=PASS amount_minor=25000 provider_environment=sandbox capture_performed=false financial_execution_authorized=false provider_status=$provider_status"
 
   echo "paypal_order_id=$paypal_order_id" >> "$GITHUB_OUTPUT"
   echo "project_id=$PROJECT_ID" >> "$GITHUB_OUTPUT"
