@@ -168,41 +168,22 @@ if [ "$PHASE" = prepare ]; then
   payment_order_id=$(jq -r '.payment_order_id' <<<"$order")
   test "$(jq -r '.amount_minor' <<<"$order")" = 25000
 
-  return_url="$worker_url/health?paypal_sandbox=approved"
-  cancel_url="$worker_url/health?paypal_sandbox=cancelled"
-  provider_payload=$(jq -n \
-    --arg po "$payment_order_id" \
-    --arg quote "$quote_id" \
-    --arg return_url "$return_url" \
-    --arg cancel_url "$cancel_url" '{
-    intent:"CAPTURE",
-    payment_source:{
-      paypal:{
-        experience_context:{
-          user_action:"PAY_NOW",
-          return_url:$return_url,
-          cancel_url:$cancel_url
-        }
-      }
-    },
-    purchase_units:[{
-      reference_id:$po,
-      custom_id:$po,
-      invoice_id:$quote,
-      description:"Jadel Tech RD sandbox certification",
-      amount:{currency_code:"USD",value:"1.00"}
-    }]
-  }')
-  provider=$(curl --fail-with-body -sS -X POST \
-    -H "Authorization: Bearer $paypal_token" \
-    -H 'Content-Type: application/json' \
-    -H "PayPal-Request-Id: jadel-$payment_order_id" \
-    --data "$provider_payload" \
-    "$PAYPAL_SANDBOX_API/v2/checkout/orders")
-  paypal_order_id=$(jq -r '.id' <<<"$provider")
-  approval_url=$(jq -r '.links[]? | select(.rel=="payer-action" or .rel=="approve") | .href' <<<"$provider" | head -n1)
+  paypal_order_id=$(jq -r '.provider_order_id' <<<"$order")
+  approval_url=$(jq -r '.approval_url' <<<"$order")
+  test "$(jq -r '.provider_environment' <<<"$order")" = sandbox
+  test "$(jq -r '.provider_call_performed' <<<"$order")" = true
+  test "$(jq -r '.capture_performed' <<<"$order")" = false
+  test "$(jq -r '.financial_execution_authorized' <<<"$order")" = false
   test -n "$paypal_order_id" && test "$paypal_order_id" != null
-  test -n "$approval_url"
+  test -n "$approval_url" && test "$approval_url" != null
+
+  provider_snapshot=$(curl --fail-with-body -sS \
+    -H "Authorization: Bearer $paypal_token" \
+    "$PAYPAL_SANDBOX_API/v2/checkout/orders/$paypal_order_id")
+  test "$(jq -r '.status' <<<"$provider_snapshot")" = CREATED
+  test "$(jq -r '.purchase_units[0].custom_id' <<<"$provider_snapshot")" = "$payment_order_id"
+  test "$(jq -r '.purchase_units[0].invoice_id' <<<"$provider_snapshot")" = "$quote_id"
+  test "$(jq -r '.purchase_units[0].amount.value' <<<"$provider_snapshot")" = 250.00
 
   echo "paypal_order_id=$paypal_order_id" >> "$GITHUB_OUTPUT"
   echo "project_id=$PROJECT_ID" >> "$GITHUB_OUTPUT"
@@ -222,7 +203,7 @@ if [ "$PHASE" = prepare ]; then
     echo "After approval, dispatch the workflow again with phase=capture_certify and paypal_order_id=$paypal_order_id."
   } >> "$GITHUB_STEP_SUMMARY"
 
-  echo 'PAYPAL_SANDBOX_PREPARE=PASS'
+  echo 'PAYPAL_SANDBOX_DYNAMIC_ORDER_PREPARE=PASS'
   exit 0
 fi
 
