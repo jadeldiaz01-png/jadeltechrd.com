@@ -1,6 +1,8 @@
 const API_ORIGIN = "https://intake.jadeltechrd.com";
 const APPROVALS_URL = `${API_ORIGIN}/api/v1/admin/approvals`;
 const PAYMENT_RECONCILE_URL = `${API_ORIGIN}/api/v1/admin/payments/reconcile`;
+const CATALOG_QUOTE_URL = `${API_ORIGIN}/api/v1/admin/quotes/from-catalog`;
+const QUOTE_ACCEPT_URL = `${API_ORIGIN}/api/v1/admin/quotes/accept`;
 
 const form = document.getElementById("approval-auth");
 const tokenInput = document.getElementById("admin-token");
@@ -24,6 +26,15 @@ function htmlEscape(value) {
   }[char]));
 }
 
+function formatMinor(value, currency = "USD") {
+  const amount = Number(value);
+  if (!Number.isSafeInteger(amount)) return "—";
+  return new Intl.NumberFormat("en-US", {
+    style:"currency",
+    currency,
+  }).format(amount / 100);
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     ...options,
@@ -43,6 +54,8 @@ async function api(path, options = {}) {
 
 function render(data) {
   const projects = data.projects || [];
+  const quotableProjects = data.quotable_projects || [];
+  const quotes = data.quotes || [];
   const payments = data.payments || [];
   const paymentOrders = data.payment_orders || [];
   resultsNode.innerHTML = `
@@ -60,6 +73,38 @@ function render(data) {
               <button data-decision="DENIED" data-project="${htmlEscape(project.project_id)}">Denegar</button>
             </div>
           </article>`).join("") : "<p>No hay solicitudes pendientes.</p>"}
+      </section>
+      <section>
+        <h3>Proyectos listos para cotizar</h3>
+        ${quotableProjects.length ? quotableProjects.map((project) => `
+          <article>
+            <strong>${htmlEscape(project.name)} · ${htmlEscape(project.email)}</strong>
+            <span>${htmlEscape(project.state)} · catálogo canónico</span>
+            <small>${htmlEscape(project.service_ids_json)}</small>
+            <div>
+              <button data-catalog-quote-project="${htmlEscape(project.project_id)}">Crear cotización base</button>
+            </div>
+          </article>`).join("") : "<p>No hay proyectos listos para cotizar.</p>"}
+      </section>
+      <section>
+        <h3>Cotizaciones activas</h3>
+        ${quotes.length ? quotes.map((quote) => `
+          <article>
+            <strong>${htmlEscape(quote.name)} · ${formatMinor(quote.total_amount_minor, quote.currency_code)}</strong>
+            <span>${htmlEscape(quote.status)} · versión ${htmlEscape(quote.version)}</span>
+            <small>Proyecto: ${htmlEscape(quote.project_id)} · Quote: ${htmlEscape(quote.quote_id)}</small>
+            ${quote.status === "ISSUED" ? `
+              <div>
+                <input
+                  type="text"
+                  autocomplete="off"
+                  data-quote-evidence="${htmlEscape(quote.quote_id)}"
+                  placeholder="Evidencia de aceptación del cliente"
+                  aria-label="Evidencia de aceptación"
+                >
+                <button data-quote-accept="${htmlEscape(quote.quote_id)}">Registrar aceptación</button>
+              </div>` : "<span>Aceptada; lista para crear orden en un entorno PayPal autorizado.</span>"}
+          </article>`).join("") : "<p>No hay cotizaciones activas.</p>"}
       </section>
       <section>
         <h3>Órdenes internas pendientes</h3>
@@ -117,6 +162,46 @@ form?.addEventListener("submit", async (event) => {
 });
 
 resultsNode?.addEventListener("click", async (event) => {
+  const catalogQuoteButton = event.target.closest("button[data-catalog-quote-project]");
+  if (catalogQuoteButton) {
+    setStatus("Creando cotización desde el catálogo canónico...", "working");
+    try {
+      await api(CATALOG_QUOTE_URL, {
+        method:"POST",
+        body:JSON.stringify({ project_id:catalogQuoteButton.dataset.catalogQuoteProject }),
+      });
+      render(await api(APPROVALS_URL));
+      setStatus("Cotización canónica creada.", "success");
+    } catch {
+      setStatus("No se pudo crear la cotización canónica.", "error");
+    }
+    return;
+  }
+
+  const quoteAcceptButton = event.target.closest("button[data-quote-accept]");
+  if (quoteAcceptButton) {
+    const quoteId = quoteAcceptButton.dataset.quoteAccept;
+    const evidenceInput = [...resultsNode.querySelectorAll("input[data-quote-evidence]")]
+      .find((node) => node.dataset.quoteEvidence === quoteId);
+    const evidence = evidenceInput?.value.trim() || "";
+    if (!evidence) {
+      setStatus("Registra evidencia de aceptación del cliente.", "error");
+      return;
+    }
+    setStatus("Registrando aceptación de cotización...", "working");
+    try {
+      await api(QUOTE_ACCEPT_URL, {
+        method:"POST",
+        body:JSON.stringify({ quote_id:quoteId, acceptance_evidence:evidence }),
+      });
+      render(await api(APPROVALS_URL));
+      setStatus("Aceptación registrada. La orden de pago sigue detrás de su gate.", "success");
+    } catch {
+      setStatus("No se pudo registrar la aceptación.", "error");
+    }
+    return;
+  }
+
   const paymentButton = event.target.closest("button[data-payment-decision]");
   if (paymentButton) {
     const ledgerId = paymentButton.dataset.ledger;
