@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "surface": "commercial-runtime /api/v1/project-requests, /api/v1/paypal/webhooks, /api/v1/admin/approvals, /api/v1/admin/revenue-intelligence",
+  "surface": "commercial-runtime project intake, verified PayPal webhooks, governed quote/acceptance/payment-order APIs, approvals, reconciliation and revenue intelligence",
   "public_write_policy": "anonymous intake and verified PayPal webhooks only; no privileged action, payout, deployment, publication or agent execution directly from request",
   "controls": {
     "turnstile_on_abuse_prone_public_forms": true,
@@ -24,7 +24,7 @@
   "implementation": {
     "turnstile": "commercial-runtime/src/worker.mjs::verifyTurnstile uses fixed Cloudflare Siteverify endpoint and server-only secret",
     "rate_limit": "PROJECT_REQUEST_RATE_LIMITER binding before parsing/DB writes",
-    "schema": "commercial-runtime/src/validation.mjs rejects unknown fields and invalid service IDs",
+    "schema": "Project intake validates service IDs; catalog quote creation derives price components and amounts from the canonical server-side service catalog.",
     "request_size": 16384,
     "authz": "project intake is intentionally public; admin approval requires Bearer token; payment webhook must verify PayPal signature",
     "csrf": "no cookie/session credentials accepted; exact Origin match when Origin is present",
@@ -33,7 +33,7 @@
     "audit": "correlation_id plus immutable-style evidence event inserted in same D1 batch",
     "ssrf": "Server egress is restricted to compile-time Cloudflare Turnstile and allowlisted PayPal API bases; dynamic PayPal order creation is sandbox-only and redirects are restricted to HTTPS jadeltechrd.com.",
     "durability": "D1 transactional batch writes project + evidence + dispatch outbox before asynchronous workflow dispatch",
-    "payments": "Verified PayPal webhooks write payment_events plus payment_ledger in REQUIRES_HUMAN. Dynamic Orders v2 creation is feature-gated, sandbox-only, idempotent and never captures funds; production financial execution remains unauthorized.",
+    "payments": "Approved project selections can become canonical quotes; quote acceptance remains explicit. Orders v2 creation is feature-gated, sandbox-only, idempotent, bound to the internal payment_order_id and never captures funds. Verified webhooks still require human reconciliation before PAID.",
     "approvals": "admin approval endpoint records approval_events and can promote only policy status, not payment, deployment or ACTIVE state",
     "revenue_intelligence": "Authenticated GET-only aggregate endpoint; no PII fields, no write verb, no paid-media/publication/payment/trading authority; advanced ML/LLM/multimodal paths remain not activated."
   },
