@@ -351,7 +351,7 @@ async function createSandboxPayPalOrder(env, paymentOrderId, quote, fetchImpl = 
       },
       purchase_units: [{
         reference_id: paymentOrderId,
-        custom_id: quote.project_id,
+        custom_id: paymentOrderId,
         invoice_id: quote.quote_id,
         description: "Jadel Tech RD service quote",
         amount: {
