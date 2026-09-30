@@ -128,7 +128,7 @@
       statusLabel: "Piloto · sin promesas de ingresos",
       setup: 1800,
       monthly: 349,
-      priceLabel: "Pilotos desde US$1,800"
+      priceLabel: "Desde US$1,800 + US$349/mes"
     },
     {
       id: "quant",
@@ -154,7 +154,7 @@
       statusLabel: "Servicio de ingeniería",
       setup: 2500,
       monthly: 299,
-      priceLabel: "Desde US$2,500",
+      priceLabel: "Desde US$2,500 + US$299/mes",
       paymentLinks: PAYMENT_LINKS.governance
     },
     {
@@ -168,7 +168,7 @@
       statusLabel: "Proyecto a medida",
       setup: 4500,
       monthly: 790,
-      priceLabel: "Desde US$4,500 + soporte"
+      priceLabel: "Desde US$4,500 + US$790/mes"
     }
   ];
 
