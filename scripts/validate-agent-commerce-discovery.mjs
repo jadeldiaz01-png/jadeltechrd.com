@@ -7,6 +7,7 @@ import {
 
 const catalog = JSON.parse(fs.readFileSync("agent-services.json", "utf8"));
 const llms = fs.readFileSync("llms.txt", "utf8");
+const pagesWorkflow = fs.readFileSync(".github/workflows/pages.yml", "utf8");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -50,6 +51,12 @@ assert(
   /No claim of guaranteed income/i.test(llms),
   "llms.txt must explicitly disclaim guaranteed-income claims",
 );
+for (const asset of ['llms.txt', 'agent-services.json']) {
+  assert(
+    pagesWorkflow.includes(`- "${asset}"`),
+    `Pages workflow must deploy ${asset} on main changes`,
+  );
+}
 
 console.log(JSON.stringify({
   status: "PASS",
