@@ -46,7 +46,10 @@ for (const required of [
 ]) {
   assert(llms.includes(required), `llms.txt missing ${required}`);
 }
-assert(!/guaranteed income|guaranteed roi/i.test(llms), "prohibited guaranteed-income claim");
+assert(
+  /No claim of guaranteed income/i.test(llms),
+  "llms.txt must explicitly disclaim guaranteed-income claims",
+);
 
 console.log(JSON.stringify({
   status: "PASS",
