@@ -96,11 +96,85 @@ jobs:
           require("PROTECTED_MAIN_SHA_MATCH=PASS", "COMMERCIAL_RUNTIME_MAIN_SHA_RECHECK")
           require("D1_MUTATION_SHA_GATE=PASS", "COMMERCIAL_RUNTIME_D1_SHA_GATE")
           require("WORKER_MUTATION_SHA_GATE=PASS", "COMMERCIAL_RUNTIME_WORKER_SHA_GATE")
+          require('PAYPAL_ORDER_CREATION_ENABLED:"false"', "COMMERCIAL_RUNTIME_PAYPAL_ORDER_CREATION")
+          require('PAYPAL_LIVE_ORDER_CREATION_ENABLED:"false"', "COMMERCIAL_RUNTIME_PAYPAL_LIVE_ORDER_CREATION")
           require('PRODUCTION_AUTHORIZED:"false"', "COMMERCIAL_RUNTIME_PRODUCTION_AUTHORITY")
           require('FINANCIAL_EXECUTION_AUTHORIZED:"false"', "COMMERCIAL_RUNTIME_FINANCIAL_AUTHORITY")
           require('MAX_AUTONOMOUS_CAPITAL_USD:"0"', "COMMERCIAL_RUNTIME_CAPITAL_GUARD")
 
           print("COMMERCIAL_RUNTIME_DEPLOY_GOVERNANCE=PASS")
+          PY
+
+      - name: Validate PayPal LIVE webhook credential governance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path(".github/workflows/configure-paypal-live-webhook.yml")
+          text = path.read_text(encoding="utf-8")
+
+          def require(fragment, label):
+              if fragment not in text:
+                  raise SystemExit(f"{label}=FAIL")
+
+          def forbid(fragment, label):
+              if fragment in text:
+                  raise SystemExit(f"{label}=FAIL")
+
+          if re.search(r"^\s*push:\s*$", text, re.MULTILINE):
+              raise SystemExit("PAYPAL_LIVE_WEBHOOK_AUTO_PUSH=FAIL")
+          if re.search(r"^\s*schedule:\s*$", text, re.MULTILINE):
+              raise SystemExit("PAYPAL_LIVE_WEBHOOK_SCHEDULE=FAIL")
+
+          require("workflow_dispatch:", "PAYPAL_LIVE_WEBHOOK_WORKFLOW_DISPATCH")
+          require("expected_sha:", "PAYPAL_LIVE_WEBHOOK_EXPECTED_SHA")
+          require("confirmation:", "PAYPAL_LIVE_WEBHOOK_CONFIRMATION_INPUT")
+          require("CONFIGURE_PAYPAL_LIVE_WEBHOOK", "PAYPAL_LIVE_WEBHOOK_CONFIRMATION_VALUE")
+          require('test "$GITHUB_REF" = "refs/heads/main"', "PAYPAL_LIVE_WEBHOOK_MAIN_REF_GATE")
+          require('test "$GITHUB_SHA" = "$EXPECTED_SHA"', "PAYPAL_LIVE_WEBHOOK_DISPATCH_SHA_GATE")
+          require("PAYPAL_LIVE_AUTHORITY_FAIL_CLOSED=PASS", "PAYPAL_LIVE_WEBHOOK_AUTHORITY_GATE")
+
+          require("secrets.PAYPAL_CLIENT_ID", "PAYPAL_LIVE_CLIENT_ID_SECRET_SOURCE")
+          require("secrets.PAYPAL_CLIENT_SECRET", "PAYPAL_LIVE_CLIENT_SECRET_SOURCE")
+          require("secrets.PAYPAL_WEBHOOK_ID", "PAYPAL_LIVE_WEBHOOK_ID_SECRET_SOURCE")
+
+          for name in ("PAYPAL_CLIENT_ID", "PAYPAL_CLIENT_SECRET", "PAYPAL_WEBHOOK_ID"):
+              require(f"wrangler secret put {name}", f"{name}_PUT")
+              require(f"{name}_RECONCILED=PASS", f"{name}_RECONCILE_EVIDENCE")
+
+          require("PAYPAL_LIVE_WEBHOOK_INVALID_SIGNATURE_CANARY=PASS", "PAYPAL_LIVE_WEBHOOK_403_CANARY")
+          require('test "$code" = 403', "PAYPAL_LIVE_WEBHOOK_403_ASSERTION")
+          require('"PAYPAL_WEBHOOK_REJECTED"', "PAYPAL_LIVE_WEBHOOK_REJECTION_ASSERTION")
+
+          forbid("wrangler deploy", "PAYPAL_LIVE_WEBHOOK_GENERAL_DEPLOY")
+          forbid("secret delete", "PAYPAL_LIVE_WEBHOOK_SECRET_DELETE")
+          forbid("secret bulk", "PAYPAL_LIVE_WEBHOOK_SECRET_BULK")
+          forbid("actions/upload-artifact", "PAYPAL_LIVE_WEBHOOK_ARTIFACT")
+          forbid("PAYPAL_ORDER_CREATION_ENABLED --name", "PAYPAL_ORDER_CREATION_SECRET_MUTATION")
+          forbid("PAYPAL_LIVE_ORDER_CREATION_ENABLED --name", "PAYPAL_LIVE_ORDER_CREATION_SECRET_MUTATION")
+          forbid("PRODUCTION_AUTHORIZED --name", "PRODUCTION_AUTHORIZED_SECRET_MUTATION")
+          forbid("FINANCIAL_EXECUTION_AUTHORIZED --name", "FINANCIAL_EXECUTION_AUTHORIZED_SECRET_MUTATION")
+          forbid("MAX_AUTONOMOUS_CAPITAL_USD --name", "MAX_AUTONOMOUS_CAPITAL_SECRET_MUTATION")
+
+          puts = re.findall(r"wrangler\s+secret\s+put\s+([A-Z0-9_]+)", text)
+          if puts != ["PAYPAL_CLIENT_ID", "PAYPAL_CLIENT_SECRET", "PAYPAL_WEBHOOK_ID"]:
+              raise SystemExit(f"PAYPAL_LIVE_WEBHOOK_SECRET_SCOPE=FAIL actual={puts}")
+
+          deploy = Path(".github/workflows/deploy-commercial-runtime.yml").read_text(encoding="utf-8")
+          for fragment, label in [
+              ('PAYPAL_ORDER_CREATION_ENABLED:"false"', "PAYPAL_ORDER_CREATION_DISABLED"),
+              ('PAYPAL_LIVE_ORDER_CREATION_ENABLED:"false"', "PAYPAL_LIVE_ORDER_CREATION_DISABLED"),
+              ('PRODUCTION_AUTHORIZED:"false"', "PRODUCTION_AUTHORIZED_FALSE"),
+              ('FINANCIAL_EXECUTION_AUTHORIZED:"false"', "FINANCIAL_EXECUTION_AUTHORIZED_FALSE"),
+              ('MAX_AUTONOMOUS_CAPITAL_USD:"0"', "MAX_AUTONOMOUS_CAPITAL_ZERO"),
+          ]:
+              if fragment not in deploy:
+                  raise SystemExit(f"{label}=FAIL")
+
+          print("PAYPAL_LIVE_WEBHOOK_CREDENTIAL_GOVERNANCE=PASS")
           PY
 
       - name: Validate pilot-agent production readiness contract
