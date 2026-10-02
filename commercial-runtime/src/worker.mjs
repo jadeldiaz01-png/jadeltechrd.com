@@ -41,8 +41,8 @@ const PAYPAL_LEDGER_EVENT_STATES = new Map([
 ]);
 const TURNSTILE_ACTION = "project_request";
 const INSERT_REQUEST_SQL = `INSERT INTO project_requests
-(project_id,idempotency_key,request_fingerprint,name,email,company,service_ids_json,notes,locale,state,policy_status,created_at,updated_at)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+(project_id,idempotency_key,request_fingerprint,name,email,company,service_ids_json,offer_id,offer_landing_path,utm_source,utm_medium,utm_campaign,utm_content,notes,locale,state,policy_status,created_at,updated_at)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
 const INSERT_EVIDENCE_SQL = `INSERT INTO evidence_events
 (event_id,project_id,event_type,state,correlation_id,payload_json,created_at)
 VALUES (?,?,?,?,?,?,?)`;
@@ -125,6 +125,12 @@ async function requestFingerprint(input) {
     email: input.email,
     company: input.company,
     service_ids: input.serviceIds,
+    offer_id: input.offerId,
+    offer_landing_path: input.offerLandingPath,
+    utm_source: input.utmSource,
+    utm_medium: input.utmMedium,
+    utm_campaign: input.utmCampaign,
+    utm_content: input.utmContent,
     notes: input.notes,
     locale: input.locale,
   }));
@@ -254,11 +260,23 @@ export async function handleProjectRequest(request, env, deps = {}) {
     await env.DB.batch([
       env.DB.prepare(INSERT_REQUEST_SQL).bind(
         projectId,idempotencyKey,fingerprint,input.name,input.email,input.company,
-        JSON.stringify(input.serviceIds),input.notes,input.locale,state,policyStatus,now,now,
+        JSON.stringify(input.serviceIds),input.offerId,input.offerLandingPath,
+        input.utmSource,input.utmMedium,input.utmCampaign,input.utmContent,
+        input.notes,input.locale,state,policyStatus,now,now,
       ),
       env.DB.prepare(INSERT_EVIDENCE_SQL).bind(
         eventId,projectId,"PROJECT_REQUEST_ACCEPTED",state,correlationId,
-        JSON.stringify({ service_ids: input.serviceIds, locale: input.locale, request_fingerprint: fingerprint }),now,
+        JSON.stringify({
+          service_ids: input.serviceIds,
+          offer_id: input.offerId,
+          offer_landing_path: input.offerLandingPath,
+          utm_source: input.utmSource,
+          utm_medium: input.utmMedium,
+          utm_campaign: input.utmCampaign,
+          utm_content: input.utmContent,
+          locale: input.locale,
+          request_fingerprint: fingerprint
+        }),now,
       ),
       env.DB.prepare(INSERT_OUTBOX_SQL).bind(
         outboxId,projectId,workflowInstanceId,"PENDING",0,now,now,
@@ -558,10 +576,10 @@ export async function handleAdminApprovals(request, env) {
     }
 
     const pending = await env.DB.prepare(
-      "SELECT project_id,name,email,company,service_ids_json,state,policy_status,created_at,updated_at FROM project_requests WHERE policy_status IN ('PENDING','REQUIRES_HUMAN') ORDER BY created_at DESC LIMIT 50"
+      "SELECT project_id,name,email,company,service_ids_json,offer_id,offer_landing_path,utm_source,utm_medium,utm_campaign,utm_content,state,policy_status,created_at,updated_at FROM project_requests WHERE policy_status IN ('PENDING','REQUIRES_HUMAN') ORDER BY created_at DESC LIMIT 50"
     ).all();
     const quotable = await env.DB.prepare(
-      "SELECT project_id,name,email,company,service_ids_json,state,policy_status,created_at,updated_at FROM project_requests WHERE policy_status='ALLOWED' AND state='POLICY_ALLOWED' ORDER BY updated_at DESC LIMIT 50"
+      "SELECT project_id,name,email,company,service_ids_json,offer_id,offer_landing_path,utm_source,utm_medium,utm_campaign,utm_content,state,policy_status,created_at,updated_at FROM project_requests WHERE policy_status='ALLOWED' AND state='POLICY_ALLOWED' ORDER BY updated_at DESC LIMIT 50"
     ).all();
     const quotes = await env.DB.prepare(
       "SELECT q.quote_id,q.project_id,q.version,q.status,q.currency_code,q.total_amount_minor,q.expires_at,q.created_at,p.name,p.email FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.status IN ('ISSUED','ACCEPTED') ORDER BY q.created_at DESC LIMIT 50"
