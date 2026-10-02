@@ -73,6 +73,9 @@ jobs:
           rm -rf _site
           mkdir -p _site
           find . -mindepth 1 -maxdepth 1 ! -name .git ! -name _site ! -name evidence ! -name CNAME -exec cp -a {} _site/ \;
+          test -s _site/llms.txt
+          test -s _site/agent-services.json
+          echo AGENT_DISCOVERY_ASSETS_STAGED=PASS
 
           immutable_app="app.${GITHUB_SHA}.js"
           cp app.js "_site/${immutable_app}"
