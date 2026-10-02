@@ -188,5 +188,31 @@
       "real_funds": false
     },
     "autonomous_replication": false
-  }
+  },
+  "offers": [
+    {
+      "id": "automation_blueprint",
+      "service_id": "architecture",
+      "landing_url": "https://jadeltechrd.com/automatizacion-procesos-ia-rd.html",
+      "human_intake_url": "https://jadeltechrd.com/solicitar-proyecto.html?services=architecture&offer_id=automation_blueprint",
+      "primary_price_component": "setup",
+      "checkout_authority": "HUMAN_GATED"
+    },
+    {
+      "id": "whatsapp_support",
+      "service_id": "support",
+      "landing_url": "https://jadeltechrd.com/whatsapp-ia-empresas-rd.html",
+      "human_intake_url": "https://jadeltechrd.com/solicitar-proyecto.html?services=support&offer_id=whatsapp_support",
+      "primary_price_component": "setup",
+      "checkout_authority": "HUMAN_GATED"
+    },
+    {
+      "id": "sales_lead_intelligence",
+      "service_id": "sales",
+      "landing_url": "https://jadeltechrd.com/agente-ventas-ia-rd.html",
+      "human_intake_url": "https://jadeltechrd.com/solicitar-proyecto.html?services=sales&offer_id=sales_lead_intelligence",
+      "primary_price_component": "setup",
+      "checkout_authority": "HUMAN_GATED"
+    }
+  ]
 }
