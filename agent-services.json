@@ -1,0 +1,192 @@
+{
+  "schema_version": "2026-10-01.1",
+  "canonical_url": "https://jadeltechrd.com/agent-services.json",
+  "provider": {
+    "name": "Jadel Tech RD",
+    "website": "https://jadeltechrd.com/",
+    "intake": "https://jadeltechrd.com/solicitar-proyecto.html"
+  },
+  "discovery": {
+    "llms_txt": "https://jadeltechrd.com/llms.txt",
+    "a2a_agent_card": null,
+    "a2a_status": "NOT_PUBLISHED_UNTIL_CONFORMANT_ENDPOINT_EXISTS",
+    "mcp_status": "PROJECT_DEPENDENT"
+  },
+  "authority": {
+    "autonomous_external_submission": false,
+    "autonomous_contract_acceptance": false,
+    "autonomous_financial_execution": false,
+    "autonomous_production_deploy": false,
+    "human_intake_required": true
+  },
+  "currency": "USD",
+  "pricing_semantics": {
+    "exact": "Published catalog amount",
+    "minimum": "Starting amount; final quote depends on scope"
+  },
+  "services": [
+    {
+      "id": "architecture",
+      "name": "Arquitectura Agentic & Automatización",
+      "maturity": "IMPLEMENTABLE_ENGINEERING_SERVICE",
+      "pricing": {
+        "setup": {
+          "amount_minor": 25000,
+          "mode": "minimum"
+        }
+      }
+    },
+    {
+      "id": "support",
+      "name": "Agente de Soporte & Tickets",
+      "maturity": "CONTAINER_QUALIFIED_IMPLEMENTABLE",
+      "pricing": {
+        "setup": {
+          "amount_minor": 90000,
+          "mode": "exact"
+        },
+        "monthly": {
+          "amount_minor": 14900,
+          "mode": "exact"
+        }
+      }
+    },
+    {
+      "id": "sales",
+      "name": "Sales & Lead Intelligence",
+      "maturity": "SUPERVISED_PILOT",
+      "pricing": {
+        "setup": {
+          "amount_minor": 150000,
+          "mode": "minimum"
+        },
+        "monthly": {
+          "amount_minor": 29900,
+          "mode": "exact"
+        }
+      }
+    },
+    {
+      "id": "social",
+      "name": "Social Trend Intelligence",
+      "maturity": "SUPERVISED_GOVERNED_PILOT",
+      "pricing": {
+        "setup": {
+          "amount_minor": 75000,
+          "mode": "exact"
+        },
+        "monthly": {
+          "amount_minor": 19900,
+          "mode": "exact"
+        }
+      }
+    },
+    {
+      "id": "cineforge",
+      "name": "CineForge · Video Premium",
+      "maturity": "GOVERNED_MEDIA_PILOT",
+      "pricing": {
+        "unit": {
+          "amount_minor": 18000,
+          "mode": "minimum"
+        },
+        "monthly_pack": {
+          "amount_minor": 89900,
+          "mode": "minimum"
+        }
+      }
+    },
+    {
+      "id": "meta",
+      "name": "Meta/Facebook Integration & App Review",
+      "maturity": "IMPLEMENTABLE_PER_CUSTOMER",
+      "pricing": {
+        "setup": {
+          "amount_minor": 85000,
+          "mode": "minimum"
+        }
+      }
+    },
+    {
+      "id": "analytics",
+      "name": "Dashboards & Decision Intelligence",
+      "maturity": "IMPLEMENTABLE_ENGINEERING_SERVICE",
+      "pricing": {
+        "setup": {
+          "amount_minor": 65000,
+          "mode": "minimum"
+        },
+        "monthly": {
+          "amount_minor": 9900,
+          "mode": "exact"
+        }
+      }
+    },
+    {
+      "id": "revenue",
+      "name": "Revenue Opportunity Intelligence",
+      "maturity": "GOVERNED_REVENUE_PILOT",
+      "pricing": {
+        "setup": {
+          "amount_minor": 180000,
+          "mode": "minimum"
+        },
+        "monthly": {
+          "amount_minor": 34900,
+          "mode": "exact"
+        }
+      }
+    },
+    {
+      "id": "quant",
+      "name": "Quant Research & Trading Risk Systems",
+      "maturity": "RESEARCH_TESTNET_ONLY",
+      "pricing": {
+        "setup": {
+          "amount_minor": 200000,
+          "mode": "minimum"
+        }
+      }
+    },
+    {
+      "id": "governance",
+      "name": "AI Governance & Production Readiness",
+      "maturity": "IMPLEMENTABLE_ENGINEERING_SERVICE",
+      "pricing": {
+        "setup": {
+          "amount_minor": 250000,
+          "mode": "minimum"
+        },
+        "monthly": {
+          "amount_minor": 29900,
+          "mode": "exact"
+        }
+      }
+    },
+    {
+      "id": "multiagent",
+      "name": "Multi-Agent Orchestration",
+      "maturity": "GOVERNED_RUNTIME_PILOT",
+      "pricing": {
+        "setup": {
+          "amount_minor": 450000,
+          "mode": "minimum"
+        },
+        "monthly": {
+          "amount_minor": 79000,
+          "mode": "exact"
+        }
+      }
+    }
+  ],
+  "experimental_machine_commerce": {
+    "x402": {
+      "status": "TESTNET_PREPARATION_ONLY",
+      "version": 2,
+      "role": "SELLER_ONLY",
+      "network": "eip155:84532",
+      "real_funds": false
+    },
+    "autonomous_replication": false
+  }
+}

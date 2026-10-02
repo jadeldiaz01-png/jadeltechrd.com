@@ -21,6 +21,8 @@ on:
       - "agente-ventas-ia-rd.html"
       - "robots.txt"
       - "sitemap.xml"
+      - "llms.txt"
+      - "agent-services.json"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 

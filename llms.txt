@@ -1,0 +1,42 @@
+# Jadel Tech RD
+
+> Governed AI automation, agentic systems, API integration, observability and production-readiness engineering.
+
+Canonical site: https://jadeltechrd.com/
+Project intake: https://jadeltechrd.com/solicitar-proyecto.html
+Machine-readable service catalog: https://jadeltechrd.com/agent-services.json
+Privacy: https://jadeltechrd.com/?view=privacy
+Terms: https://jadeltechrd.com/?view=terms
+Data deletion: https://jadeltechrd.com/?view=data-deletion
+
+## Commercial capabilities
+
+- Agentic architecture and AI automation
+- API, webhook and business-process integrations
+- Support/ticket agents with human escalation
+- Sales and lead intelligence
+- Dashboards and decision intelligence
+- AI governance and production readiness
+- Multi-agent orchestration
+- Revenue opportunity intelligence
+
+## Interaction and authority
+
+Public discovery is read-only. Project creation uses the governed human intake.
+External submission, contract acceptance, production deployment and financial
+execution are not autonomous capabilities.
+
+The current commercial payment flow is human-controlled. Machine-payment
+capabilities are experimental/testnet until separately certified and promoted.
+
+## Agent interoperability
+
+MCP is used as a tool/interoperability pattern in supported projects.
+An A2A Agent Card is intentionally not published until a conformant A2A endpoint
+is available on the public domain.
+
+## Evidence and claims
+
+Service maturity and pricing are described in the machine-readable service
+catalog. No claim of guaranteed income, customer ROI, autonomous financial
+authority or production deployment should be inferred from this discovery file.
