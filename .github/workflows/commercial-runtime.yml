@@ -42,6 +42,7 @@ jobs:
       - name: Syntax check runtime
         run: |
           node --check commercial-runtime/src/validation.mjs
+          node --check commercial-runtime/src/offer-catalog.mjs
           node --check commercial-runtime/src/worker.mjs
           node --check commercial-runtime/src/service-pricing.mjs
           node --check commercial-runtime/src/project-workflow.mjs
@@ -62,6 +63,8 @@ jobs:
           done
           test "$(sqlite3 /tmp/jadel-commercial.db 'PRAGMA integrity_check;')" = "ok"
           sqlite3 /tmp/jadel-commercial.db ".schema project_requests" | grep -q 'idempotency_key'
+          sqlite3 /tmp/jadel-commercial.db ".schema project_requests" | grep -q 'offer_id'
+          sqlite3 /tmp/jadel-commercial.db ".schema project_requests" | grep -q 'utm_campaign'
           sqlite3 /tmp/jadel-commercial.db ".schema dispatch_outbox" | grep -q 'workflow_instance_id'
           sqlite3 /tmp/jadel-commercial.db ".schema payment_events" | grep -q 'provider_event_id'
           sqlite3 /tmp/jadel-commercial.db ".schema payment_ledger" | grep -q 'ledger_state'
