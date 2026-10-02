@@ -4,6 +4,7 @@ import {
   SERVICE_DISPLAY_NAMES,
   SERVICE_PRICING_CATALOG,
 } from "../commercial-runtime/src/service-pricing.mjs";
+import { OFFER_CATALOG } from "../commercial-runtime/src/offer-catalog.mjs";
 
 const catalog = JSON.parse(fs.readFileSync("agent-services.json", "utf8"));
 const llms = fs.readFileSync("llms.txt", "utf8");
@@ -40,6 +41,25 @@ for (const [serviceId, runtimePricing] of Object.entries(SERVICE_PRICING_CATALOG
 }
 assert(byId.size === Object.keys(SERVICE_PRICING_CATALOG).length, "unexpected service in agent catalog");
 
+const offers = Array.isArray(catalog.offers) ? catalog.offers : [];
+const offersById = new Map(offers.map((offer) => [offer.id, offer]));
+assert(offersById.size === offers.length, "duplicate public offer ids");
+for (const [offerId, runtimeOffer] of Object.entries(OFFER_CATALOG)) {
+  const discovered = offersById.get(offerId);
+  assert(discovered, `missing public offer mapping: ${offerId}`);
+  assert(discovered.service_id === runtimeOffer.serviceId, `offer service drift: ${offerId}`);
+  assert(
+    discovered.primary_price_component === runtimeOffer.primaryPriceComponent,
+    `offer price-component drift: ${offerId}`,
+  );
+  assert(
+    discovered.landing_url === `https://jadeltechrd.com${runtimeOffer.landingPath}`,
+    `offer landing drift: ${offerId}`,
+  );
+  assert(discovered.checkout_authority === "HUMAN_GATED", `offer checkout authority drift: ${offerId}`);
+}
+assert(offersById.size === Object.keys(OFFER_CATALOG).length, "unexpected public offer mapping");
+
 for (const required of [
   "https://jadeltechrd.com/",
   "https://jadeltechrd.com/solicitar-proyecto.html",
@@ -61,6 +81,7 @@ for (const asset of ['llms.txt', 'agent-services.json']) {
 console.log(JSON.stringify({
   status: "PASS",
   services: byId.size,
+  offers: offersById.size,
   x402: catalog.experimental_machine_commerce.x402,
   a2a_status: catalog.discovery.a2a_status,
 }, null, 2));
