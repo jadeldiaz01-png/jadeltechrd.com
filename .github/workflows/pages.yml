@@ -1,30 +1,16 @@
 name: Deploy public site to GitHub Pages
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "index.html"
-      - "app.js"
-      - "styles.css"
-      - "project-request.css"
-      - "project-request.js"
-      - "solicitar-proyecto.html"
-      - "revenue-funnel.js"
-      - "ga4-config.js"
-      - "ga4-loader.js"
-      - "analytics-consent.js"
-      - "analytics-consent.css"
-      - "revenue-funnel.css"
-      - "whatsapp-ia-empresas-rd.html"
-      - "automatizacion-procesos-ia-rd.html"
-      - "agente-ventas-ia-rd.html"
-      - "robots.txt"
-      - "sitemap.xml"
-      - "llms.txt"
-      - "agent-services.json"
-      - ".github/workflows/pages.yml"
   workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact protected main SHA approved for public-site deployment
+        required: true
+        type: string
+      confirmation:
+        description: Type DEPLOY_PUBLIC_SITE
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -43,11 +29,39 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Validate governed public-site deployment authorization
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "DEPLOY_PUBLIC_SITE"
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          echo PAGES_DEPLOY_CONFIRMATION=PASS
+          echo PAGES_EXACT_SHA_FORMAT=PASS
+          echo PAGES_DISPATCH_REF_MAIN=PASS
+
+      - name: Checkout immutable approved revision
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ inputs.expected_sha }}
           persist-credentials: false
           fetch-depth: 0
+
+      - name: Verify protected main before Pages promotion
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          test "$(git status --porcelain)" = ""
+          echo PAGES_PROTECTED_MAIN_SHA_MATCH=PASS
 
       - name: Configure Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
