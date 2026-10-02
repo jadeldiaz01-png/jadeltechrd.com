@@ -9,6 +9,8 @@ on:
       - 'commercial-runtime/src/service-pricing.mjs'
       - 'scripts/validate-agent-commerce-discovery.mjs'
       - '.github/workflows/agent-commerce-discovery.yml'
+      - '.github/workflows/pages.yml'
+      - '.github/workflows/pages.yml'
   push:
     branches: [main]
     paths:
