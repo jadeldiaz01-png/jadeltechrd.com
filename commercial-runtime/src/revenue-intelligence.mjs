@@ -122,10 +122,41 @@ export async function loadRevenueAggregate(db) {
   };
 }
 
+export async function loadOfferPerformance(db) {
+  const rows = await db.prepare(
+    `SELECT
+       p.offer_id AS offer_id,
+       COUNT(DISTINCT p.project_id) AS total_requests,
+       COUNT(DISTINCT CASE WHEN p.policy_status='ALLOWED' THEN p.project_id END) AS allowed_projects,
+       COUNT(DISTINCT CASE WHEN l.ledger_state='MATCHED' THEN p.project_id END) AS paid_projects,
+       COALESCE(SUM(CASE WHEN l.ledger_state='MATCHED' AND l.currency_code='USD'
+                         THEN CAST(l.amount_usd AS REAL) ELSE 0 END),0) AS reconciled_usd_revenue
+     FROM project_requests p
+     LEFT JOIN payment_ledger l ON l.project_id=p.project_id
+     WHERE p.offer_id <> ''
+     GROUP BY p.offer_id
+     ORDER BY reconciled_usd_revenue DESC, total_requests DESC, p.offer_id ASC`
+  ).all();
+  return (rows.results || []).map((row) => ({
+    offer_id:String(row.offer_id || ""),
+    total_requests:finiteNonNegative(row.total_requests, "offer_total_requests"),
+    allowed_projects:finiteNonNegative(row.allowed_projects, "offer_allowed_projects"),
+    paid_projects:finiteNonNegative(row.paid_projects, "offer_paid_projects"),
+    reconciled_usd_revenue:finiteNonNegative(
+      row.reconciled_usd_revenue,
+      "offer_reconciled_usd_revenue",
+    ),
+  }));
+}
+
 export async function buildRuntimeRevenueView(db) {
-  const summary = await loadRevenueAggregate(db);
+  const [summary, offerPerformance] = await Promise.all([
+    loadRevenueAggregate(db),
+    loadOfferPerformance(db),
+  ]);
   return {
     summary,
+    offer_performance:offerPerformance,
     recommendation:buildRevenueRecommendation(summary),
     evidence_state:{
       ml_models:"NOT_ACTIVATED",
