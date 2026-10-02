@@ -1,0 +1,44 @@
+name: agent-commerce-discovery
+
+on:
+  pull_request:
+    paths:
+      - 'llms.txt'
+      - 'agent-services.json'
+      - 'docs/AGENT-COMMERCE-DISCOVERY-2026.md'
+      - 'commercial-runtime/src/service-pricing.mjs'
+      - 'scripts/validate-agent-commerce-discovery.mjs'
+      - '.github/workflows/agent-commerce-discovery.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'llms.txt'
+      - 'agent-services.json'
+      - 'docs/AGENT-COMMERCE-DISCOVERY-2026.md'
+      - 'commercial-runtime/src/service-pricing.mjs'
+      - 'scripts/validate-agent-commerce-discovery.mjs'
+      - '.github/workflows/agent-commerce-discovery.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Validate agent commerce discovery
+        run: node scripts/validate-agent-commerce-discovery.mjs
+
+      - name: Validate JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('agent-services.json','utf8'))"
