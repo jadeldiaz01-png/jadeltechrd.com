@@ -7,9 +7,9 @@ on:
       - 'agent-services.json'
       - 'docs/AGENT-COMMERCE-DISCOVERY-2026.md'
       - 'commercial-runtime/src/service-pricing.mjs'
+      - 'commercial-runtime/src/offer-catalog.mjs'
       - 'scripts/validate-agent-commerce-discovery.mjs'
       - '.github/workflows/agent-commerce-discovery.yml'
-      - '.github/workflows/pages.yml'
       - '.github/workflows/pages.yml'
   push:
     branches: [main]
@@ -18,8 +18,10 @@ on:
       - 'agent-services.json'
       - 'docs/AGENT-COMMERCE-DISCOVERY-2026.md'
       - 'commercial-runtime/src/service-pricing.mjs'
+      - 'commercial-runtime/src/offer-catalog.mjs'
       - 'scripts/validate-agent-commerce-discovery.mjs'
       - '.github/workflows/agent-commerce-discovery.yml'
+      - '.github/workflows/pages.yml'
 
 permissions:
   contents: read
