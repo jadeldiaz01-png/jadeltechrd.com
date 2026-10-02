@@ -2,14 +2,22 @@ name: Deploy commercial runtime
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'commercial-runtime/**'
-      - '.github/workflows/deploy-commercial-runtime.yml'
+    inputs:
+      expected_sha:
+        description: Exact protected main SHA approved for production deployment
+        required: true
+        type: string
+      confirmation:
+        description: Type DEPLOY_COMMERCIAL_RUNTIME
+        required: true
+        type: string
 
 permissions:
   contents: read
+
+concurrency:
+  group: jadel-commercial-runtime-production-deploy
+  cancel-in-progress: false
 
 env:
   DOMAIN: jadeltechrd.com
@@ -20,6 +28,7 @@ env:
 
 jobs:
   prepare-production-d1:
+    if: ${{ inputs.confirmation == 'DEPLOY_COMMERCIAL_RUNTIME' }}
     environment:
       name: d1-recovery-drill
     runs-on: ubuntu-24.04
@@ -32,10 +41,37 @@ jobs:
       CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Checkout immutable source
+      - name: Validate governed deployment authorization
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          echo DEPLOY_CONFIRMATION=PASS
+          echo EXACT_SHA_FORMAT=PASS
+          echo DISPATCH_REF_MAIN=PASS
+
+      - name: Checkout immutable approved revision
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
           persist-credentials: false
+
+      - name: Verify protected main before production access
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          test "$(git status --porcelain)" = ""
+          echo PROTECTED_MAIN_SHA_MATCH=PASS
 
       - name: Use Node 22
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -132,8 +168,14 @@ jobs:
       - name: Apply additive D1 migrations
         shell: bash
         working-directory: commercial-runtime
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
           set -euo pipefail
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          echo D1_MUTATION_SHA_GATE=PASS
           npx wrangler d1 migrations apply "$D1_NAME" --remote --config wrangler.d1.jsonc
           echo 'D1_MIGRATIONS=PASS'
 
@@ -156,6 +198,7 @@ jobs:
 
   deploy-worker:
     needs: prepare-production-d1
+    if: ${{ inputs.confirmation == 'DEPLOY_COMMERCIAL_RUNTIME' && needs.prepare-production-d1.result == 'success' }}
     environment:
       name: jadeltechrd
     runs-on: ubuntu-24.04
@@ -167,10 +210,24 @@ jobs:
       D1_DATABASE_ID: ${{ needs.prepare-production-d1.outputs.database_id }}
       D1_DATABASE_HASH: ${{ needs.prepare-production-d1.outputs.database_hash }}
     steps:
-      - name: Checkout immutable source
+      - name: Checkout immutable approved revision
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
           persist-credentials: false
+
+      - name: Verify protected main before Worker access
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          test "$(git status --porcelain)" = ""
+          echo WORKER_PROTECTED_MAIN_SHA_MATCH=PASS
 
       - name: Use Node 22
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -272,7 +329,10 @@ jobs:
               PUBLIC_ORIGIN:"https://jadeltechrd.com",
               PUBLIC_TURNSTILE_SITEKEY:$sitekey,
               TURNSTILE_EXPECTED_HOSTNAME:"jadeltechrd.com",
-              PAYPAL_ENVIRONMENT:"live"
+              PAYPAL_ENVIRONMENT:"live",
+              PRODUCTION_AUTHORIZED:"false",
+              FINANCIAL_EXECUTION_AUTHORIZED:"false",
+              MAX_AUTONOMOUS_CAPITAL_USD:"0"
             },
             d1_databases:[{
               binding:"DB",
@@ -310,8 +370,13 @@ jobs:
         working-directory: commercial-runtime
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ steps.cloudflare.outputs.account_id }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
           set -euo pipefail
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          echo WORKER_MUTATION_SHA_GATE=PASS
           npx wrangler deploy --config wrangler.deploy.jsonc
           printf '%s' "$ADMIN_API_TOKEN" | npx wrangler secret put ADMIN_API_TOKEN --config wrangler.deploy.jsonc
           echo 'WORKER_DEPLOY_NO_ROUTE_MUTATION_ADMIN_SECRET_RECONCILED=PASS'
