@@ -30,6 +30,7 @@ function eventBodyWithType(eventType) {
 
 function paypalEnv(db) {
   return {
+    PAYPAL_ENVIRONMENT: "live",
     PAYPAL_CLIENT_ID: "client",
     PAYPAL_CLIENT_SECRET: "secret",
     PAYPAL_WEBHOOK_ID: "WH-ID",
@@ -148,6 +149,54 @@ test("verified PayPal webhook stores event and ledger as human-reconciled", asyn
   assert.equal(statements.some((entry) => entry.values.includes("REQUIRES_HUMAN")), true);
 });
 
+
+test("live webhook verification uses only PayPal live REST endpoints", async () => {
+  const seen = [];
+  const db = {
+    prepare() {
+      return {
+        bind() {
+          return { first: async () => null };
+        }
+      };
+    },
+    batch: async (items) => {
+      assert.equal(items.length, 2);
+    }
+  };
+  const response = await handlePayPalWebhook(new Request("https://intake.jadeltechrd.com/api/v1/paypal/webhooks", {
+    method: "POST",
+    headers,
+    body: eventBody("WH-LIVE"),
+  }), paypalEnv(db), {
+    fetchImpl: async (url) => {
+      seen.push(String(url));
+      if (String(url).endsWith("/v1/oauth2/token")) return Response.json({ access_token: "live-token" });
+      return Response.json({ verification_status: "SUCCESS" });
+    }
+  });
+  assert.equal(response.status, 202);
+  assert.equal(seen.length, 2);
+  assert.equal(seen.every((url) => url.startsWith("https://api-m.paypal.com/")), true);
+});
+
+test("live webhook rejects sandbox certificate host before OAuth", async () => {
+  let fetched = false;
+  let wrote = false;
+  const response = await handlePayPalWebhook(new Request("https://intake.jadeltechrd.com/api/v1/paypal/webhooks", {
+    method: "POST",
+    headers: { ...headers, "paypal-cert-url": "https://api-m.sandbox.paypal.com/certs/test.pem" },
+    body: eventBody("WH-CROSS-ENV"),
+  }), paypalEnv({ batch: async () => { wrote = true; } }), {
+    fetchImpl: async () => {
+      fetched = true;
+      return Response.json({});
+    }
+  });
+  assert.equal(response.status, 403);
+  assert.equal(fetched, false);
+  assert.equal(wrote, false);
+});
 
 test("sandbox webhook verification uses only PayPal sandbox REST endpoints", async () => {
   const seen = [];
