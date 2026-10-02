@@ -192,10 +192,32 @@ jobs:
               if fragment not in text:
                   raise SystemExit(f"{label}=FAIL")
 
-          if re.search(r"^\s*push:\s*$", text, re.MULTILINE):
-              raise SystemExit("PAGES_AUTO_PUSH_DEPLOY=FAIL")
-          if re.search(r"^\s*pull_request:\s*$", text, re.MULTILINE):
-              raise SystemExit("PAGES_PR_DEPLOY=FAIL")
+          lines = text.splitlines()
+          on_index = next(
+              (i for i, line in enumerate(lines) if re.match(r"^on:\s*$", line)),
+              None,
+          )
+          if on_index is None:
+              raise SystemExit("PAGES_ON_BLOCK=FAIL")
+
+          on_indent = len(lines[on_index]) - len(lines[on_index].lstrip())
+          trigger_keys = set()
+          for line in lines[on_index + 1:]:
+              stripped = line.strip()
+              if not stripped or stripped.startswith("#"):
+                  continue
+              indent = len(line) - len(line.lstrip())
+              if indent <= on_indent:
+                  break
+              if indent == on_indent + 2:
+                  match = re.match(r"([A-Za-z_][A-Za-z0-9_-]*)\s*:", stripped)
+                  if match:
+                      trigger_keys.add(match.group(1))
+
+          if trigger_keys != {"workflow_dispatch"}:
+              raise SystemExit(
+                  "PAGES_TRIGGER_KEYS=FAIL actual=" + ",".join(sorted(trigger_keys))
+              )
 
           require("workflow_dispatch:", "PAGES_WORKFLOW_DISPATCH")
           require("expected_sha:", "PAGES_EXPECTED_SHA_INPUT")
@@ -204,7 +226,8 @@ jobs:
           require('test "$GITHUB_REF" = "refs/heads/main"', "PAGES_MAIN_REF_GATE")
           require('test "$GITHUB_SHA" = "$EXPECTED_SHA"', "PAGES_DISPATCH_SHA_GATE")
           require("PAGES_PROTECTED_MAIN_SHA_MATCH=PASS", "PAGES_MAIN_SHA_RECHECK")
-          require("ref: ${{ inputs.expected_sha }}", "PAGES_IMMUTABLE_CHECKOUT")
+          expected_checkout_ref = "ref: $" + "{{ inputs.expected_sha }}"
+          require(expected_checkout_ref, "PAGES_IMMUTABLE_CHECKOUT")
           require("actions/deploy-pages@", "PAGES_DEPLOY_ACTION")
 
           print("PAGES_DEPLOY_GOVERNANCE=PASS")
