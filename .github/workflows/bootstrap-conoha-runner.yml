@@ -22,8 +22,8 @@ jobs:
     timeout-minutes: 15
     environment: production-bootstrap
     env:
-      RUNNER_NAME: jadel-agent-runtime
-      RUNNER_LABELS: jadel-agent-runtime
+      TARGET_RUNNER_NAME: jadel-agent-runtime
+      TARGET_RUNNER_LABELS: jadel-agent-runtime
       VPS_HOST: ${{ secrets.VPS_HOST }}
       VPS_USER: ${{ secrets.VPS_USER }}
       VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT }}
@@ -145,7 +145,7 @@ jobs:
             -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             -o ConnectTimeout=15 \
             -- "$VPS_USER@$VPS_HOST" \
-            "sudo -n env RUNNER_REG_TOKEN='$REG_TOKEN' RUNNER_DOWNLOAD_URL='$RUNNER_URL' RUNNER_SHA256='$RUNNER_SHA' RUNNER_NAME='$RUNNER_NAME' RUNNER_LABELS='$RUNNER_LABELS' REPO_URL='https://github.com/$GITHUB_REPOSITORY' bash -s" \
+            "sudo -n env RUNNER_REG_TOKEN='$REG_TOKEN' RUNNER_DOWNLOAD_URL='$RUNNER_URL' RUNNER_SHA256='$RUNNER_SHA' RUNNER_NAME='$TARGET_RUNNER_NAME' RUNNER_LABELS='$TARGET_RUNNER_LABELS' REPO_URL='https://github.com/$GITHUB_REPOSITORY' bash -s" \
             < ops/runner/bootstrap-self-hosted-runner.sh
 
       - name: Verify runner is Online and Idle in GitHub
@@ -156,7 +156,7 @@ jobs:
           auth=(-H 'Accept: application/vnd.github+json' -H "Authorization: Bearer $RUNNER_ADMIN_TOKEN" -H 'X-GitHub-Api-Version: 2026-03-10')
           for attempt in $(seq 1 12); do
             runners="$(curl -fsS "${auth[@]}" "$api/repos/$GITHUB_REPOSITORY/actions/runners?per_page=100")"
-            state="$(python3 -c 'import json,sys; name=sys.argv[1]; data=json.load(sys.stdin); found=next((r for r in data.get("runners",[]) if r.get("name")==name),None); required={"self-hosted","linux","x64","jadel-agent-runtime"}; labels={x.get("name","").lower() for x in (found or {}).get("labels",[])}; print("MISSING" if found is None else ("READY" if found.get("status")=="online" and found.get("busy") is False and required.issubset(labels) else "NOT_READY:%s:%s"%(found.get("status"),found.get("busy"))))' "$RUNNER_NAME" <<<"$runners")"
+            state="$(python3 -c 'import json,sys; name=sys.argv[1]; data=json.load(sys.stdin); found=next((r for r in data.get("runners",[]) if r.get("name")==name),None); required={"self-hosted","linux","x64","jadel-agent-runtime"}; labels={x.get("name","").lower() for x in (found or {}).get("labels",[])}; print("MISSING" if found is None else ("READY" if found.get("status")=="online" and found.get("busy") is False and required.issubset(labels) else "NOT_READY:%s:%s"%(found.get("status"),found.get("busy"))))' "$TARGET_RUNNER_NAME" <<<"$runners")"
             echo "RUNNER_STATE_ATTEMPT_${attempt}=$state"
             if [ "$state" = READY ]; then
               echo 'RUNNER_ONLINE=PASS'
