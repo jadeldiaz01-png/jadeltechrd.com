@@ -160,9 +160,9 @@ jobs:
         run: |
           set -euo pipefail
           workflow="$GITHUB_WORKSPACE/.github/workflows/deploy-commercial-runtime.yml"
-          ! grep -Fq 'PAYPAL_ENVIRONMENT:' "$workflow"
-          ! grep -Fq 'wrangler secret put' "$workflow"
-          ! grep -Fq 'ADMIN_API_TOKEN_RAW:' "$workflow"
+          ! grep -Eq 'PAYPAL_[A-Z_]*ENVIRONMENT:' "$workflow"
+          ! grep -Eq 'wrangler[[:space:]]+secret[[:space:]]+put' "$workflow"
+          ! grep -Eq 'ADMIN_API_TOKEN_[A-Z_]*RAW:' "$workflow"
           grep -Fq 'keep_vars:true' "$workflow"
           grep -Fq '0007_offer_attribution.sql' "$workflow"
           grep -Fq 'npx wrangler deploy --keep-vars' "$workflow"
