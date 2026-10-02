@@ -360,12 +360,13 @@ test("sandbox-gated payment order creates a PayPal order without capture", async
   assert.match(orderRequest.options.headers["paypal-request-id"], /^[0-9a-f-]{36}$/i);
 });
 
-test("PayPal order creation flag cannot be enabled against live environment", async () => {
-  let wrote = false;
+function livePaymentOrderFixture() {
+  const batches = [];
+  const updates = [];
   const db = {
     prepare(sql) {
       return {
-        bind() {
+        bind(...values) {
           return {
             async first() {
               if (sql.includes("FROM quotes q JOIN project_requests")) {
@@ -379,14 +380,28 @@ test("PayPal order creation flag cannot be enabled against live environment", as
                   policy_status:"ALLOWED",
                 };
               }
+              if (sql.includes("FROM payment_orders")) return null;
               return null;
+            },
+            async run() {
+              updates.push({ sql, values });
+              return {};
             },
           };
         },
       };
     },
-    async batch() { wrote = true; return []; },
+    async batch(items) {
+      batches.push(items);
+      return [];
+    },
   };
+  return { db, batches, updates };
+}
+
+test("live PayPal order creation remains disabled without dedicated live gate", async () => {
+  const { db, batches } = livePaymentOrderFixture();
+  let fetched = false;
   const response = await handleAdminPaymentOrderCreate(adminRequest("/api/v1/admin/payment-orders", {
     quote_id:QUOTE_ID,
   }), {
@@ -396,9 +411,127 @@ test("PayPal order creation flag cannot be enabled against live environment", as
     PAYPAL_ENVIRONMENT:"live",
     PAYPAL_CLIENT_ID:"live-client",
     PAYPAL_CLIENT_SECRET:"live-secret",
+    PRODUCTION_AUTHORIZED:"true",
+    MAX_AUTONOMOUS_CAPITAL_USD:"0",
+  }, {
+    fetchImpl: async () => {
+      fetched = true;
+      throw new Error("provider must not be called");
+    },
   });
   const body = await response.json();
   assert.equal(response.status, 409);
-  assert.equal(body.error, "PAYPAL_ORDER_CREATION_SANDBOX_ONLY");
-  assert.equal(wrote, false);
+  assert.equal(body.error, "PAYPAL_LIVE_ORDER_CREATION_DISABLED");
+  assert.equal(fetched, false);
+  assert.equal(batches.length, 0);
+});
+
+test("live PayPal order creation remains disabled while production authorization is false", async () => {
+  const { db, batches } = livePaymentOrderFixture();
+  let fetched = false;
+  const response = await handleAdminPaymentOrderCreate(adminRequest("/api/v1/admin/payment-orders", {
+    quote_id:QUOTE_ID,
+  }), {
+    ADMIN_API_TOKEN:"admin-secret-token",
+    DB:db,
+    PAYPAL_ORDER_CREATION_ENABLED:"true",
+    PAYPAL_LIVE_ORDER_CREATION_ENABLED:"true",
+    PAYPAL_ENVIRONMENT:"live",
+    PAYPAL_CLIENT_ID:"live-client",
+    PAYPAL_CLIENT_SECRET:"live-secret",
+    PRODUCTION_AUTHORIZED:"false",
+    MAX_AUTONOMOUS_CAPITAL_USD:"0",
+  }, {
+    fetchImpl: async () => {
+      fetched = true;
+      throw new Error("provider must not be called");
+    },
+  });
+  const body = await response.json();
+  assert.equal(response.status, 409);
+  assert.equal(body.error, "PAYPAL_PRODUCTION_NOT_AUTHORIZED");
+  assert.equal(fetched, false);
+  assert.equal(batches.length, 0);
+});
+
+test("live PayPal order creation rejects autonomous capital above zero", async () => {
+  const { db, batches } = livePaymentOrderFixture();
+  let fetched = false;
+  const response = await handleAdminPaymentOrderCreate(adminRequest("/api/v1/admin/payment-orders", {
+    quote_id:QUOTE_ID,
+  }), {
+    ADMIN_API_TOKEN:"admin-secret-token",
+    DB:db,
+    PAYPAL_ORDER_CREATION_ENABLED:"true",
+    PAYPAL_LIVE_ORDER_CREATION_ENABLED:"true",
+    PAYPAL_ENVIRONMENT:"live",
+    PAYPAL_CLIENT_ID:"live-client",
+    PAYPAL_CLIENT_SECRET:"live-secret",
+    PRODUCTION_AUTHORIZED:"true",
+    MAX_AUTONOMOUS_CAPITAL_USD:"1",
+  }, {
+    fetchImpl: async () => {
+      fetched = true;
+      throw new Error("provider must not be called");
+    },
+  });
+  const body = await response.json();
+  assert.equal(response.status, 409);
+  assert.equal(body.error, "PAYPAL_AUTONOMOUS_CAPITAL_NOT_ALLOWED");
+  assert.equal(fetched, false);
+  assert.equal(batches.length, 0);
+});
+
+test("fully gated live PayPal order creation uses live API without capture", async () => {
+  const { db, batches, updates } = livePaymentOrderFixture();
+  const seen = [];
+  const response = await handleAdminPaymentOrderCreate(adminRequest("/api/v1/admin/payment-orders", {
+    quote_id:QUOTE_ID,
+  }), {
+    ADMIN_API_TOKEN:"admin-secret-token",
+    DB:db,
+    PAYPAL_ORDER_CREATION_ENABLED:"true",
+    PAYPAL_LIVE_ORDER_CREATION_ENABLED:"true",
+    PAYPAL_ENVIRONMENT:"live",
+    PAYPAL_CLIENT_ID:"live-client",
+    PAYPAL_CLIENT_SECRET:"live-secret",
+    PRODUCTION_AUTHORIZED:"true",
+    MAX_AUTONOMOUS_CAPITAL_USD:"0",
+  }, {
+    fetchImpl: async (url, options = {}) => {
+      seen.push({ url:String(url), options });
+      if (String(url).endsWith("/v1/oauth2/token")) {
+        return Response.json({ access_token:"live-token" });
+      }
+      if (String(url).endsWith("/v2/checkout/orders")) {
+        const requestBody = JSON.parse(options.body);
+        assert.equal(requestBody.intent, "CAPTURE");
+        assert.equal(requestBody.purchase_units[0].amount.value, "250.00");
+        assert.equal(requestBody.purchase_units[0].amount.currency_code, "USD");
+        assert.equal(requestBody.purchase_units[0].invoice_id, QUOTE_ID);
+        return Response.json({
+          id:"LIVE-PAYPAL-ORDER-123",
+          status:"PAYER_ACTION_REQUIRED",
+          links:[{
+            rel:"payer-action",
+            href:"https://www.paypal.com/checkoutnow?token=LIVE-PAYPAL-ORDER-123",
+          }],
+        }, { status:201 });
+      }
+      throw new Error("unexpected provider URL");
+    },
+  });
+
+  const body = await response.json();
+  assert.equal(response.status, 201);
+  assert.equal(body.provider_order_id, "LIVE-PAYPAL-ORDER-123");
+  assert.equal(body.provider_environment, "live");
+  assert.equal(body.provider_call_performed, true);
+  assert.equal(body.capture_performed, false);
+  assert.equal(body.financial_execution_authorized, false);
+  assert.equal(seen.length, 2);
+  assert.equal(seen.every((entry) => entry.url.startsWith("https://api-m.paypal.com/")), true);
+  assert.equal(seen.some((entry) => /\/capture(?:$|[/?])/.test(entry.url)), false);
+  assert.equal(batches.length, 1);
+  assert.equal(updates.length, 1);
 });
