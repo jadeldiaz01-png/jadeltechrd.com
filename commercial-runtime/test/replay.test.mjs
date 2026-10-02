@@ -8,6 +8,12 @@ async function fingerprint(input) {
     email: input.email,
     company: input.company || "",
     service_ids: input.service_ids,
+    offer_id: input.offer_id || "",
+    offer_landing_path: input.offer_landing_path || "",
+    utm_source: input.utm_source || "",
+    utm_medium: input.utm_medium || "",
+    utm_campaign: input.utm_campaign || "",
+    utm_content: input.utm_content || "",
     notes: input.notes || "",
     locale: input.locale || "es-DO",
   });
