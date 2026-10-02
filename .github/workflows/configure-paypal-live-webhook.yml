@@ -1,0 +1,186 @@
+name: Configure PayPal LIVE webhook credentials
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact protected main SHA approved for PayPal LIVE webhook credential reconciliation
+        required: true
+        type: string
+      confirmation:
+        description: Type CONFIGURE_PAYPAL_LIVE_WEBHOOK
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jadel-paypal-live-webhook-credentials
+  cancel-in-progress: false
+
+env:
+  DOMAIN: jadeltechrd.com
+  API_HOST: intake.jadeltechrd.com
+  WORKER_NAME: jadel-commercial-runtime
+  WRANGLER_VERSION: 4.127.1
+
+jobs:
+  reconcile:
+    if: ${{ inputs.confirmation == 'CONFIGURE_PAYPAL_LIVE_WEBHOOK' }}
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+      PAYPAL_CLIENT_ID_RAW: ${{ secrets.PAYPAL_CLIENT_ID }}
+      PAYPAL_CLIENT_SECRET_RAW: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      PAYPAL_WEBHOOK_ID_RAW: ${{ secrets.PAYPAL_WEBHOOK_ID }}
+    steps:
+      - name: Validate governed credential authorization
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          echo PAYPAL_LIVE_WEBHOOK_CONFIRMATION=PASS
+          echo EXACT_SHA_FORMAT=PASS
+          echo DISPATCH_REF_MAIN=PASS
+
+      - name: Checkout immutable approved revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify protected main and fail-closed authority
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          test "$(git status --porcelain)" = ""
+
+          deploy=.github/workflows/deploy-commercial-runtime.yml
+          grep -Fq 'PAYPAL_ENVIRONMENT:"live"' "$deploy"
+          grep -Fq 'PAYPAL_ORDER_CREATION_ENABLED:"false"' "$deploy"
+          grep -Fq 'PAYPAL_LIVE_ORDER_CREATION_ENABLED:"false"' "$deploy"
+          grep -Fq 'PRODUCTION_AUTHORIZED:"false"' "$deploy"
+          grep -Fq 'FINANCIAL_EXECUTION_AUTHORIZED:"false"' "$deploy"
+          grep -Fq 'MAX_AUTONOMOUS_CAPITAL_USD:"0"' "$deploy"
+          grep -Fq 'if (!paypalOrderCreationEnabled(env)) return { enabled: false, environment: null };' commercial-runtime/src/worker.mjs
+          ! grep -Fq '/capture' commercial-runtime/src/worker.mjs
+
+          echo PROTECTED_MAIN_SHA_MATCH=PASS
+          echo PAYPAL_LIVE_AUTHORITY_FAIL_CLOSED=PASS
+
+      - name: Use Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Install pinned Wrangler outside checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          wrangler_dir="$RUNNER_TEMP/wrangler-${WRANGLER_VERSION}"
+          mkdir -p "$wrangler_dir"
+          npm install --prefix "$wrangler_dir" --no-save --ignore-scripts --package-lock=false "wrangler@${WRANGLER_VERSION}"
+          wrangler_bin="$wrangler_dir/node_modules/.bin/wrangler"
+          test -x "$wrangler_bin"
+          actual=$("$wrangler_bin" --version | tr -d '\r\n[:space:]')
+          test "$actual" = "$WRANGLER_VERSION"
+          printf 'WRANGLER_BIN=%s\n' "$wrangler_bin" >> "$GITHUB_ENV"
+          echo "WRANGLER_VERSION=PASS version=${actual}"
+          echo WRANGLER_INSTALL_OUTSIDE_CHECKOUT=PASS
+
+      - name: Reconcile only PayPal LIVE webhook credentials
+        shell: bash
+        working-directory: commercial-runtime
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          test -n "${WRANGLER_BIN:-}"
+          test -x "$WRANGLER_BIN"
+
+          wrangler() {
+            "$WRANGLER_BIN" "$@"
+          }
+
+          normalize() {
+            printf '%s' "$1" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
+          }
+
+          cf_token=$(normalize "${CLOUDFLARE_API_TOKEN_RAW:-}")
+          paypal_client_id=$(normalize "${PAYPAL_CLIENT_ID_RAW:-}")
+          paypal_client_secret=$(normalize "${PAYPAL_CLIENT_SECRET_RAW:-}")
+          paypal_webhook_id=$(normalize "${PAYPAL_WEBHOOK_ID_RAW:-}")
+
+          test -n "$cf_token" || { echo CLOUDFLARE_WORKER_TOKEN_PRESENT=NO >&2; exit 2; }
+          test -n "$paypal_client_id" || { echo PAYPAL_CLIENT_ID_PRESENT=NO >&2; exit 3; }
+          test -n "$paypal_client_secret" || { echo PAYPAL_CLIENT_SECRET_PRESENT=NO >&2; exit 3; }
+          test -n "$paypal_webhook_id" || { echo PAYPAL_WEBHOOK_ID_PRESENT=NO >&2; exit 3; }
+
+          echo "::add-mask::$cf_token"
+          echo "::add-mask::$paypal_client_id"
+          echo "::add-mask::$paypal_client_secret"
+          echo "::add-mask::$paypal_webhook_id"
+
+          export CLOUDFLARE_API_TOKEN="$cf_token"
+
+          zones=$(curl --fail-with-body -sS \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50")
+          test "$(jq -r '.success' <<<"$zones")" = true
+          account_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .account.id' <<<"$zones" | head -n1)
+          test -n "$account_id" && test "$account_id" != null
+          export CLOUDFLARE_ACCOUNT_ID="$account_id"
+
+          code=$(curl -sS -o /tmp/worker.json -w '%{http_code}' \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/content/v2" || true)
+          test "$code" = 200 || { echo "WORKER_SCRIPT_EDITOR_PREFLIGHT=FAIL_HTTP_${code}" >&2; exit 10; }
+
+          assert_main() {
+            git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+            test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+            test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+            test "$(git status --porcelain)" = ""
+          }
+
+          assert_main
+          printf '%s' "$paypal_client_id" | npx wrangler secret put PAYPAL_CLIENT_ID --name "$WORKER_NAME"
+          echo PAYPAL_CLIENT_ID_RECONCILED=PASS
+
+          assert_main
+          printf '%s' "$paypal_client_secret" | npx wrangler secret put PAYPAL_CLIENT_SECRET --name "$WORKER_NAME"
+          echo PAYPAL_CLIENT_SECRET_RECONCILED=PASS
+
+          assert_main
+          printf '%s' "$paypal_webhook_id" | npx wrangler secret put PAYPAL_WEBHOOK_ID --name "$WORKER_NAME"
+          echo PAYPAL_WEBHOOK_ID_RECONCILED=PASS
+
+      - name: Verify invalid PayPal webhook signature is rejected
+        shell: bash
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/paypal-invalid-signature.json -w '%{http_code}' \
+            -X POST \
+            -H 'content-type: application/json' \
+            --data '{"id":"governed-invalid-signature-canary"}' \
+            "https://${API_HOST}/api/v1/paypal/webhooks")
+          test "$code" = 403 || {
+            echo "PAYPAL_LIVE_WEBHOOK_INVALID_SIGNATURE_CANARY=FAIL_HTTP_${code}" >&2
+            exit 20
+          }
+          test "$(jq -r '.error // empty' /tmp/paypal-invalid-signature.json)" = "PAYPAL_WEBHOOK_REJECTED"
+          echo PAYPAL_LIVE_WEBHOOK_INVALID_SIGNATURE_CANARY=PASS
