@@ -11,13 +11,23 @@ const PAYPAL_API_BASES = new Map([
   ["live", "https://api-m.paypal.com"],
   ["sandbox", "https://api-m.sandbox.paypal.com"],
 ]);
-const PAYPAL_CERT_HOSTS = new Set(["api-m.paypal.com", "api-m.sandbox.paypal.com", "api.paypal.com", "api.sandbox.paypal.com"]);
+const PAYPAL_CERT_HOSTS = new Map([
+  ["live", new Set(["api-m.paypal.com", "api.paypal.com"])],
+  ["sandbox", new Set(["api-m.sandbox.paypal.com", "api.sandbox.paypal.com"])],
+]);
+const PAYPAL_CHECKOUT_HOSTS = new Map([
+  ["live", new Set(["www.paypal.com"])],
+  ["sandbox", new Set(["www.sandbox.paypal.com"])],
+]);
+
+function paypalEnvironment(env) {
+  const mode = String(env?.PAYPAL_ENVIRONMENT || "").trim().toLowerCase();
+  if (!PAYPAL_API_BASES.has(mode)) throw new Error("PAYPAL_ENVIRONMENT_INVALID");
+  return mode;
+}
 
 function paypalApiBase(env) {
-  const mode = String(env?.PAYPAL_ENVIRONMENT || "live").trim().toLowerCase();
-  const base = PAYPAL_API_BASES.get(mode);
-  if (!base) throw new Error("PAYPAL_ENVIRONMENT_INVALID");
-  return base;
+  return PAYPAL_API_BASES.get(paypalEnvironment(env));
 }
 const PAYPAL_LEDGER_EVENT_STATES = new Map([
   ["PAYMENT.CAPTURE.COMPLETED", "REQUIRES_HUMAN"],
@@ -294,14 +304,29 @@ function paypalOrderCreationEnabled(env) {
   return String(env?.PAYPAL_ORDER_CREATION_ENABLED || "").trim().toLowerCase() === "true";
 }
 
-function validateSandboxPayPalOrderCreation(env) {
-  if (!paypalOrderCreationEnabled(env)) return false;
-  const mode = String(env?.PAYPAL_ENVIRONMENT || "").trim().toLowerCase();
-  if (mode !== "sandbox") throw new Error("PAYPAL_ORDER_CREATION_SANDBOX_ONLY");
+function envFlagTrue(env, name) {
+  return String(env?.[name] || "").trim().toLowerCase() === "true";
+}
+
+function validatePayPalOrderCreation(env) {
+  if (!paypalOrderCreationEnabled(env)) return { enabled: false, environment: null };
+  const environment = paypalEnvironment(env);
   if (!env?.PAYPAL_CLIENT_ID || !env?.PAYPAL_CLIENT_SECRET) {
     throw new Error("PAYPAL_ORDER_CREATION_NOT_CONFIGURED");
   }
-  return true;
+  if (environment === "live") {
+    if (!envFlagTrue(env, "PAYPAL_LIVE_ORDER_CREATION_ENABLED")) {
+      throw new Error("PAYPAL_LIVE_ORDER_CREATION_DISABLED");
+    }
+    if (!envFlagTrue(env, "PRODUCTION_AUTHORIZED")) {
+      throw new Error("PAYPAL_PRODUCTION_NOT_AUTHORIZED");
+    }
+    const autonomousCapital = Number(String(env?.MAX_AUTONOMOUS_CAPITAL_USD ?? "0").trim());
+    if (!Number.isFinite(autonomousCapital) || autonomousCapital !== 0) {
+      throw new Error("PAYPAL_AUTONOMOUS_CAPITAL_NOT_ALLOWED");
+    }
+  }
+  return { enabled: true, environment };
 }
 
 function paypalCheckoutRedirectUrl(value, fallbackPath) {
@@ -322,9 +347,10 @@ function minorToPayPalAmount(value) {
   return (value / 100).toFixed(2);
 }
 
-async function createSandboxPayPalOrder(env, paymentOrderId, quote, fetchImpl = fetch) {
-  validateSandboxPayPalOrderCreation(env);
-  const apiBase = paypalApiBase(env);
+async function createPayPalOrder(env, paymentOrderId, quote, fetchImpl = fetch) {
+  const authorization = validatePayPalOrderCreation(env);
+  if (!authorization.enabled) throw new Error("PAYPAL_ORDER_CREATION_DISABLED");
+  const apiBase = PAYPAL_API_BASES.get(authorization.environment);
   const token = await paypalAccessToken(env, fetchImpl);
   const returnUrl = paypalCheckoutRedirectUrl(env.PAYPAL_RETURN_URL, "?paypal=approved");
   const cancelUrl = paypalCheckoutRedirectUrl(env.PAYPAL_CANCEL_URL, "?paypal=cancelled");
@@ -374,13 +400,15 @@ async function createSandboxPayPalOrder(env, paymentOrderId, quote, fetchImpl = 
   let approval;
   try { approval = new URL(approvalUrl); }
   catch { throw new Error("PAYPAL_APPROVAL_URL_INVALID"); }
-  if (approval.protocol !== "https:" || !approval.hostname.endsWith("paypal.com")) {
+  const allowedCheckoutHosts = PAYPAL_CHECKOUT_HOSTS.get(authorization.environment);
+  if (approval.protocol !== "https:" || !allowedCheckoutHosts?.has(approval.hostname)) {
     throw new Error("PAYPAL_APPROVAL_URL_INVALID");
   }
   return {
     providerOrderId,
     approvalUrl: approval.toString(),
     providerStatus: String(body?.status || "").slice(0, 32),
+    providerEnvironment: authorization.environment,
   };
 }
 
@@ -398,15 +426,17 @@ async function verifyPayPalWebhook(headers, webhookEvent, env, fetchImpl = fetch
   if (Object.entries(required).some(([key, value]) => key !== "webhook_event" && !value)) {
     return { ok: false, reason: "PAYPAL_HEADERS_MISSING" };
   }
+  const environment = paypalEnvironment(env);
   try {
     const parsedCertUrl = new URL(certUrl);
-    if (parsedCertUrl.protocol !== "https:" || !PAYPAL_CERT_HOSTS.has(parsedCertUrl.hostname)) {
+    const allowedCertHosts = PAYPAL_CERT_HOSTS.get(environment);
+    if (parsedCertUrl.protocol !== "https:" || !allowedCertHosts?.has(parsedCertUrl.hostname)) {
       return { ok: false, reason: "PAYPAL_CERT_URL_REJECTED" };
     }
   } catch {
     return { ok: false, reason: "PAYPAL_CERT_URL_REJECTED" };
   }
-  const apiBase = paypalApiBase(env);
+  const apiBase = PAYPAL_API_BASES.get(environment);
   const token = await paypalAccessToken(env, fetchImpl);
   const response = await fetchImpl(`${apiBase}/v1/notifications/verify-webhook-signature`, {
     method: "POST",
@@ -868,14 +898,20 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
     return json({ error: "QUOTE_NOT_READY_FOR_PAYMENT" }, 409);
   }
 
-  let providerEnabled = false;
+  let providerGate = { enabled: false, environment: null };
   try {
-    providerEnabled = validateSandboxPayPalOrderCreation(env);
+    providerGate = validatePayPalOrderCreation(env);
   } catch (error) {
     const code = String(error?.message || "PAYPAL_ORDER_CREATION_NOT_CONFIGURED");
-    const status = code === "PAYPAL_ORDER_CREATION_SANDBOX_ONLY" ? 409 : 503;
-    return json({ error: code }, status);
+    const policyDenied = new Set([
+      "PAYPAL_LIVE_ORDER_CREATION_DISABLED",
+      "PAYPAL_PRODUCTION_NOT_AUTHORIZED",
+      "PAYPAL_AUTONOMOUS_CAPITAL_NOT_ALLOWED",
+    ]);
+    return json({ error: code }, policyDenied.has(code) ? 409 : 503);
   }
+  const providerEnabled = providerGate.enabled;
+  const providerEnvironment = providerGate.environment;
 
   let existing = await env.DB.prepare(
     "SELECT payment_order_id,status,provider_order_id,provider_approval_url,amount_minor,currency_code,project_id FROM payment_orders WHERE quote_id=? AND status IN ('PENDING','COMPLETED') ORDER BY created_at DESC LIMIT 1"
@@ -898,7 +934,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
       provider:"paypal",
       provider_order_id:existing.provider_order_id,
       approval_url:existing.provider_approval_url || null,
-      provider_environment:"sandbox",
+      provider_environment:providerEnvironment,
       provider_call_performed:false,
       capture_performed:false,
       financial_execution_authorized:false,
@@ -938,7 +974,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
           provider:"paypal",
           provider_order_id:raced.provider_order_id,
           approval_url:raced.provider_approval_url || null,
-          provider_environment:"sandbox",
+          provider_environment:providerEnvironment,
           provider_call_performed:false,
           capture_performed:false,
           financial_execution_authorized:false,
@@ -968,13 +1004,13 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
 
   let provider;
   try {
-    provider = await createSandboxPayPalOrder(env, paymentOrderId, quote, deps.fetchImpl);
+    provider = await createPayPalOrder(env, paymentOrderId, quote, deps.fetchImpl);
   } catch (error) {
     return json({
       error:String(error?.message || "PAYPAL_ORDER_CREATE_FAILED"),
       payment_order_id:paymentOrderId,
       retryable:true,
-      provider_environment:"sandbox",
+      provider_environment:providerEnvironment,
       capture_performed:false,
       financial_execution_authorized:false,
     }, 502);
@@ -990,7 +1026,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
       payment_order_id:paymentOrderId,
       provider_order_id:provider.providerOrderId,
       retryable:true,
-      provider_environment:"sandbox",
+      provider_environment:providerEnvironment,
       capture_performed:false,
       financial_execution_authorized:false,
     }, 503);
@@ -1007,7 +1043,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
     provider_order_id:provider.providerOrderId,
     approval_url:provider.approvalUrl,
     provider_status:provider.providerStatus,
-    provider_environment:"sandbox",
+    provider_environment:providerEnvironment,
     provider_call_performed:true,
     capture_performed:false,
     financial_execution_authorized:false,

@@ -271,7 +271,8 @@ jobs:
             vars:{
               PUBLIC_ORIGIN:"https://jadeltechrd.com",
               PUBLIC_TURNSTILE_SITEKEY:$sitekey,
-              TURNSTILE_EXPECTED_HOSTNAME:"jadeltechrd.com"
+              TURNSTILE_EXPECTED_HOSTNAME:"jadeltechrd.com",
+              PAYPAL_ENVIRONMENT:"live"
             },
             d1_databases:[{
               binding:"DB",
