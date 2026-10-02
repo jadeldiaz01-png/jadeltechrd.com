@@ -155,6 +155,21 @@ jobs:
           jq -e '.d1_databases[0].database_id | length > 10' commercial-runtime/wrangler.d1.jsonc >/dev/null
           echo 'D1_MIGRATION_CONFIG=PASS'
 
+      - name: Validate M3 non-financial deployment contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow="$GITHUB_WORKSPACE/.github/workflows/deploy-commercial-runtime.yml"
+          ! grep -Eq 'PAYPAL_[A-Z_]*ENVIRONMENT:' "$workflow"
+          ! grep -Eq 'wrangler[[:space:]]+secret[[:space:]]+put' "$workflow"
+          ! grep -Eq 'ADMIN_API_TOKEN_[A-Z_]*RAW:' "$workflow"
+          grep -Fq 'PAYPAL_ORDER_CREATION_ENABLED:"false"' "$workflow"
+          grep -Fq 'PAYPAL_LIVE_ORDER_CREATION_ENABLED:"false"' "$workflow"
+          grep -Fq 'keep_vars:true' "$workflow"
+          grep -Fq '0007_offer_attribution.sql' "$workflow"
+          grep -Fq 'npx wrangler deploy --keep-vars' "$workflow"
+          echo M3_NONFINANCIAL_DEPLOY_CONTRACT=PASS
+
       - name: Install pinned Wrangler
         shell: bash
         working-directory: commercial-runtime
@@ -165,7 +180,7 @@ jobs:
           test "$actual" = "$WRANGLER_VERSION" || { echo "WRANGLER_VERSION_MISMATCH expected=$WRANGLER_VERSION actual=$actual" >&2; exit 40; }
           echo "WRANGLER_VERSION=PASS version=${actual}"
 
-      - name: Apply additive D1 migrations
+      - name: Apply only governed M3 attribution migration
         shell: bash
         working-directory: commercial-runtime
         env:
@@ -176,8 +191,18 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
           echo D1_MUTATION_SHA_GATE=PASS
+
+          pending=$(NO_COLOR=1 npx wrangler d1 migrations list "$D1_NAME" --remote --config wrangler.d1.jsonc 2>&1)
+          printf '%s\n' "$pending"
+          pending_files=$(printf '%s\n' "$pending" | grep -oE '[0-9]{4}_[A-Za-z0-9._-]+\.sql' | sort -u || true)
+          test "$pending_files" = "0007_offer_attribution.sql" || {
+            echo "D1_PENDING_MIGRATIONS=FAIL expected=0007_offer_attribution.sql actual=$(printf '%s' "$pending_files" | tr '\n' ',')" >&2
+            exit 41
+          }
+          echo D1_PENDING_MIGRATIONS=PASS
+
           npx wrangler d1 migrations apply "$D1_NAME" --remote --config wrangler.d1.jsonc
-          echo 'D1_MIGRATIONS=PASS'
+          echo 'D1_M3_MIGRATION_0007=PASS'
 
       - name: Verify production D1 schema
         shell: bash
@@ -205,7 +230,6 @@ jobs:
     timeout-minutes: 15
     env:
       CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
-      ADMIN_API_TOKEN_RAW: ${{ secrets.ADMIN_API_TOKEN }}
       D1_ACCOUNT_HASH: ${{ needs.prepare-production-d1.outputs.account_hash }}
       D1_DATABASE_ID: ${{ needs.prepare-production-d1.outputs.database_id }}
       D1_DATABASE_HASH: ${{ needs.prepare-production-d1.outputs.database_hash }}
@@ -244,19 +268,6 @@ jobs:
           test -n "$token" || { echo 'CLOUDFLARE_WORKER_TOKEN_PRESENT=NO' >&2; exit 2; }
           echo "::add-mask::$token"
           printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
-
-      - name: Normalize required admin credential
-        shell: bash
-        run: |
-          set -euo pipefail
-          raw="${ADMIN_API_TOKEN_RAW:-}"
-          value=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
-          if [[ "$value" == \"*\" && "$value" == *\" ]]; then value="${value:1:${#value}-2}"; fi
-          test -n "$value" || { echo 'ADMIN_API_TOKEN_PRESENT=NO' >&2; exit 3; }
-          test "${#value}" -ge 32 || { echo 'ADMIN_API_TOKEN_STRENGTH=FAIL_MIN_LENGTH_32' >&2; exit 3; }
-          echo "::add-mask::$value"
-          printf 'ADMIN_API_TOKEN=%s\n' "$value" >> "$GITHUB_ENV"
-          echo 'ADMIN_API_TOKEN_PRESENT=YES'
 
       - name: Resolve zone account and bind it to D1 evidence
         id: cloudflare
@@ -323,13 +334,13 @@ jobs:
             name:"jadel-commercial-runtime",
             main:"src/project-entry.mjs",
             compatibility_date:"2026-08-31",
+            keep_vars:true,
             workers_dev:false,
             observability:{enabled:true,head_sampling_rate:1},
             vars:{
               PUBLIC_ORIGIN:"https://jadeltechrd.com",
               PUBLIC_TURNSTILE_SITEKEY:$sitekey,
               TURNSTILE_EXPECTED_HOSTNAME:"jadeltechrd.com",
-              PAYPAL_ENVIRONMENT:"live",
               PAYPAL_ORDER_CREATION_ENABLED:"false",
               PAYPAL_LIVE_ORDER_CREATION_ENABLED:"false",
               PRODUCTION_AUTHORIZED:"false",
@@ -367,7 +378,7 @@ jobs:
           test "$actual" = "$WRANGLER_VERSION" || { echo "WRANGLER_VERSION_MISMATCH expected=$WRANGLER_VERSION actual=$actual" >&2; exit 40; }
           echo "WRANGLER_VERSION=PASS version=${actual}"
 
-      - name: Deploy existing Worker without route or secret mutation
+      - name: Deploy existing Worker preserving vars and secrets
         shell: bash
         working-directory: commercial-runtime
         env:
@@ -379,9 +390,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
           echo WORKER_MUTATION_SHA_GATE=PASS
-          npx wrangler deploy --config wrangler.deploy.jsonc
-          printf '%s' "$ADMIN_API_TOKEN" | npx wrangler secret put ADMIN_API_TOKEN --config wrangler.deploy.jsonc
-          echo 'WORKER_DEPLOY_NO_ROUTE_MUTATION_ADMIN_SECRET_RECONCILED=PASS'
+          npx wrangler deploy --keep-vars --config wrangler.deploy.jsonc
+          echo 'WORKER_DEPLOY_M3_KEEP_VARS_NO_SECRET_MUTATION=PASS'
 
       - name: Verify production runtime canaries
         shell: bash

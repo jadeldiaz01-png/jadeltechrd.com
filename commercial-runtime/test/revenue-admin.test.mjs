@@ -8,7 +8,10 @@ function envWith(values = [0,0,0,0,0]) {
     ADMIN_API_TOKEN:"admin-secret-token",
     DB:{
       prepare() {
-        return { first: async () => ({ value: values[index++] ?? 0 }) };
+        return {
+          first: async () => ({ value: values[index++] ?? 0 }),
+          all: async () => ({ results: [] }),
+        };
       }
     }
   };
