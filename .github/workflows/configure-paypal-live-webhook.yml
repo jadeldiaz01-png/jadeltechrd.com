@@ -87,15 +87,20 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install pinned Wrangler
+      - name: Install pinned Wrangler outside checkout
         shell: bash
-        working-directory: commercial-runtime
         run: |
           set -euo pipefail
-          npm install --no-save --ignore-scripts "wrangler@${WRANGLER_VERSION}"
-          actual=$(npx wrangler --version | tr -d '\r\n[:space:]')
+          wrangler_dir="$RUNNER_TEMP/wrangler-${WRANGLER_VERSION}"
+          mkdir -p "$wrangler_dir"
+          npm install --prefix "$wrangler_dir" --no-save --ignore-scripts --package-lock=false "wrangler@${WRANGLER_VERSION}"
+          wrangler_bin="$wrangler_dir/node_modules/.bin/wrangler"
+          test -x "$wrangler_bin"
+          actual=$("$wrangler_bin" --version | tr -d '\r\n[:space:]')
           test "$actual" = "$WRANGLER_VERSION"
+          printf 'WRANGLER_BIN=%s\n' "$wrangler_bin" >> "$GITHUB_ENV"
           echo "WRANGLER_VERSION=PASS version=${actual}"
+          echo WRANGLER_INSTALL_OUTSIDE_CHECKOUT=PASS
 
       - name: Reconcile only PayPal LIVE webhook credentials
         shell: bash
@@ -104,6 +109,12 @@ jobs:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
           set -euo pipefail
+          test -n "${WRANGLER_BIN:-}"
+          test -x "$WRANGLER_BIN"
+
+          wrangler() {
+            "$WRANGLER_BIN" "$@"
+          }
 
           normalize() {
             printf '%s' "$1" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
