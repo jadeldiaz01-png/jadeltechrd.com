@@ -1,0 +1,17 @@
+import fs from "node:fs";
+const p="config/autonomy-evidence-plane-2026.json";
+const m=JSON.parse(fs.readFileSync(p,"utf8"));
+const fail=(x)=>{console.error("AUTONOMY_EVIDENCE_PLANE=FAIL",x);process.exit(1)};
+const req=["IDENTITY","AUTHORIZATION","POLICY","DATA_LINEAGE","PRIVACY","SECURITY","SUPPLY_CHAIN","EVALS","OBSERVABILITY","SLO","DR","IDEMPOTENCY","RECONCILIATION","REVERSIBILITY","FINOPS","HUMAN_APPROVAL_WHEN_REQUIRED"];
+if(!m.principles?.fail_closed) fail("fail_closed must be true");
+if(m.principles?.critical_action_from_probabilistic_output!==false) fail("probabilistic authorization forbidden");
+for(const g of req) if(!m.mandatory_gates?.includes(g)) fail("missing gate "+g);
+for(const l of ["L4","L5"]) if(m.autonomy?.[l]?.auto!==false||m.autonomy?.[l]?.human_approval!==true) fail(l+" must require human approval");
+if(m.revenue_objectives?.forbidden_claims?.length<3) fail("revenue claim guards missing");
+const t=m.trading_boundary||{};
+for(const k of ["edge_verified","gbm_authorized","paper_authorized","testnet_authorized","live_authorized"]) if(t[k]!==false) fail("trading fail-closed invariant "+k);
+if(t.holdout!=="CLOSED_BY_DEFAULT") fail("holdout must remain closed");
+if(m.production_promotion?.authorized!==false) fail("production cannot self-authorize");
+console.log("AUTONOMY_EVIDENCE_PLANE=PASS");
+console.log("HOLDOUT=CLOSED");
+console.log("EXTERNAL_SIDE_EFFECTS=HUMAN_GATED");
