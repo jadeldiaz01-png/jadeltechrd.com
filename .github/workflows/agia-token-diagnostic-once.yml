@@ -1,0 +1,115 @@
+name: AGIA Token Diagnostic Once
+
+on:
+  push:
+    branches:
+      - 'ops/agia-token-diagnostic-72c3b3fb'
+    paths:
+      - '.github/workflows/agia-token-diagnostic-once.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agia-token-diagnostic-once
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    name: Diagnose AGIA runner token sources
+    runs-on: [self-hosted, linux, x64, jadel-agent-runtime]
+    timeout-minutes: 8
+    environment: production-bootstrap
+    env:
+      EXPECTED_MAIN: '72c3b3fb183a988c59de3d5af54484c6c6e0db26'
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      VPS_SSH_PRIVATE_KEY_PASSPHRASE: ${{ secrets.VPS_SSH_PRIVATE_KEY_PASSPHRASE }}
+      RUNNER_ADMIN_TOKEN: ${{ secrets.RUNNER_ADMIN_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Exact lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_MAIN"
+          test "$(git diff --name-only HEAD^ HEAD)" = '.github/workflows/agia-token-diagnostic-once.yml'
+          echo TOKEN_DIAGNOSTIC_LINEAGE=PASS
+
+      - name: Prepare self Tailscale SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_USER"
+          test -n "$VPS_SSH_PRIVATE_KEY"
+          test -n "$VPS_SSH_PRIVATE_KEY_PASSPHRASE"
+          test "$(tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin).get("BackendState",""))')" = Running
+          TAILSCALE_IP="$(tailscale ip -4 | head -n1)"
+          [[ "$TAILSCALE_IP" =~ ^100\. ]]
+          printf 'TAILSCALE_IP=%s\n' "$TAILSCALE_IP" >> "$GITHUB_ENV"
+          install -d -m 0700 "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/ssh/id_ed25519"
+          chmod 0600 "$RUNNER_TEMP/ssh/id_ed25519"
+          awk -v host="$TAILSCALE_IP" '{print host" "$1" "$2}' /etc/ssh/ssh_host_ed25519_key.pub > "$RUNNER_TEMP/ssh/known_hosts"
+          chmod 0600 "$RUNNER_TEMP/ssh/known_hosts"
+          eval "$(ssh-agent -s)" >/dev/null
+          printf 'SSH_AUTH_SOCK=%s\n' "$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          printf 'SSH_AGENT_PID=%s\n' "$SSH_AGENT_PID" >> "$GITHUB_ENV"
+          cat > "$RUNNER_TEMP/ssh/askpass" <<'ASKPASS'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          printf '%s\n' "${VPS_SSH_PRIVATE_KEY_PASSPHRASE:?}"
+          ASKPASS
+          chmod 0700 "$RUNNER_TEMP/ssh/askpass"
+          DISPLAY=:0 SSH_ASKPASS="$RUNNER_TEMP/ssh/askpass" SSH_ASKPASS_REQUIRE=force ssh-add "$RUNNER_TEMP/ssh/id_ed25519" </dev/null >/dev/null
+          echo TOKEN_DIAGNOSTIC_SSH=PASS
+
+      - name: Diagnose VPS GitHub App helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$RUNNER_TEMP/ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent="$SSH_AUTH_SOCK" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o ConnectTimeout=15)
+          "${SSH[@]}" -- "$VPS_USER@$TAILSCALE_IP" 'set +e
+            T="$(/usr/local/sbin/agia-github-app-installation-token print-installation-token 2>/tmp/agia-token-helper.err)"
+            rc=$?
+            if [ "$rc" -ne 0 ] || [ -z "$T" ]; then
+              echo "GITHUB_APP_HELPER=FAIL_RC_$rc"
+              sed -n "1,5p" /tmp/agia-token-helper.err | sed "s/.*/GITHUB_APP_HELPER_ERROR_PRESENT=YES/"
+              rm -f /tmp/agia-token-helper.err
+              unset T
+              exit 0
+            fi
+            rm -f /tmp/agia-token-helper.err
+            echo "GITHUB_APP_HELPER=PASS"
+            code="$(curl -sS -o /tmp/agia-reg-token-probe.json -w "%{http_code}" -X POST -H "Authorization: Bearer $T" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/jadeldiaz01-png/universal-multi-project-runtime/actions/runners/registration-token")"
+            echo "GITHUB_APP_REGISTRATION_HTTP=$code"
+            rm -f /tmp/agia-reg-token-probe.json
+            unset T
+          '
+
+      - name: Diagnose existing RUNNER_ADMIN_TOKEN
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${RUNNER_ADMIN_TOKEN:-}" ]; then
+            echo RUNNER_ADMIN_TOKEN=ABSENT
+            exit 0
+          fi
+          echo "::add-mask::$RUNNER_ADMIN_TOKEN"
+          code="$(curl -sS -o "$RUNNER_TEMP/admin-reg-token-probe.json" -w '%{http_code}' -X POST -H "Authorization: Bearer $RUNNER_ADMIN_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/jadeldiaz01-png/universal-multi-project-runtime/actions/runners/registration-token")"
+          echo "RUNNER_ADMIN_REGISTRATION_HTTP=$code"
+          rm -f "$RUNNER_TEMP/admin-reg-token-probe.json"
+
+      - name: Cleanup
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set +e
+          if [ -n "${SSH_AGENT_PID:-}" ]; then ssh-agent -k >/dev/null 2>&1 || true; fi
+          rm -rf "$RUNNER_TEMP/ssh"
