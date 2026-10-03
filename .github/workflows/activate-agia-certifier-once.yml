@@ -1,0 +1,150 @@
+name: Activate AGIA Certifier Once
+
+on:
+  push:
+    branches:
+      - 'ops/activate-agia-certifier-72c3b3fb'
+    paths:
+      - '.github/workflows/activate-agia-certifier-once.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: activate-agia-certifier-once
+  cancel-in-progress: false
+
+jobs:
+  activate:
+    name: Activate dedicated AGIA production certifier service
+    runs-on: [self-hosted, linux, x64, jadel-agent-runtime]
+    timeout-minutes: 10
+    environment: production-bootstrap
+    env:
+      EXPECTED_MAIN: '72c3b3fb183a988c59de3d5af54484c6c6e0db26'
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      VPS_SSH_PRIVATE_KEY_PASSPHRASE: ${{ secrets.VPS_SSH_PRIVATE_KEY_PASSPHRASE }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Enforce exact lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_MAIN"
+          test "$(git diff --name-only HEAD^ HEAD)" = '.github/workflows/activate-agia-certifier-once.yml'
+          echo "ACTIVATION_LINEAGE=PASS"
+
+      - name: Materialize activation script
+        shell: bash
+        env:
+          ACT_B64: 'IyEvdXNyL2Jpbi9lbnYgYmFzaApzZXQgLWV1byBwaXBlZmFpbAoKOiAiJHtBR0lBX1JVTk5FUl9SRUdJU1RSQVRJT05fVE9LRU46P21pc3NpbmcgaGVscGVyIHRyYW5zcG9ydCBzZW50aW5lbH0iCnRlc3QgIiRBR0lBX1JVTk5FUl9SRUdJU1RSQVRJT05fVE9LRU4iID0gIkFDVElWQVRFX1NFUlZJQ0VfT05MWSIgfHwgewogIGVjaG8gInVuZXhwZWN0ZWQgaGVscGVyIHRyYW5zcG9ydCB2YWx1ZSIgPiYyCiAgZXhpdCAxCn0KdW5zZXQgQUdJQV9SVU5ORVJfUkVHSVNUUkFUSU9OX1RPS0VOCgpSVU5ORVJfVVNFUj0iYWN0aW9ucy1ydW5uZXIiClJVTk5FUl9IT01FPSIvb3B0L2FjdGlvbnMtcnVubmVycy9hZ2lhLXByb2R1Y3Rpb24tY2VydGlmaWVyIgpMRUdBQ1lfSE9NRT0iL29wdC9hY3Rpb25zLXJ1bm5lciIKUDRIX01BUktFUj0iL29wdC9hY3Rpb25zLXJ1bm5lcnMvcDRoLXJ1bnRpbWUvLnJ1bm5lciIKCnRlc3QgIiQoaWQgLXUpIiAtZXEgMAppZCAiJFJVTk5FUl9VU0VSIiA+L2Rldi9udWxsIDI+JjEKdGVzdCAtZCAiJFJVTk5FUl9IT01FIgp0ZXN0IC14ICIkUlVOTkVSX0hPTUUvc3ZjLnNoIgp0ZXN0IC1mICIkUlVOTkVSX0hPTUUvLnJ1bm5lciIKdGVzdCAtcyAiJFJVTk5FUl9IT01FLy5jcmVkZW50aWFscyIKdGVzdCAtcyAiJFJVTk5FUl9IT01FLy5jcmVkZW50aWFsc19yc2FwYXJhbXMiCnRlc3QgIiQoc3RhdCAtYyAnJVU6JUcnICIkUlVOTkVSX0hPTUUvLnJ1bm5lciIpIiA9ICIkUlVOTkVSX1VTRVI6JFJVTk5FUl9VU0VSIgoKaGFzaF9vcl9hYnNlbnQoKSB7CiAgaWYgWyAtZSAiJDEiIF07IHRoZW4gc2hhMjU2c3VtICIkMSIgfCBhd2sgJ3twcmludCAkMX0nOyBlbHNlIHByaW50ZiAnQUJTRU5UXG4nOyBmaQp9CmxlZ2FjeV9ydW5uZXJfYmVmb3JlPSIkKGhhc2hfb3JfYWJzZW50ICIkTEVHQUNZX0hPTUUvLnJ1bm5lciIpIgpsZWdhY3lfc2VydmljZV9iZWZvcmU9IiQoaGFzaF9vcl9hYnNlbnQgIiRMRUdBQ1lfSE9NRS8uc2VydmljZSIpIgpwNGhfYmVmb3JlPSIkKGhhc2hfb3JfYWJzZW50ICIkUDRIX01BUktFUiIpIgoKaW5zdGFsbF9wZXJmb3JtZWQ9Ik5PIgppZiBbICEgLWUgIiRSVU5ORVJfSE9NRS8uc2VydmljZSIgXTsgdGhlbgogIGNkICIkUlVOTkVSX0hPTUUiCiAgLi9zdmMuc2ggaW5zdGFsbCAiJFJVTk5FUl9VU0VSIgogIGluc3RhbGxfcGVyZm9ybWVkPSJZRVMiCmZpCgp0ZXN0IC1zICIkUlVOTkVSX0hPTUUvLnNlcnZpY2UiCnNlcnZpY2VfbmFtZT0iJChjYXQgIiRSVU5ORVJfSE9NRS8uc2VydmljZSIpIgp0ZXN0IC1uICIkc2VydmljZV9uYW1lIgpjYXNlICIkc2VydmljZV9uYW1lIiBpbgogICp1bml2ZXJzYWwtbXVsdGktcHJvamVjdC1ydW50aW1lKikgOzsKICAqKSBlY2hvICJ1bmV4cGVjdGVkIGRlZGljYXRlZCBzZXJ2aWNlIG5hbWUiID4mMjsgZXhpdCAxIDs7CmVzYWMKCmNkICIkUlVOTkVSX0hPTUUiCi4vc3ZjLnNoIHN0YXJ0Ci4vc3ZjLnNoIHN0YXR1cwpzeXN0ZW1jdGwgaXMtYWN0aXZlIC0tcXVpZXQgIiRzZXJ2aWNlX25hbWUiCgpwZ3JlcCAtdSAiJFJVTk5FUl9VU0VSIiAtZiAiJFJVTk5FUl9IT01FL2Jpbi9SdW5uZXIuTGlzdGVuZXIiID4vZGV2L251bGwKCmxlZ2FjeV9ydW5uZXJfYWZ0ZXI9IiQoaGFzaF9vcl9hYnNlbnQgIiRMRUdBQ1lfSE9NRS8ucnVubmVyIikiCmxlZ2FjeV9zZXJ2aWNlX2FmdGVyPSIkKGhhc2hfb3JfYWJzZW50ICIkTEVHQUNZX0hPTUUvLnNlcnZpY2UiKSIKcDRoX2FmdGVyPSIkKGhhc2hfb3JfYWJzZW50ICIkUDRIX01BUktFUiIpIgoKdGVzdCAiJGxlZ2FjeV9ydW5uZXJfYWZ0ZXIiID0gIiRsZWdhY3lfcnVubmVyX2JlZm9yZSIKdGVzdCAiJGxlZ2FjeV9zZXJ2aWNlX2FmdGVyIiA9ICIkbGVnYWN5X3NlcnZpY2VfYmVmb3JlIgp0ZXN0ICIkcDRoX2FmdGVyIiA9ICIkcDRoX2JlZm9yZSIKCmVjaG8gIkFHSUFfUFJPRFVDVElPTl9DRVJUSUZJRVJfU0VSVklDRV9BQ1RJVkFUSU9OPVBBU1MiCmVjaG8gIlJVTk5FUl9IT01FPSRSVU5ORVJfSE9NRSIKZWNobyAiUlVOTkVSX1NFUlZJQ0U9JHNlcnZpY2VfbmFtZSIKZWNobyAiUlVOTkVSX1NFUlZJQ0VfSU5TVEFMTF9QRVJGT1JNRUQ9JGluc3RhbGxfcGVyZm9ybWVkIgplY2hvICJSVU5ORVJfU0VSVklDRV9TVEFSVF9QRVJGT1JNRUQ9WUVTIgplY2hvICJMRUdBQ1lfSkFERUxfQUdFTlRfUlVOVElNRV9QUkVTRVJWRUQ9UEFTUyIKZWNobyAiUDRIX1BSRVNFUlZFRD1QQVNTIgo='
+        run: |
+          set -euo pipefail
+          printf '%s' "$ACT_B64" | base64 -d > "$RUNNER_TEMP/activate.sh"
+          chmod 700 "$RUNNER_TEMP/activate.sh"
+          bash -n "$RUNNER_TEMP/activate.sh"
+          grep -Fq 'RUNNER_HOME="/opt/actions-runners/agia-production-certifier"' "$RUNNER_TEMP/activate.sh"
+          ! grep -Fq 'config.sh' "$RUNNER_TEMP/activate.sh"
+          ! grep -Fq -- '--replace' "$RUNNER_TEMP/activate.sh"
+          echo "ACTIVATION_PAYLOAD_INTEGRITY=PASS"
+
+      - name: Prepare self Tailscale SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin).get("BackendState",""))')" = Running
+          TAILSCALE_IP="$(tailscale ip -4 | head -n1)"
+          [[ "$TAILSCALE_IP" =~ ^100\. ]]
+          printf 'TAILSCALE_IP=%s\n' "$TAILSCALE_IP" >> "$GITHUB_ENV"
+          install -d -m 0700 "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/ssh/id_ed25519"
+          chmod 0600 "$RUNNER_TEMP/ssh/id_ed25519"
+          awk -v host="$TAILSCALE_IP" '{print host" "$1" "$2}' /etc/ssh/ssh_host_ed25519_key.pub > "$RUNNER_TEMP/ssh/known_hosts"
+          chmod 0600 "$RUNNER_TEMP/ssh/known_hosts"
+          eval "$(ssh-agent -s)" >/dev/null
+          printf 'SSH_AUTH_SOCK=%s\n' "$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          printf 'SSH_AGENT_PID=%s\n' "$SSH_AGENT_PID" >> "$GITHUB_ENV"
+          cat > "$RUNNER_TEMP/ssh/askpass" <<'ASKPASS'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          printf '%s\n' "${VPS_SSH_PRIVATE_KEY_PASSPHRASE:?}"
+          ASKPASS
+          chmod 0700 "$RUNNER_TEMP/ssh/askpass"
+          DISPLAY=:0 SSH_ASKPASS="$RUNNER_TEMP/ssh/askpass" SSH_ASKPASS_REQUIRE=force ssh-add "$RUNNER_TEMP/ssh/id_ed25519" </dev/null >/dev/null
+          echo "ACTIVATION_TAILSCALE_SSH=PASS"
+
+      - name: Stage activation as runtime-gateway-deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$RUNNER_TEMP/ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent="$SSH_AUTH_SOCK" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o ConnectTimeout=15)
+          "${SSH[@]}" -- "$VPS_USER@$TAILSCALE_IP" 'set -euo pipefail
+            p=/tmp/bootstrap_agia_production_runner.sh
+            if [ -e "$p" ]; then
+              test ! -L "$p"
+              owner="$(stat -c %U "$p")"
+              caller="$(id -un)"
+              case "$owner" in
+                "$caller") rm -f "$p" ;;
+                runtime-gateway-deploy) sudo -n -u runtime-gateway-deploy rm -f "$p" ;;
+                *) echo "unexpected staged owner=$owner" >&2; exit 41 ;;
+              esac
+            fi
+          '
+          "${SSH[@]}" -- "$VPS_USER@$TAILSCALE_IP"             "sudo -n -u runtime-gateway-deploy sh -c 'cat > /tmp/bootstrap_agia_production_runner.sh && chmod 700 /tmp/bootstrap_agia_production_runner.sh'"             < "$RUNNER_TEMP/activate.sh"
+          echo "ACTIVATION_STAGED=PASS"
+
+      - name: Activate governed service
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$RUNNER_TEMP/ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent="$SSH_AUTH_SOCK" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o ConnectTimeout=15)
+          set +e
+          out="$(printf '%s\n' ACTIVATE_SERVICE_ONLY | "${SSH[@]}" -- "$VPS_USER@$TAILSCALE_IP" "sudo -n -u runtime-gateway-deploy bash -c 'sudo -n /usr/local/sbin/agia-runner-bootstrap'")"
+          rc=$?
+          set -e
+          printf '%s\n' "$out"
+          test "$rc" -eq 0
+          grep -qx 'AGIA_PRODUCTION_CERTIFIER_SERVICE_ACTIVATION=PASS' <<<"$out"
+          grep -qx 'RUNNER_SERVICE_START_PERFORMED=YES' <<<"$out"
+          grep -qx 'LEGACY_JADEL_AGENT_RUNTIME_PRESERVED=PASS' <<<"$out"
+          grep -qx 'P4H_PRESERVED=PASS' <<<"$out"
+          echo "AGIA_SERVICE_ACTIVATION_REMOTE=PASS"
+
+      - name: Verify runner online via GitHub App
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$RUNNER_TEMP/ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent="$SSH_AUTH_SOCK" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o ConnectTimeout=15)
+          cat > "$RUNNER_TEMP/verify-online.sh" <<'REMOTE'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          T="$(sudo -n /usr/local/sbin/agia-github-app-installation-token print-installation-token)"
+          trap 'unset T DATA' EXIT HUP INT TERM
+          for i in $(seq 1 12); do
+            DATA="$(curl -fsS -H "Authorization: Bearer $T" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/jadeldiaz01-png/universal-multi-project-runtime/actions/runners?per_page=100")"
+            state="$(python3 -c 'import json,sys,socket; d=json.load(sys.stdin); n=socket.gethostname().split(".")[0]+"-agia-production-certifier"; r=next((x for x in d.get("runners",[]) if x.get("name")==n),None); print("MISSING" if r is None else str(r.get("status"))+":"+str(r.get("busy")).lower())' <<<"$DATA")"
+            echo "AGIA_RUNNER_STATE_ATTEMPT_${i}=$state"
+            case "$state" in online:*) echo "AGIA_RUNNER_ONLINE=PASS"; exit 0;; esac
+            sleep 2
+          done
+          exit 1
+          REMOTE
+          chmod 700 "$RUNNER_TEMP/verify-online.sh"
+          "${SSH[@]}" -- "$VPS_USER@$TAILSCALE_IP" 'bash -s' < "$RUNNER_TEMP/verify-online.sh"
+
+      - name: Cleanup
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set +e
+          if [ -n "${SSH_AGENT_PID:-}" ]; then ssh-agent -k >/dev/null 2>&1 || true; fi
+          rm -rf "$RUNNER_TEMP/ssh"
+          rm -f "$RUNNER_TEMP/activate.sh" "$RUNNER_TEMP/verify-online.sh"
