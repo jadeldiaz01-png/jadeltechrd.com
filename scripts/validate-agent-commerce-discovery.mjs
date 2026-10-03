@@ -71,12 +71,16 @@ assert(
   /No claim of guaranteed income/i.test(llms),
   "llms.txt must explicitly disclaim guaranteed-income claims",
 );
-for (const asset of ['llms.txt', 'agent-services.json']) {
+for (const asset of ["llms.txt", "agent-services.json"]) {
   assert(
-    pagesWorkflow.includes(`- "${asset}"`),
-    `Pages workflow must deploy ${asset} on main changes`,
+    pagesWorkflow.includes(`test -s _site/${asset}`),
+    `Pages workflow must stage and verify ${asset} before manual promotion`,
   );
 }
+assert(
+  pagesWorkflow.includes("DEPLOY_PUBLIC_SITE"),
+  "Pages workflow must require explicit public-site deployment confirmation",
+);
 
 console.log(JSON.stringify({
   status: "PASS",
