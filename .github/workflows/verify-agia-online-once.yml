@@ -1,0 +1,107 @@
+name: Verify AGIA Online Once
+
+on:
+  push:
+    branches:
+      - 'ops/verify-agia-online-72c3b3fb'
+    paths:
+      - '.github/workflows/verify-agia-online-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify AGIA production certifier online
+    runs-on: [self-hosted, linux, x64, jadel-agent-runtime]
+    timeout-minutes: 7
+    environment: production-bootstrap
+    env:
+      EXPECTED_MAIN: '72c3b3fb183a988c59de3d5af54484c6c6e0db26'
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      VPS_SSH_PRIVATE_KEY_PASSPHRASE: ${{ secrets.VPS_SSH_PRIVATE_KEY_PASSPHRASE }}
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Exact lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_MAIN"
+          test "$(git diff --name-only HEAD^ HEAD)" = '.github/workflows/verify-agia-online-once.yml'
+
+      - name: Prepare self Tailscale SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin).get("BackendState",""))')" = Running
+          TAILSCALE_IP="$(tailscale ip -4 | head -n1)"
+          printf 'TAILSCALE_IP=%s\n' "$TAILSCALE_IP" >> "$GITHUB_ENV"
+          install -d -m 0700 "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/ssh/id_ed25519"
+          chmod 0600 "$RUNNER_TEMP/ssh/id_ed25519"
+          awk -v host="$TAILSCALE_IP" '{print host" "$1" "$2}' /etc/ssh/ssh_host_ed25519_key.pub > "$RUNNER_TEMP/ssh/known_hosts"
+          chmod 0600 "$RUNNER_TEMP/ssh/known_hosts"
+          eval "$(ssh-agent -s)" >/dev/null
+          printf 'SSH_AUTH_SOCK=%s\n' "$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          printf 'SSH_AGENT_PID=%s\n' "$SSH_AGENT_PID" >> "$GITHUB_ENV"
+          cat > "$RUNNER_TEMP/ssh/askpass" <<'ASKPASS'
+          #!/usr/bin/env bash
+          printf '%s\n' "${VPS_SSH_PRIVATE_KEY_PASSPHRASE:?}"
+          ASKPASS
+          chmod 0700 "$RUNNER_TEMP/ssh/askpass"
+          DISPLAY=:0 SSH_ASKPASS="$RUNNER_TEMP/ssh/askpass" SSH_ASKPASS_REQUIRE=force ssh-add "$RUNNER_TEMP/ssh/id_ed25519" </dev/null >/dev/null
+
+      - name: Verify service and API read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$RUNNER_TEMP/ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent="$SSH_AUTH_SOCK" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o ConnectTimeout=15)
+          "${SSH[@]}" -- "$VPS_USER@$TAILSCALE_IP" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          home=/opt/actions-runners/agia-production-certifier
+          test -f "$home/.runner"
+          test -s "$home/.credentials"
+          test -s "$home/.service"
+          service="$(cat "$home/.service")"
+          case "$service" in *universal-multi-project-runtime*) ;; *) exit 21;; esac
+          systemctl is-enabled --quiet "$service"
+          systemctl is-active --quiet "$service"
+          echo "AGIA_SERVICE_ENABLED=PASS"
+          echo "AGIA_SERVICE_ACTIVE=PASS"
+
+          legacy="$(cat /opt/actions-runner/.service)"
+          test "$legacy" = "actions.runner.jadeldiaz01-png-jadeltechrd.com.jadel-agent-runtime.service"
+          systemctl is-active --quiet "$legacy"
+          echo "JADEL_AGENT_RUNTIME_PRESERVED=PASS"
+
+          if [ -e /opt/actions-runners/p4h-runtime/.runner ]; then
+            p4h="$(sha256sum /opt/actions-runners/p4h-runtime/.runner | awk "{print \$1}")"
+            test "$p4h" = "ca6b30433e1abca3ec52b8c684ac8af46089c5f04be357d4a83d7e5137f08faa"
+          fi
+          echo "P4H_PRESERVED=PASS"
+
+          T="$(sudo -n /usr/local/sbin/agia-github-app-installation-token print-installation-token)"
+          trap 'unset T DATA' EXIT HUP INT TERM
+          for i in $(seq 1 10); do
+            DATA="$(curl -fsS -H "Authorization: Bearer $T" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/jadeldiaz01-png/universal-multi-project-runtime/actions/runners?per_page=100")"
+            state="$(python3 -c 'import json,sys,socket; d=json.load(sys.stdin); n=socket.gethostname().split(".")[0]+"-agia-production-certifier"; r=next((x for x in d.get("runners",[]) if x.get("name")==n),None); print("MISSING" if r is None else str(r.get("status"))+":"+str(r.get("busy")).lower())' <<<"$DATA")"
+            echo "AGIA_API_STATE_ATTEMPT_${i}=$state"
+            case "$state" in online:*) echo "AGIA_RUNNER_ONLINE=PASS"; exit 0;; esac
+            sleep 2
+          done
+          exit 22
+          REMOTE
+
+      - name: Cleanup
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set +e
+          if [ -n "${SSH_AGENT_PID:-}" ]; then ssh-agent -k >/dev/null 2>&1 || true; fi
+          rm -rf "$RUNNER_TEMP/ssh"
