@@ -1,0 +1,29 @@
+name: autonomy-evidence-plane-2026
+on:
+  pull_request:
+    paths:
+      - "config/autonomy-evidence-plane-2026.json"
+      - "scripts/validate-autonomy-evidence-plane.mjs"
+      - ".github/workflows/autonomy-evidence-plane-2026.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Validate fail-closed autonomy and evidence contract
+        run: node scripts/validate-autonomy-evidence-plane.mjs
+      - name: Verify no secret-like material entered the manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Eini '(api[_-]?key|client[_-]?secret|private[_-]?key|bearer[[:space:]]+[A-Za-z0-9._-]{12,}|sk-[A-Za-z0-9_-]{12,})[[:space:]]*[:=][[:space:]]*["'\'' ]?[A-Za-z0-9/+._=-]{12,}' config/autonomy-evidence-plane-2026.json; then
+            echo "SECRET_PATTERN=FAIL"; exit 1
+          fi
+          echo "SECRET_PATTERN=PASS"
