@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "conoha-vps-mcp": {
-      "type": "http",
-      "url": "https://api.conoha.jp/vps/mcp"
-    }
-  }
-}
