@@ -1,0 +1,183 @@
+name: AGIA Register Via Runtime User Once
+
+on:
+  push:
+    branches:
+      - 'ops/agia-register-once-72c3b3fb'
+    paths:
+      - '.github/workflows/agia-register-via-runtime-user-once.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agia-register-via-runtime-user-once
+  cancel-in-progress: false
+
+jobs:
+  register:
+    name: Register dedicated AGIA runner without service activation
+    runs-on: [self-hosted, linux, x64, jadel-agent-runtime]
+    timeout-minutes: 10
+    environment: production-bootstrap
+    env:
+      EXPECTED_WEB_MAIN: '72c3b3fb183a988c59de3d5af54484c6c6e0db26'
+      EXPECTED_RUNTIME_MAIN: 'f7dd568fe283aa8973e8518dfc8b57ab66c6022a'
+      EXPECTED_REGISTER_BLOB: '0decb69b8937315b367c32added539a21f3df239'
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      VPS_SSH_PRIVATE_KEY_PASSPHRASE: ${{ secrets.VPS_SSH_PRIVATE_KEY_PASSPHRASE }}
+
+    steps:
+      - name: Checkout one-shot revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Enforce exact bridge lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_WEB_MAIN"
+          test "$(git diff --name-only HEAD^ HEAD)" = '.github/workflows/agia-register-via-runtime-user-once.yml'
+          echo "REGISTER_BRIDGE_LINEAGE=PASS"
+          echo "RUNTIME_SOURCE_SHA=$EXPECTED_RUNTIME_MAIN"
+
+      - name: Materialize immutable REGISTER_ONLY payload
+        shell: bash
+        env:
+          REGISTER_B64: 'IyEvdXNyL2Jpbi9lbnYgYmFzaApzZXQgLWV1byBwaXBlZmFpbAoKOiAiJHtBR0lBX1JVTk5FUl9SRUdJU1RSQVRJT05fVE9LRU46P21pc3NpbmcgZXBoZW1lcmFsIHJ1bm5lciByZWdpc3RyYXRpb24gdG9rZW59Igo6ICIke0FHSUFfUlVOTkVSX1JFUE9TSVRPUllfVVJMOj9taXNzaW5nIHJlcG9zaXRvcnkgVVJMfSIKClJVTk5FUl9VU0VSPSJhY3Rpb25zLXJ1bm5lciIKUlVOTkVSX0hPTUU9Ii9vcHQvYWN0aW9ucy1ydW5uZXJzL2FnaWEtcHJvZHVjdGlvbi1jZXJ0aWZpZXIiCkxFR0FDWV9SVU5ORVJfSE9NRT0iL29wdC9hY3Rpb25zLXJ1bm5lciIKUlVOTkVSX05BTUU9IiR7QUdJQV9SVU5ORVJfTkFNRTotJChob3N0bmFtZSAtcyktYWdpYS1wcm9kdWN0aW9uLWNlcnRpZmllcn0iClJVTk5FUl9MQUJFTD0iYWdpYS1wcm9kdWN0aW9uLWNlcnRpZmllciIKUDRIX01BUktFUj0iL29wdC9hY3Rpb25zLXJ1bm5lcnMvcDRoLXJ1bnRpbWUvLnJ1bm5lciIKU0VSVklDRV9NQVJLRVI9IiRSVU5ORVJfSE9NRS8uc2VydmljZSIKCltbICIkQUdJQV9SVU5ORVJfUkVQT1NJVE9SWV9VUkwiID09ICJodHRwczovL2dpdGh1Yi5jb20vamFkZWxkaWF6MDEtcG5nL3VuaXZlcnNhbC1tdWx0aS1wcm9qZWN0LXJ1bnRpbWUiIF1dIHx8IHsKICBlY2hvICJ1bmV4cGVjdGVkIHJlcG9zaXRvcnkgVVJMIiA+JjIKICBleGl0IDEKfQp0ZXN0ICIkUlVOTkVSX0hPTUUiICE9ICIkTEVHQUNZX1JVTk5FUl9IT01FIiB8fCB7CiAgZWNobyAicmVmdXNpbmcgamFkZWwtYWdlbnQtcnVudGltZSBob21lIGNvbGxpc2lvbiIgPiYyCiAgZXhpdCAxCn0KW1sgIiRSVU5ORVJfTkFNRSIgPX4gXltBLVphLXowLTkuXy1dKyQgXV0gfHwgewogIGVjaG8gImludmFsaWQgcnVubmVyIG5hbWUiID4mMgogIGV4aXQgMQp9CgppZCAiJFJVTk5FUl9VU0VSIiA+L2Rldi9udWxsIDI+JjEgfHwgewogIGVjaG8gImFjdGlvbnMtcnVubmVyIHVzZXIgbWlzc2luZzsgUkVHSVNURVJfT05MWSByZWZ1c2VzIHVzZXIgY3JlYXRpb24iID4mMgogIGV4aXQgMQp9CnRlc3QgLWQgIiRSVU5ORVJfSE9NRSIgfHwgewogIGVjaG8gInJ1bm5lciBob21lIG1pc3Npbmc7IFJFR0lTVEVSX09OTFkgcmVmdXNlcyBkaXJlY3RvcnkgY3JlYXRpb24iID4mMgogIGV4aXQgMQp9CnRlc3QgLXggIiRSVU5ORVJfSE9NRS9jb25maWcuc2giIHx8IHsKICBlY2hvICJjb25maWcuc2ggbWlzc2luZyBvciBub3QgZXhlY3V0YWJsZSIgPiYyCiAgZXhpdCAxCn0KdGVzdCAteCAiJFJVTk5FUl9IT01FL2Jpbi9SdW5uZXIuTGlzdGVuZXIiIHx8IHsKICBlY2hvICJSdW5uZXIuTGlzdGVuZXIgbWlzc2luZyBvciBub3QgZXhlY3V0YWJsZSIgPiYyCiAgZXhpdCAxCn0KdGVzdCAhIC1lICIkUlVOTkVSX0hPTUUvLnJ1bm5lciIgfHwgewogIGVjaG8gInJ1bm5lciBhbHJlYWR5IGNvbmZpZ3VyZWQ7IHJlZnVzaW5nIHJlLXJlZ2lzdHJhdGlvbiIgPiYyCiAgZXhpdCAxCn0KCmxlZ2FjeV9ydW5uZXJfYmVmb3JlPSJBQlNFTlQiCmlmIFsgLWUgIiRMRUdBQ1lfUlVOTkVSX0hPTUUvLnJ1bm5lciIgXTsgdGhlbgogIGxlZ2FjeV9ydW5uZXJfYmVmb3JlPSIkKHNoYTI1NnN1bSAiJExFR0FDWV9SVU5ORVJfSE9NRS8ucnVubmVyIiB8IGF3ayAne3ByaW50ICQxfScpIgpmaQoKbGVnYWN5X3NlcnZpY2VfYmVmb3JlPSJBQlNFTlQiCmlmIFsgLWUgIiRMRUdBQ1lfUlVOTkVSX0hPTUUvLnNlcnZpY2UiIF07IHRoZW4KICBsZWdhY3lfc2VydmljZV9iZWZvcmU9IiQoc2hhMjU2c3VtICIkTEVHQUNZX1JVTk5FUl9IT01FLy5zZXJ2aWNlIiB8IGF3ayAne3ByaW50ICQxfScpIgpmaQoKcDRoX2JlZm9yZT0iQUJTRU5UIgppZiBbIC1lICIkUDRIX01BUktFUiIgXTsgdGhlbgogIHA0aF9iZWZvcmU9IiQoc2hhMjU2c3VtICIkUDRIX01BUktFUiIgfCBhd2sgJ3twcmludCAkMX0nKSIKZmkKCnNlcnZpY2VfYmVmb3JlPSJBQlNFTlQiCmlmIFsgLWUgIiRTRVJWSUNFX01BUktFUiIgXTsgdGhlbgogIHNlcnZpY2VfYmVmb3JlPSIkKHNoYTI1NnN1bSAiJFNFUlZJQ0VfTUFSS0VSIiB8IGF3ayAne3ByaW50ICQxfScpIgpmaQoKY2QgIiRSVU5ORVJfSE9NRSIKcnVudXNlciAtdSAiJFJVTk5FUl9VU0VSIiAtLSAuL2NvbmZpZy5zaCBcCiAgLS11bmF0dGVuZGVkIFwKICAtLXVybCAiJEFHSUFfUlVOTkVSX1JFUE9TSVRPUllfVVJMIiBcCiAgLS10b2tlbiAiJEFHSUFfUlVOTkVSX1JFR0lTVFJBVElPTl9UT0tFTiIgXAogIC0tbmFtZSAiJFJVTk5FUl9OQU1FIiBcCiAgLS1sYWJlbHMgIiRSVU5ORVJfTEFCRUwiIFwKICAtLXdvcmsgIl93b3JrIgoKdW5zZXQgQUdJQV9SVU5ORVJfUkVHSVNUUkFUSU9OX1RPS0VOCgp0ZXN0IC1mICIkUlVOTkVSX0hPTUUvLnJ1bm5lciIgfHwgewogIGVjaG8gInJ1bm5lciByZWdpc3RyYXRpb24gbWFya2VyIG1pc3NpbmcgYWZ0ZXIgY29uZmlnLnNoIiA+JjIKICBleGl0IDEKfQp0ZXN0ICIkKHN0YXQgLWMgJyVVOiVHJyAiJFJVTk5FUl9IT01FLy5ydW5uZXIiKSIgPSAiJFJVTk5FUl9VU0VSOiRSVU5ORVJfVVNFUiIgfHwgewogIGVjaG8gIi5ydW5uZXIgb3duZXIgbWlzbWF0Y2giID4mMgogIGV4aXQgMQp9CgppZiBbICIkbGVnYWN5X3J1bm5lcl9iZWZvcmUiID0gIkFCU0VOVCIgXTsgdGhlbgogIHRlc3QgISAtZSAiJExFR0FDWV9SVU5ORVJfSE9NRS8ucnVubmVyIiB8fCB7CiAgICBlY2hvICJqYWRlbC1hZ2VudC1ydW50aW1lIHJ1bm5lciBtYXJrZXIgdW5leHBlY3RlZGx5IGNyZWF0ZWQiID4mMgogICAgZXhpdCAxCiAgfQplbHNlCiAgbGVnYWN5X3J1bm5lcl9hZnRlcj0iJChzaGEyNTZzdW0gIiRMRUdBQ1lfUlVOTkVSX0hPTUUvLnJ1bm5lciIgfCBhd2sgJ3twcmludCAkMX0nKSIKICB0ZXN0ICIkbGVnYWN5X3J1bm5lcl9hZnRlciIgPSAiJGxlZ2FjeV9ydW5uZXJfYmVmb3JlIiB8fCB7CiAgICBlY2hvICJqYWRlbC1hZ2VudC1ydW50aW1lIHJ1bm5lciBtYXJrZXIgY2hhbmdlZCIgPiYyCiAgICBleGl0IDEKICB9CmZpCgppZiBbICIkbGVnYWN5X3NlcnZpY2VfYmVmb3JlIiA9ICJBQlNFTlQiIF07IHRoZW4KICB0ZXN0ICEgLWUgIiRMRUdBQ1lfUlVOTkVSX0hPTUUvLnNlcnZpY2UiIHx8IHsKICAgIGVjaG8gImphZGVsLWFnZW50LXJ1bnRpbWUgc2VydmljZSBtYXJrZXIgdW5leHBlY3RlZGx5IGNyZWF0ZWQiID4mMgogICAgZXhpdCAxCiAgfQplbHNlCiAgbGVnYWN5X3NlcnZpY2VfYWZ0ZXI9IiQoc2hhMjU2c3VtICIkTEVHQUNZX1JVTk5FUl9IT01FLy5zZXJ2aWNlIiB8IGF3ayAne3ByaW50ICQxfScpIgogIHRlc3QgIiRsZWdhY3lfc2VydmljZV9hZnRlciIgPSAiJGxlZ2FjeV9zZXJ2aWNlX2JlZm9yZSIgfHwgewogICAgZWNobyAiamFkZWwtYWdlbnQtcnVudGltZSBzZXJ2aWNlIG1hcmtlciBjaGFuZ2VkIiA+JjIKICAgIGV4aXQgMQogIH0KZmkKCmlmIFsgIiRwNGhfYmVmb3JlIiA9ICJBQlNFTlQiIF07IHRoZW4KICB0ZXN0ICEgLWUgIiRQNEhfTUFSS0VSIiB8fCB7CiAgICBlY2hvICJQNEggbWFya2VyIHVuZXhwZWN0ZWRseSBjcmVhdGVkIiA+JjIKICAgIGV4aXQgMQogIH0KZWxzZQogIHA0aF9hZnRlcj0iJChzaGEyNTZzdW0gIiRQNEhfTUFSS0VSIiB8IGF3ayAne3ByaW50ICQxfScpIgogIHRlc3QgIiRwNGhfYWZ0ZXIiID0gIiRwNGhfYmVmb3JlIiB8fCB7CiAgICBlY2hvICJQNEggcnVubmVyIG1hcmtlciBjaGFuZ2VkIiA+JjIKICAgIGV4aXQgMQogIH0KZmkKCmlmIFsgIiRzZXJ2aWNlX2JlZm9yZSIgPSAiQUJTRU5UIiBdOyB0aGVuCiAgdGVzdCAhIC1lICIkU0VSVklDRV9NQVJLRVIiIHx8IHsKICAgIGVjaG8gInNlcnZpY2UgbWFya2VyIHVuZXhwZWN0ZWRseSBjcmVhdGVkIiA+JjIKICAgIGV4aXQgMQogIH0KZWxzZQogIHNlcnZpY2VfYWZ0ZXI9IiQoc2hhMjU2c3VtICIkU0VSVklDRV9NQVJLRVIiIHwgYXdrICd7cHJpbnQgJDF9JykiCiAgdGVzdCAiJHNlcnZpY2VfYWZ0ZXIiID0gIiRzZXJ2aWNlX2JlZm9yZSIgfHwgewogICAgZWNobyAic2VydmljZSBtYXJrZXIgY2hhbmdlZCBkdXJpbmcgUkVHSVNURVJfT05MWSIgPiYyCiAgICBleGl0IDEKICB9CmZpCgplY2hvICJBR0lBX1BST0RVQ1RJT05fUlVOTkVSX1JFR0lTVEVSX09OTFk9UEFTUyIKZWNobyAiUlVOTkVSX0xBQkVMPSRSVU5ORVJfTEFCRUwiCmVjaG8gIkxFR0FDWV9KQURFTF9BR0VOVF9SVU5USU1FX1BSRVNFUlZFRD1QQVNTIgplY2hvICJQNEhfUFJFU0VSVkVEPVBBU1MiCmVjaG8gIlJVTk5FUl9TRVJWSUNFX0lOU1RBTExfUEVSRk9STUVEPU5PIgplY2hvICJSVU5ORVJfU0VSVklDRV9TVEFSVF9QRVJGT1JNRUQ9Tk8iCg=='
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTER_B64" | base64 -d > "$RUNNER_TEMP/register_only_agia_production_runner.sh"
+          chmod 700 "$RUNNER_TEMP/register_only_agia_production_runner.sh"
+          test "$(git hash-object "$RUNNER_TEMP/register_only_agia_production_runner.sh")" = "$EXPECTED_REGISTER_BLOB"
+          bash -n "$RUNNER_TEMP/register_only_agia_production_runner.sh"
+          grep -Fq 'RUNNER_HOME="/opt/actions-runners/agia-production-certifier"' "$RUNNER_TEMP/register_only_agia_production_runner.sh"
+          ! grep -Fq -- '--replace' "$RUNNER_TEMP/register_only_agia_production_runner.sh"
+          ! grep -Fq 'svc.sh' "$RUNNER_TEMP/register_only_agia_production_runner.sh"
+          ! grep -Fq 'systemctl ' "$RUNNER_TEMP/register_only_agia_production_runner.sh"
+          echo "REGISTER_ONLY_PAYLOAD_INTEGRITY=PASS"
+
+      - name: Resolve self Tailscale and SSH trust
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_USER"
+          case "$VPS_USER" in root) echo "refusing root SSH user" >&2; exit 1;; esac
+          test -n "$VPS_SSH_PRIVATE_KEY"
+          test -n "$VPS_SSH_PRIVATE_KEY_PASSPHRASE"
+          test "$(tailscale status --json | python3 -c 'import json,sys; print(json.load(sys.stdin).get("BackendState",""))')" = Running
+          TAILSCALE_IP="$(tailscale ip -4 | head -n1)"
+          [[ "$TAILSCALE_IP" =~ ^100\. ]]
+          printf 'TAILSCALE_IP=%s\n' "$TAILSCALE_IP" >> "$GITHUB_ENV"
+          test -r /etc/ssh/ssh_host_ed25519_key.pub
+          install -d -m 0700 "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/ssh/id_ed25519"
+          chmod 0600 "$RUNNER_TEMP/ssh/id_ed25519"
+          awk -v host="$TAILSCALE_IP" '{print host" "$1" "$2}' /etc/ssh/ssh_host_ed25519_key.pub > "$RUNNER_TEMP/ssh/known_hosts"
+          chmod 0600 "$RUNNER_TEMP/ssh/known_hosts"
+          eval "$(ssh-agent -s)" >/dev/null
+          printf 'SSH_AUTH_SOCK=%s\n' "$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          printf 'SSH_AGENT_PID=%s\n' "$SSH_AGENT_PID" >> "$GITHUB_ENV"
+          askpass="$RUNNER_TEMP/ssh/askpass"
+          cat > "$askpass" <<'ASKPASS'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          printf '%s\n' "${VPS_SSH_PRIVATE_KEY_PASSPHRASE:?}"
+          ASKPASS
+          chmod 0700 "$askpass"
+          DISPLAY=:0 SSH_ASKPASS="$askpass" SSH_ASKPASS_REQUIRE=force ssh-add "$RUNNER_TEMP/ssh/id_ed25519" </dev/null >/dev/null
+          echo "REGISTER_SELF_TAILSCALE_SSH_TRUST=PASS"
+
+      - name: Verify runtime user chain and clean safe stale stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$RUNNER_TEMP/ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent="$SSH_AUTH_SOCK" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o ConnectTimeout=15)
+          "${SSH[@]}" -- "$VPS_USER@$TAILSCALE_IP" 'set -euo pipefail
+            id runtime-gateway-deploy >/dev/null
+            sudo -n -u runtime-gateway-deploy true
+            sudo -n -u runtime-gateway-deploy bash -c "sudo -n -l /usr/local/sbin/agia-runner-bootstrap >/dev/null"
+            test -x /usr/local/sbin/agia-github-app-installation-token
+            p=/tmp/bootstrap_agia_production_runner.sh
+            if [ -e "$p" ]; then
+              test ! -L "$p"
+              owner="$(stat -c %U "$p")"
+              caller="$(id -un)"
+              case "$owner" in
+                "$caller") rm -f "$p" ;;
+                runtime-gateway-deploy) sudo -n -u runtime-gateway-deploy rm -f "$p" ;;
+                *) echo "unexpected staged file owner: $owner" >&2; exit 41 ;;
+              esac
+            fi
+            test ! -e "$p"
+          '
+          echo "REGISTER_PRIVILEGE_CHAIN=PASS"
+
+      - name: Stage REGISTER_ONLY as runtime-gateway-deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$RUNNER_TEMP/ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent="$SSH_AUTH_SOCK" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o ConnectTimeout=15)
+          "${SSH[@]}" -- "$VPS_USER@$TAILSCALE_IP"             "sudo -n -u runtime-gateway-deploy sh -c 'cat > /tmp/bootstrap_agia_production_runner.sh && chmod 700 /tmp/bootstrap_agia_production_runner.sh'"             < "$RUNNER_TEMP/register_only_agia_production_runner.sh"
+          echo "REGISTER_ONLY_STAGED=PASS"
+
+      - name: Mint ephemeral registration token and register only
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$RUNNER_TEMP/ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent="$SSH_AUTH_SOCK" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o ConnectTimeout=15)
+          set +e
+          out="$("${SSH[@]}" -- "$VPS_USER@$TAILSCALE_IP" 'set -euo pipefail
+            INSTALL_TOKEN="$(/usr/local/sbin/agia-github-app-installation-token print-installation-token)"
+            trap "unset INSTALL_TOKEN REG_TOKEN; rm -f /tmp/bootstrap_agia_production_runner.sh" EXIT HUP INT TERM
+            REG_JSON="$(curl -fsS -X POST               -H "Authorization: Bearer $INSTALL_TOKEN"               -H "Accept: application/vnd.github+json"               -H "X-GitHub-Api-Version: 2022-11-28"               "https://api.github.com/repos/jadeldiaz01-png/universal-multi-project-runtime/actions/runners/registration-token")"
+            REG_TOKEN="$(python3 -c '"'"'import json,sys; print(json.load(sys.stdin)["token"])'"'"' <<<"$REG_JSON")"
+            test -n "$REG_TOKEN"
+            unset INSTALL_TOKEN REG_JSON
+            printf "%s\n" "$REG_TOKEN" | sudo -n -u runtime-gateway-deploy bash -c '"'"'sudo -n /usr/local/sbin/agia-runner-bootstrap'"'"'
+            unset REG_TOKEN
+          ')"
+          rc=$?
+          set -e
+          printf '%s\n' "$out"
+          test "$rc" -eq 0
+          grep -qx 'AGIA_PRODUCTION_RUNNER_REGISTER_ONLY=PASS' <<<"$out"
+          grep -qx 'RUNNER_LABEL=agia-production-certifier' <<<"$out"
+          grep -qx 'LEGACY_JADEL_AGENT_RUNTIME_PRESERVED=PASS' <<<"$out"
+          grep -qx 'P4H_PRESERVED=PASS' <<<"$out"
+          grep -qx 'RUNNER_SERVICE_INSTALL_PERFORMED=NO' <<<"$out"
+          grep -qx 'RUNNER_SERVICE_START_PERFORMED=NO' <<<"$out"
+          echo "AGIA_REGISTER_ONLY_REMOTE=PASS"
+
+      - name: Verify registered runner via GitHub App without service
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$RUNNER_TEMP/ssh/id_ed25519" -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent="$SSH_AUTH_SOCK" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -o ConnectTimeout=15)
+          "${SSH[@]}" -- "$VPS_USER@$TAILSCALE_IP" 'set -euo pipefail
+            INSTALL_TOKEN="$(/usr/local/sbin/agia-github-app-installation-token print-installation-token)"
+            trap "unset INSTALL_TOKEN" EXIT HUP INT TERM
+            data="$(curl -fsS               -H "Authorization: Bearer $INSTALL_TOKEN"               -H "Accept: application/vnd.github+json"               -H "X-GitHub-Api-Version: 2022-11-28"               "https://api.github.com/repos/jadeldiaz01-png/universal-multi-project-runtime/actions/runners?per_page=100")"
+            python3 -c '"'"'import json,sys,socket
+d=json.load(sys.stdin); name=socket.gethostname().split(".")[0]+"-agia-production-certifier"
+r=next((x for x in d.get("runners",[]) if x.get("name")==name),None)
+assert r is not None, name
+labels={x.get("name") for x in r.get("labels",[])}
+assert "agia-production-certifier" in labels, labels
+print("AGIA_RUNNER_API_REGISTERED=PASS")
+print("AGIA_RUNNER_API_STATUS="+str(r.get("status")))
+print("AGIA_RUNNER_API_BUSY="+str(r.get("busy")).lower())'"'"' <<<"$data"
+          '
+          echo "REGISTER_ONLY_API_VERIFICATION=PASS"
+
+      - name: Cleanup
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set +e
+          if [ -n "${SSH_AGENT_PID:-}" ]; then ssh-agent -k >/dev/null 2>&1 || true; fi
+          rm -rf "$RUNNER_TEMP/ssh"
+          rm -f "$RUNNER_TEMP/register_only_agia_production_runner.sh"
