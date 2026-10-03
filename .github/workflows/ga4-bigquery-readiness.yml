@@ -1,4 +1,5 @@
 name: GA4 BigQuery Daily Export readiness
+# Revalidate completed-link evidence without generating analytics traffic
 
 on:
   pull_request:
