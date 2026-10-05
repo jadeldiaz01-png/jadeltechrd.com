@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0.0",
+  "currency": "USD",
+  "scope": "cumulative_settled_revenue",
+  "source": {
+    "database_name": "jadel-commercial-runtime",
+    "table": "sales_settlements",
+    "predicate": "status='MATCHED' AND currency_code='USD'",
+    "query_semantics": "SELECT_ONLY"
+  },
+  "milestones": [
+    {"id":"settled_250","label":"US$250","target_usd":250},
+    {"id":"settled_1000","label":"US$1,000","target_usd":1000},
+    {"id":"settled_5000","label":"US$5,000","target_usd":5000}
+  ],
+  "traffic_light": {"yellow_min_ratio":0.5,"green_min_ratio":1.0},
+  "governance": {
+    "d1_mutation_authorized": false,
+    "payment_mutation_authorized": false,
+    "financial_execution_authorized": false,
+    "external_side_effects_authorized": false
+  }
+}
