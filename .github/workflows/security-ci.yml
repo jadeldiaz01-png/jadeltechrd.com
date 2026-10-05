@@ -96,6 +96,7 @@ jobs:
           require("PROTECTED_MAIN_SHA_MATCH=PASS", "COMMERCIAL_RUNTIME_MAIN_SHA_RECHECK")
           require("D1_MUTATION_SHA_GATE=PASS", "COMMERCIAL_RUNTIME_D1_SHA_GATE")
           require("WORKER_MUTATION_SHA_GATE=PASS", "COMMERCIAL_RUNTIME_WORKER_SHA_GATE")
+          require('PAYPAL_ENVIRONMENT:"live"', "COMMERCIAL_RUNTIME_PAYPAL_ENVIRONMENT")
           require('PAYPAL_ORDER_CREATION_ENABLED:"false"', "COMMERCIAL_RUNTIME_PAYPAL_ORDER_CREATION")
           require('PAYPAL_LIVE_ORDER_CREATION_ENABLED:"false"', "COMMERCIAL_RUNTIME_PAYPAL_LIVE_ORDER_CREATION")
           require('PRODUCTION_AUTHORIZED:"false"', "COMMERCIAL_RUNTIME_PRODUCTION_AUTHORITY")
@@ -177,6 +178,70 @@ jobs:
           print("PAYPAL_LIVE_WEBHOOK_CREDENTIAL_GOVERNANCE=PASS")
           PY
 
+      - name: Validate PayPal LIVE production workflow governance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          workflows = {
+              "readiness": Path(".github/workflows/paypal-live-readiness.yml"),
+              "activate": Path(".github/workflows/paypal-live-activate.yml"),
+              "capture": Path(".github/workflows/paypal-live-capture.yml"),
+          }
+
+          def require(text, fragment, label):
+              if fragment not in text:
+                  raise SystemExit(f"{label}=FAIL")
+
+          def manual_only(text, label):
+              if not re.search(r"^on:\s*\n\s+workflow_dispatch:", text, re.MULTILINE):
+                  raise SystemExit(f"{label}_DISPATCH=FAIL")
+              if re.search(r"^\s*push:\s*$", text, re.MULTILINE):
+                  raise SystemExit(f"{label}_PUSH=FAIL")
+              if re.search(r"^\s*schedule:\s*$", text, re.MULTILINE):
+                  raise SystemExit(f"{label}_SCHEDULE=FAIL")
+
+          readiness = workflows["readiness"].read_text(encoding="utf-8")
+          activation = workflows["activate"].read_text(encoding="utf-8")
+          capture = workflows["capture"].read_text(encoding="utf-8")
+
+          manual_only(readiness, "PAYPAL_LIVE_READINESS")
+          require(readiness, "VERIFY_PAYPAL_LIVE_READINESS", "PAYPAL_LIVE_READINESS_CONFIRMATION")
+          require(readiness, 'test "$GITHUB_SHA" = "$EXPECTED_SHA"', "PAYPAL_LIVE_READINESS_SHA")
+          require(readiness, "PAYPAL_LIVE_READINESS=PASS", "PAYPAL_LIVE_READINESS_EVIDENCE")
+          if "/capture" in readiness:
+              raise SystemExit("PAYPAL_LIVE_READINESS_CAPTURE=FAIL")
+
+          manual_only(activation, "PAYPAL_LIVE_ACTIVATION")
+          require(activation, "ACTIVATE_PAYPAL_LIVE_ORDER_CREATION", "PAYPAL_LIVE_ACTIVATION_CONFIRMATION")
+          require(activation, 'test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"', "PAYPAL_LIVE_ACTIVATION_SHA")
+          require(activation, 'PAYPAL_ENVIRONMENT:"live"', "PAYPAL_LIVE_ACTIVATION_ENV")
+          require(activation, 'PAYPAL_ORDER_CREATION_ENABLED:"true"', "PAYPAL_LIVE_ACTIVATION_ORDER_FLAG")
+          require(activation, 'PAYPAL_LIVE_ORDER_CREATION_ENABLED:"true"', "PAYPAL_LIVE_ACTIVATION_LIVE_FLAG")
+          require(activation, 'PRODUCTION_AUTHORIZED:"true"', "PAYPAL_LIVE_ACTIVATION_PRODUCTION_FLAG")
+          require(activation, 'FINANCIAL_EXECUTION_AUTHORIZED:"false"', "PAYPAL_LIVE_ACTIVATION_FINANCIAL_BOUNDARY")
+          require(activation, 'MAX_AUTONOMOUS_CAPITAL_USD:"0"', "PAYPAL_LIVE_ACTIVATION_CAPITAL_BOUNDARY")
+          if "/capture" in activation:
+              raise SystemExit("PAYPAL_LIVE_ACTIVATION_CAPTURE=FAIL")
+
+          manual_only(capture, "PAYPAL_LIVE_CAPTURE")
+          require(capture, "CAPTURE_PAYPAL_LIVE_ORDER", "PAYPAL_LIVE_CAPTURE_CONFIRMATION")
+          require(capture, "paypal_order_id:", "PAYPAL_LIVE_CAPTURE_PROVIDER_ID")
+          require(capture, "payment_order_id:", "PAYPAL_LIVE_CAPTURE_INTERNAL_ID")
+          require(capture, "quote_id:", "PAYPAL_LIVE_CAPTURE_QUOTE_ID")
+          require(capture, 'test "$status" = APPROVED', "PAYPAL_LIVE_CAPTURE_APPROVED_GATE")
+          require(capture, "PayPal-Request-Id: jadel-live-capture-$PAYMENT_ORDER_ID", "PAYPAL_LIVE_CAPTURE_IDEMPOTENCY")
+          require(capture, "/v2/checkout/orders/$PAYPAL_ORDER_ID/capture", "PAYPAL_LIVE_CAPTURE_ENDPOINT")
+          require(capture, "PAYPAL_LIVE_SIGNED_WEBHOOK=PASS", "PAYPAL_LIVE_CAPTURE_WEBHOOK_EVIDENCE")
+          if "/api/v1/admin/payments/reconcile" in capture:
+              raise SystemExit("PAYPAL_LIVE_CAPTURE_AUTO_RECONCILE=FAIL")
+
+          print("PAYPAL_LIVE_PRODUCTION_WORKFLOW_GOVERNANCE=PASS")
+          PY
+
       - name: Validate GitHub Pages deploy governance
         shell: bash
         run: |
@@ -229,6 +294,11 @@ jobs:
           expected_checkout_ref = "ref: $" + "{{ inputs.expected_sha }}"
           require(expected_checkout_ref, "PAGES_IMMUTABLE_CHECKOUT")
           require("actions/deploy-pages@", "PAGES_DEPLOY_ACTION")
+          require("public_assets=(", "PAGES_PUBLIC_ASSET_ALLOWLIST")
+          require("approval-console.html", "PAGES_APPROVAL_CONSOLE_HTML")
+          require("approval-console.js", "PAGES_APPROVAL_CONSOLE_JS")
+          if "find . -mindepth 1 -maxdepth 1" in text:
+              raise SystemExit("PAGES_BROAD_ROOT_COPY=FAIL")
 
           print("PAGES_DEPLOY_GOVERNANCE=PASS")
           PY
