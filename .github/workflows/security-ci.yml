@@ -212,8 +212,8 @@ jobs:
           require(readiness, "VERIFY_PAYPAL_LIVE_READINESS", "PAYPAL_LIVE_READINESS_CONFIRMATION")
           require(readiness, 'test "$GITHUB_SHA" = "$EXPECTED_SHA"', "PAYPAL_LIVE_READINESS_SHA")
           require(readiness, "PAYPAL_LIVE_READINESS=PASS", "PAYPAL_LIVE_READINESS_EVIDENCE")
-          if "/capture" in readiness:
-              raise SystemExit("PAYPAL_LIVE_READINESS_CAPTURE=FAIL")
+          if "$PAYPAL_LIVE_API/v2/checkout/orders/" in readiness:
+              raise SystemExit("PAYPAL_LIVE_READINESS_PROVIDER_ORDER_CALL=FAIL")
 
           manual_only(activation, "PAYPAL_LIVE_ACTIVATION")
           require(activation, "ACTIVATE_PAYPAL_LIVE_ORDER_CREATION", "PAYPAL_LIVE_ACTIVATION_CONFIRMATION")
@@ -224,8 +224,8 @@ jobs:
           require(activation, 'PRODUCTION_AUTHORIZED:"true"', "PAYPAL_LIVE_ACTIVATION_PRODUCTION_FLAG")
           require(activation, 'FINANCIAL_EXECUTION_AUTHORIZED:"false"', "PAYPAL_LIVE_ACTIVATION_FINANCIAL_BOUNDARY")
           require(activation, 'MAX_AUTONOMOUS_CAPITAL_USD:"0"', "PAYPAL_LIVE_ACTIVATION_CAPITAL_BOUNDARY")
-          if "/capture" in activation:
-              raise SystemExit("PAYPAL_LIVE_ACTIVATION_CAPTURE=FAIL")
+          if "$PAYPAL_LIVE_API/v2/checkout/orders/" in activation:
+              raise SystemExit("PAYPAL_LIVE_ACTIVATION_PROVIDER_ORDER_CALL=FAIL")
 
           manual_only(capture, "PAYPAL_LIVE_CAPTURE")
           require(capture, "CAPTURE_PAYPAL_LIVE_ORDER", "PAYPAL_LIVE_CAPTURE_CONFIRMATION")
