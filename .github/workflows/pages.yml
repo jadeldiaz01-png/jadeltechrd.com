@@ -72,9 +72,41 @@ jobs:
           set -euo pipefail
           rm -rf _site
           mkdir -p _site
-          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name _site ! -name evidence ! -name CNAME -exec cp -a {} _site/ \;
+          public_assets=(
+            index.html
+            styles.css
+            project-request.css
+            project-request.js
+            solicitar-proyecto.html
+            revenue-funnel.js
+            ga4-config.js
+            ga4-loader.js
+            analytics-consent.js
+            analytics-consent.css
+            revenue-funnel.css
+            whatsapp-ia-empresas-rd.html
+            automatizacion-procesos-ia-rd.html
+            agente-ventas-ia-rd.html
+            robots.txt
+            sitemap.xml
+            llms.txt
+            agent-services.json
+            approval-console.html
+            approval-console.js
+          )
+          for asset in "${public_assets[@]}"; do
+            test -f "$asset"
+            cp "$asset" "_site/$asset"
+          done
           test -s _site/llms.txt
           test -s _site/agent-services.json
+          test -s _site/approval-console.html
+          test -s _site/approval-console.js
+          test ! -e _site/.github
+          test ! -e _site/commercial-runtime
+          test ! -e _site/scripts
+          test ! -e _site/config
+          echo PUBLIC_ASSET_ALLOWLIST=PASS
           echo AGENT_DISCOVERY_ASSETS_STAGED=PASS
 
           immutable_app="app.${GITHUB_SHA}.js"
