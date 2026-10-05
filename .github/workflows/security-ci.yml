@@ -44,6 +44,13 @@ jobs:
             echo 'INSECURE_RESOURCE_REFERENCE=FAIL'
             exit 1
           fi
+          if grep -Fq 'paypal.com/ncp/payment/' index.html || grep -Fq 'paypal.com/ncp/payment/' app.js; then
+            echo 'UNTRACKED_PUBLIC_PAYPAL_LINK=FAIL'
+            exit 1
+          fi
+          ! grep -Fq 'PAYMENT_LINKS' app.js
+          grep -Fq 'checkout PayPal único asociado a tu cotización' index.html
+          echo 'GOVERNED_PUBLIC_CHECKOUT_ONLY=PASS'
           echo 'SOURCE_SECURITY=PASS'
       - name: Require immutable GitHub Actions
         shell: bash
