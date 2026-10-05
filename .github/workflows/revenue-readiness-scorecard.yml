@@ -1,0 +1,97 @@
+name: Revenue readiness scorecard
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact protected main SHA approved for this read-only run
+        required: true
+        type: string
+  schedule:
+    - cron: '17 */6 * * *'
+  pull_request:
+    paths: ['config/revenue-readiness-scorecard.json','scripts/revenue-readiness-scorecard.mjs','scripts/test-revenue-readiness-scorecard.mjs','.github/workflows/revenue-readiness-scorecard.yml']
+  push:
+    branches: [main]
+    paths: ['config/revenue-readiness-scorecard.json','scripts/revenue-readiness-scorecard.mjs','scripts/test-revenue-readiness-scorecard.mjs','.github/workflows/revenue-readiness-scorecard.yml']
+
+permissions:
+  contents: read
+concurrency:
+  group: revenue-readiness-scorecard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: {persist-credentials: false}
+      - name: Validate read-only contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/revenue-readiness-scorecard.mjs
+          node --test scripts/test-revenue-readiness-scorecard.mjs
+          jq -e '.currency=="USD" and .scope=="cumulative_settled_revenue" and .source.table=="sales_settlements" and .source.query_semantics=="SELECT_ONLY" and ([.milestones[].target_usd]==[250,1000,5000]) and ([.governance[]]|any)==false' config/revenue-readiness-scorecard.json >/dev/null
+          wf=.github/workflows/revenue-readiness-scorecard.yml
+          sql_line=$(grep -F 'sql="SELECT ' "$wf")
+          test -n "$sql_line"
+          printf '%s' "$sql_line" | grep -Fq "FROM sales_settlements"
+          ! printf '%s' "$sql_line" | grep -Eiq '\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE)\b'
+          echo REVENUE_SCORECARD_CONTRACT=PASS
+
+  live-readonly:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
+    needs: contract
+    environment: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      D1_NAME: jadel-commercial-runtime
+      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: {ref: '${{ github.sha }}', fetch-depth: 1, persist-credentials: false}
+      - name: Exact SHA gate
+        shell: bash
+        env: {MANUAL_EXPECTED_SHA: '${{ inputs.expected_sha }}'}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          expected="$GITHUB_SHA"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then [[ "$MANUAL_EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]; test "$MANUAL_EXPECTED_SHA" = "$GITHUB_SHA"; expected="$MANUAL_EXPECTED_SHA"; fi
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$expected"; test "$(git rev-parse refs/remotes/origin/main)" = "$expected"; test -z "$(git status --porcelain)"
+      - name: Read D1 settlement facts
+        shell: bash
+        run: |
+          set -euo pipefail
+          token=$(printf '%s' "${CLOUDFLARE_D1_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]'); test -n "$token"; test -n "$account"; echo "::add-mask::$token"
+          auth=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
+          dbs=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database?name=${D1_NAME}&per_page=100")
+          test "$(jq -r '.success' <<<"$dbs")" = true
+          test "$(jq -r --arg n "$D1_NAME" '[.result[]|select(.name==$n)]|length' <<<"$dbs")" = 1
+          db=$(jq -r --arg n "$D1_NAME" '.result[]|select(.name==$n)|.uuid' <<<"$dbs")
+          sql="SELECT (SELECT COUNT(*) FROM project_requests) AS total_requests,(SELECT COUNT(DISTINCT project_id) FROM lead_lifecycle_events WHERE stage='qualify_lead') AS qualified_leads,(SELECT COUNT(DISTINCT project_id) FROM lead_lifecycle_events WHERE stage='close_convert_lead') AS converted_customers,(SELECT COUNT(*) FROM sales_settlements WHERE status='MATCHED' AND currency_code='USD') AS settled_payments,(SELECT COALESCE(SUM(amount_minor),0) FROM sales_settlements WHERE status='MATCHED' AND currency_code='USD') AS settled_amount_minor;"
+          printf '%s' "$sql" | grep -Eq '^SELECT '; ! printf '%s' "$sql" | grep -Eiq '\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE)\b'
+          resp=$(curl --fail-with-body -sS -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database/$db/query" --data "$(jq -n --arg sql "$sql" '{sql:$sql}')")
+          test "$(jq -r '.success' <<<"$resp")" = true; row=$(jq -c '.result[0].results[0]' <<<"$resp"); test "$row" != null
+          mkdir -p evidence
+          jq -n --argjson r "$row" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{source:"commercial_d1.sales_settlements",generated_at:$t,settled_amount_minor:($r.settled_amount_minor|tonumber),settled_payments:($r.settled_payments|tonumber),total_requests:($r.total_requests|tonumber),qualified_leads:($r.qualified_leads|tonumber),converted_customers:($r.converted_customers|tonumber)}' > evidence/revenue-readiness-facts.json
+      - name: Build scorecard
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/revenue-readiness-scorecard.mjs --facts evidence/revenue-readiness-facts.json --config config/revenue-readiness-scorecard.json --json evidence/revenue-readiness-scorecard.json --markdown evidence/revenue-readiness-scorecard.md
+          sha256sum evidence/revenue-readiness-facts.json evidence/revenue-readiness-scorecard.json > evidence/revenue-readiness-scorecard.sha256
+          cat evidence/revenue-readiness-scorecard.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: revenue-readiness-scorecard-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/revenue-readiness-*
+          if-no-files-found: error
+          retention-days: 35
