@@ -4,6 +4,7 @@
   const SERVICE_ID_PATTERN = /^[a-z0-9-]{1,64}$/;
   const MAX_INTAKE_SERVICES = 8;
   const CONTACT_EMAIL = "darklife_jadel@hotmail.com";
+  const NEXUS_AGENT = "nexus_ai_automation_v0.3.0";
   const services = [
     {
       id: "architecture",
