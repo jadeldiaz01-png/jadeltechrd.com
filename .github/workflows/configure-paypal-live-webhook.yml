@@ -158,29 +158,56 @@ jobs:
           }
 
           assert_main
-          printf '%s' "$paypal_client_id" | npx wrangler secret put PAYPAL_CLIENT_ID --name "$WORKER_NAME"
+          printf '%s' "$paypal_client_id" | "$WRANGLER_BIN" secret put PAYPAL_CLIENT_ID --name "$WORKER_NAME"
           echo PAYPAL_CLIENT_ID_RECONCILED=PASS
 
           assert_main
-          printf '%s' "$paypal_client_secret" | npx wrangler secret put PAYPAL_CLIENT_SECRET --name "$WORKER_NAME"
+          printf '%s' "$paypal_client_secret" | "$WRANGLER_BIN" secret put PAYPAL_CLIENT_SECRET --name "$WORKER_NAME"
           echo PAYPAL_CLIENT_SECRET_RECONCILED=PASS
 
           assert_main
-          printf '%s' "$paypal_webhook_id" | npx wrangler secret put PAYPAL_WEBHOOK_ID --name "$WORKER_NAME"
+          printf '%s' "$paypal_webhook_id" | "$WRANGLER_BIN" secret put PAYPAL_WEBHOOK_ID --name "$WORKER_NAME"
           echo PAYPAL_WEBHOOK_ID_RECONCILED=PASS
+
+          assert_main
+          secret_list=$("$WRANGLER_BIN" secret list --name "$WORKER_NAME" --format json)
+          for secret_name in PAYPAL_CLIENT_ID PAYPAL_CLIENT_SECRET PAYPAL_WEBHOOK_ID; do
+            jq -e --arg name "$secret_name" '[.[] | select(.name == $name)] | length == 1' <<<"$secret_list" >/dev/null || {
+              echo "${secret_name}_PRESENCE=FAIL" >&2
+              exit 11
+            }
+            echo "${secret_name}_PRESENCE=PASS"
+          done
+          echo PAYPAL_LIVE_SECRET_NAMES_PRESENT=PASS
 
       - name: Verify invalid PayPal webhook signature is rejected
         shell: bash
         run: |
           set -euo pipefail
-          code=$(curl -sS -o /tmp/paypal-invalid-signature.json -w '%{http_code}' \
-            -X POST \
-            -H 'content-type: application/json' \
-            --data '{"id":"governed-invalid-signature-canary"}' \
-            "https://${API_HOST}/api/v1/paypal/webhooks")
-          test "$code" = 403 || {
-            echo "PAYPAL_LIVE_WEBHOOK_INVALID_SIGNATURE_CANARY=FAIL_HTTP_${code}" >&2
+          max_attempts=12
+          for attempt in $(seq 1 "$max_attempts"); do
+            code=$(curl -sS -o /tmp/paypal-invalid-signature.json -w '%{http_code}' \
+              -X POST \
+              -H 'content-type: application/json' \
+              --data '{"id":"governed-invalid-signature-canary"}' \
+              "https://${API_HOST}/api/v1/paypal/webhooks")
+            error=$(jq -r '.error // empty' /tmp/paypal-invalid-signature.json)
+
+            if [ "$code" = 403 ] && [ "$error" = "PAYPAL_WEBHOOK_REJECTED" ]; then
+              echo "PAYPAL_LIVE_WEBHOOK_INVALID_SIGNATURE_CANARY=PASS attempt=${attempt}"
+              exit 0
+            fi
+
+            if [ "$code" = 503 ] && [ "$error" = "PAYPAL_WEBHOOK_NOT_CONFIGURED" ]; then
+              if [ "$attempt" -lt "$max_attempts" ]; then
+                echo "PAYPAL_LIVE_WEBHOOK_PROPAGATION_PENDING=RETRY attempt=${attempt}"
+                sleep 2
+                continue
+              fi
+              echo "PAYPAL_LIVE_WEBHOOK_INVALID_SIGNATURE_CANARY=FAIL_PROPAGATION_TIMEOUT attempts=${max_attempts}" >&2
+              exit 21
+            fi
+
+            echo "PAYPAL_LIVE_WEBHOOK_INVALID_SIGNATURE_CANARY=FAIL_HTTP_${code}_ERROR_${error}" >&2
             exit 20
-          }
-          test "$(jq -r '.error // empty' /tmp/paypal-invalid-signature.json)" = "PAYPAL_WEBHOOK_REJECTED"
-          echo PAYPAL_LIVE_WEBHOOK_INVALID_SIGNATURE_CANARY=PASS
+          done
