@@ -158,15 +158,15 @@ jobs:
           }
 
           assert_main
-          printf '%s' "$paypal_client_id" | "$WRANGLER_BIN" secret put PAYPAL_CLIENT_ID --name "$WORKER_NAME"
+          printf '%s' "$paypal_client_id" | wrangler secret put PAYPAL_CLIENT_ID --name "$WORKER_NAME"
           echo PAYPAL_CLIENT_ID_RECONCILED=PASS
 
           assert_main
-          printf '%s' "$paypal_client_secret" | "$WRANGLER_BIN" secret put PAYPAL_CLIENT_SECRET --name "$WORKER_NAME"
+          printf '%s' "$paypal_client_secret" | wrangler secret put PAYPAL_CLIENT_SECRET --name "$WORKER_NAME"
           echo PAYPAL_CLIENT_SECRET_RECONCILED=PASS
 
           assert_main
-          printf '%s' "$paypal_webhook_id" | "$WRANGLER_BIN" secret put PAYPAL_WEBHOOK_ID --name "$WORKER_NAME"
+          printf '%s' "$paypal_webhook_id" | wrangler secret put PAYPAL_WEBHOOK_ID --name "$WORKER_NAME"
           echo PAYPAL_WEBHOOK_ID_RECONCILED=PASS
 
           assert_main
@@ -193,11 +193,6 @@ jobs:
               "https://${API_HOST}/api/v1/paypal/webhooks")
             error=$(jq -r '.error // empty' /tmp/paypal-invalid-signature.json)
 
-            if [ "$code" = 403 ] && [ "$error" = "PAYPAL_WEBHOOK_REJECTED" ]; then
-              echo "PAYPAL_LIVE_WEBHOOK_INVALID_SIGNATURE_CANARY=PASS attempt=${attempt}"
-              exit 0
-            fi
-
             if [ "$code" = 503 ] && [ "$error" = "PAYPAL_WEBHOOK_NOT_CONFIGURED" ]; then
               if [ "$attempt" -lt "$max_attempts" ]; then
                 echo "PAYPAL_LIVE_WEBHOOK_PROPAGATION_PENDING=RETRY attempt=${attempt}"
@@ -208,6 +203,14 @@ jobs:
               exit 21
             fi
 
-            echo "PAYPAL_LIVE_WEBHOOK_INVALID_SIGNATURE_CANARY=FAIL_HTTP_${code}_ERROR_${error}" >&2
-            exit 20
+            test "$code" = 403 || {
+              echo "PAYPAL_LIVE_WEBHOOK_INVALID_SIGNATURE_CANARY=FAIL_HTTP_${code}_ERROR_${error}" >&2
+              exit 20
+            }
+            test "$error" = "PAYPAL_WEBHOOK_REJECTED" || {
+              echo "PAYPAL_LIVE_WEBHOOK_INVALID_SIGNATURE_CANARY=FAIL_HTTP_${code}_ERROR_${error}" >&2
+              exit 20
+            }
+            echo "PAYPAL_LIVE_WEBHOOK_INVALID_SIGNATURE_CANARY=PASS attempt=${attempt}"
+            exit 0
           done
