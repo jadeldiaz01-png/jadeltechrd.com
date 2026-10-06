@@ -1,0 +1,148 @@
+name: Verify PayPal LIVE readiness
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact protected main SHA approved for read-only PayPal LIVE readiness verification
+        required: true
+        type: string
+      confirmation:
+        description: Type VERIFY_PAYPAL_LIVE_READINESS
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jadel-paypal-live-readiness
+  cancel-in-progress: true
+
+env:
+  API_HOST: intake.jadeltechrd.com
+  PAYPAL_LIVE_API: https://api-m.paypal.com
+
+jobs:
+  verify:
+    if: ${{ inputs.confirmation == 'VERIFY_PAYPAL_LIVE_READINESS' }}
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      PAYPAL_CLIENT_ID_RAW: ${{ secrets.PAYPAL_CLIENT_ID }}
+      PAYPAL_CLIENT_SECRET_RAW: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      PAYPAL_WEBHOOK_ID_RAW: ${{ secrets.PAYPAL_WEBHOOK_ID }}
+    steps:
+      - name: Validate exact-SHA authorization
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          echo PAYPAL_LIVE_READINESS_AUTHORIZATION=PASS
+
+      - name: Checkout immutable approved revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify protected main and fail-closed source contract
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain)"
+          deploy=.github/workflows/deploy-commercial-runtime.yml
+          grep -Fq 'PAYPAL_ENVIRONMENT:"live"' "$deploy"
+          grep -Fq 'PAYPAL_ORDER_CREATION_ENABLED:"false"' "$deploy"
+          grep -Fq 'PAYPAL_LIVE_ORDER_CREATION_ENABLED:"false"' "$deploy"
+          grep -Fq 'PRODUCTION_AUTHORIZED:"false"' "$deploy"
+          grep -Fq 'FINANCIAL_EXECUTION_AUTHORIZED:"false"' "$deploy"
+          grep -Fq 'MAX_AUTONOMOUS_CAPITAL_USD:"0"' "$deploy"
+          ! grep -Fq '/v2/checkout/orders/$paypal_order_id/capture' commercial-runtime/src/worker.mjs
+          echo PAYPAL_LIVE_FAIL_CLOSED_SOURCE=PASS
+
+      - name: Verify PayPal LIVE application and webhook configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          normalize() { printf '%s' "$1" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'; }
+          client_id=$(normalize "${PAYPAL_CLIENT_ID_RAW:-}")
+          client_secret=$(normalize "${PAYPAL_CLIENT_SECRET_RAW:-}")
+          webhook_id=$(normalize "${PAYPAL_WEBHOOK_ID_RAW:-}")
+          test -n "$client_id" || { echo PAYPAL_CLIENT_ID_PRESENT=NO >&2; exit 2; }
+          test -n "$client_secret" || { echo PAYPAL_CLIENT_SECRET_PRESENT=NO >&2; exit 2; }
+          test -n "$webhook_id" || { echo PAYPAL_WEBHOOK_ID_PRESENT=NO >&2; exit 2; }
+          echo "::add-mask::$client_id"
+          echo "::add-mask::$client_secret"
+          echo "::add-mask::$webhook_id"
+
+          token=$(curl --fail-with-body -sS -u "$client_id:$client_secret" \
+            -H 'Accept: application/json' -H 'Accept-Language: en_US' \
+            -d 'grant_type=client_credentials' "$PAYPAL_LIVE_API/v1/oauth2/token" | jq -r '.access_token // empty')
+          test -n "$token"
+          echo "::add-mask::$token"
+
+          webhook=$(curl --fail-with-body -sS -H "Authorization: Bearer $token" \
+            "$PAYPAL_LIVE_API/v1/notifications/webhooks/$webhook_id")
+          test "$(jq -r '.url // empty' <<<"$webhook")" = "https://intake.jadeltechrd.com/api/v1/paypal/webhooks"
+          missing=$(jq -r '
+            [.event_types[]?.name] as $events |
+            ["PAYMENT.CAPTURE.COMPLETED","PAYMENT.CAPTURE.PENDING","PAYMENT.CAPTURE.DENIED","PAYMENT.CAPTURE.REFUNDED","PAYMENT.CAPTURE.REVERSED"] |
+            map(select(. as $required | ($events | index($required)) == null)) | length
+          ' <<<"$webhook")
+          test "$missing" = 0
+          echo PAYPAL_LIVE_OAUTH=PASS
+          echo PAYPAL_LIVE_WEBHOOK_CONFIG=PASS
+
+      - name: Verify production Worker health and live verification path
+        shell: bash
+        run: |
+          set -euo pipefail
+          health=$(curl --fail-with-body -sS "https://${API_HOST}/health")
+          test "$(jq -r '.status // empty' <<<"$health")" = ok
+          test "$(jq -r '.service // empty' <<<"$health")" = jadel-commercial-runtime
+
+          code=$(curl -sS -o /tmp/paypal-readiness.json -w '%{http_code}' \
+            -X POST \
+            -H 'content-type: application/json' \
+            -H 'paypal-auth-algo: SHA256withRSA' \
+            -H 'paypal-cert-url: https://api.paypal.com/certs/jadel-readiness.pem' \
+            -H 'paypal-transmission-id: jadel-live-readiness' \
+            -H 'paypal-transmission-sig: deliberately-invalid' \
+            -H 'paypal-transmission-time: 2026-01-01T00:00:00Z' \
+            --data '{"id":"JADel-live-readiness","event_type":"PAYMENT.CAPTURE.COMPLETED","resource":{"id":"READINESS","status":"COMPLETED","amount":{"value":"0.01","currency_code":"USD"}}}' \
+            "https://${API_HOST}/api/v1/paypal/webhooks")
+          test "$code" = 403 || {
+            echo "PAYPAL_LIVE_RUNTIME_VERIFY_PATH=FAIL_HTTP_$code" >&2
+            cat /tmp/paypal-readiness.json >&2
+            exit 20
+          }
+          test "$(jq -r '.error // empty' /tmp/paypal-readiness.json)" = PAYPAL_WEBHOOK_REJECTED
+          echo PAYPAL_LIVE_RUNTIME_VERIFY_PATH=PASS
+          echo PAYPAL_LIVE_READINESS=PASS
+
+      - name: Summarize
+        shell: bash
+        run: |
+          {
+            echo '## PayPal LIVE readiness'
+            echo
+            echo '- Exact protected main: PASS'
+            echo '- PayPal LIVE OAuth: PASS'
+            echo '- PayPal LIVE webhook URL/event set: PASS'
+            echo '- Production Worker health: PASS'
+            echo '- Signed-webhook verification path: reachable and fail-closed'
+            echo '- No order created and no money captured'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,251 @@
+name: Activate PayPal LIVE order creation
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact protected main SHA approved for PayPal LIVE order-creation activation
+        required: true
+        type: string
+      confirmation:
+        description: Type ACTIVATE_PAYPAL_LIVE_ORDER_CREATION
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jadel-paypal-live-order-activation
+  cancel-in-progress: false
+
+env:
+  DOMAIN: jadeltechrd.com
+  API_HOST: intake.jadeltechrd.com
+  WORKER_NAME: jadel-commercial-runtime
+  D1_NAME: jadel-commercial-runtime
+  WRANGLER_VERSION: 4.127.1
+  PAYPAL_LIVE_API: https://api-m.paypal.com
+
+jobs:
+  resolve-production-d1:
+    if: ${{ inputs.confirmation == 'ACTIVATE_PAYPAL_LIVE_ORDER_CREATION' }}
+    environment:
+      name: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    outputs:
+      account_hash: ${{ steps.d1.outputs.account_hash }}
+      database_id: ${{ steps.d1.outputs.database_id }}
+      database_hash: ${{ steps.d1.outputs.database_hash }}
+    env:
+      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Exact-SHA gate
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+
+      - name: Checkout immutable approved revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify main and resolve existing D1 read-only
+        id: d1
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          raw="${CLOUDFLARE_D1_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          test -n "$token"; test -n "$account"; echo "::add-mask::$token"
+          auth=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
+          dbs=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database?name=${D1_NAME}&per_page=100")
+          test "$(jq -r '.success' <<<"$dbs")" = true
+          test "$(jq -r --arg n "$D1_NAME" '[.result[]|select(.name==$n)]|length' <<<"$dbs")" = 1
+          db=$(jq -r --arg n "$D1_NAME" '.result[]|select(.name==$n)|.uuid' <<<"$dbs")
+          test -n "$db" && test "$db" != null
+          account_hash=$(printf '%s' "$account" | sha256sum | awk '{print $1}')
+          database_hash=$(printf '%s' "$db" | sha256sum | awk '{print $1}')
+          echo "account_hash=$account_hash" >> "$GITHUB_OUTPUT"
+          echo "database_id=$db" >> "$GITHUB_OUTPUT"
+          echo "database_hash=$database_hash" >> "$GITHUB_OUTPUT"
+          echo PAYPAL_LIVE_D1_PREFLIGHT=PASS
+
+  activate:
+    needs: resolve-production-d1
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+      PAYPAL_CLIENT_ID_RAW: ${{ secrets.PAYPAL_CLIENT_ID }}
+      PAYPAL_CLIENT_SECRET_RAW: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      PAYPAL_WEBHOOK_ID_RAW: ${{ secrets.PAYPAL_WEBHOOK_ID }}
+      D1_ACCOUNT_HASH: ${{ needs.resolve-production-d1.outputs.account_hash }}
+      D1_DATABASE_ID: ${{ needs.resolve-production-d1.outputs.database_id }}
+      D1_DATABASE_HASH: ${{ needs.resolve-production-d1.outputs.database_hash }}
+    steps:
+      - name: Checkout immutable approved revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify source authority boundary
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain)"
+          grep -Fq 'PAYPAL_LIVE_ORDER_CREATION_DISABLED' commercial-runtime/src/worker.mjs
+          grep -Fq 'PAYPAL_PRODUCTION_NOT_AUTHORIZED' commercial-runtime/src/worker.mjs
+          grep -Fq 'PAYPAL_AUTONOMOUS_CAPITAL_NOT_ALLOWED' commercial-runtime/src/worker.mjs
+          ! grep -Fq '/v2/checkout/orders/$paypal_order_id/capture' commercial-runtime/src/worker.mjs
+          echo PAYPAL_LIVE_ACTIVATION_SOURCE_GATE=PASS
+
+      - name: Verify PayPal LIVE credentials and webhook read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          normalize() { printf '%s' "$1" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'; }
+          client_id=$(normalize "${PAYPAL_CLIENT_ID_RAW:-}")
+          client_secret=$(normalize "${PAYPAL_CLIENT_SECRET_RAW:-}")
+          webhook_id=$(normalize "${PAYPAL_WEBHOOK_ID_RAW:-}")
+          test -n "$client_id"; test -n "$client_secret"; test -n "$webhook_id"
+          echo "::add-mask::$client_id"; echo "::add-mask::$client_secret"; echo "::add-mask::$webhook_id"
+          token=$(curl --fail-with-body -sS -u "$client_id:$client_secret" -d 'grant_type=client_credentials' "$PAYPAL_LIVE_API/v1/oauth2/token" | jq -r '.access_token // empty')
+          test -n "$token"; echo "::add-mask::$token"
+          webhook=$(curl --fail-with-body -sS -H "Authorization: Bearer $token" "$PAYPAL_LIVE_API/v1/notifications/webhooks/$webhook_id")
+          test "$(jq -r '.url // empty' <<<"$webhook")" = "https://intake.jadeltechrd.com/api/v1/paypal/webhooks"
+          jq -e '[.event_types[]?.name] | index("PAYMENT.CAPTURE.COMPLETED") != null' <<<"$webhook" >/dev/null
+          echo PAYPAL_LIVE_PROVIDER_PREFLIGHT=PASS
+
+      - name: Use Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
+      - name: Resolve Worker account and public Turnstile binding
+        id: cf
+        shell: bash
+        run: |
+          set -euo pipefail
+          token=$(printf '%s' "${CLOUDFLARE_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          test -n "$token"; echo "::add-mask::$token"; export CLOUDFLARE_API_TOKEN="$token"
+          zones=$(curl --fail-with-body -sS -H "Authorization: Bearer $token" "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50")
+          test "$(jq -r '.success' <<<"$zones")" = true
+          account=$(jq -r --arg d "$DOMAIN" '.result[]|select(.name==$d)|.account.id' <<<"$zones" | head -n1)
+          test -n "$account" && test "$account" != null
+          test "$(printf '%s' "$account" | sha256sum | awk '{print $1}')" = "$D1_ACCOUNT_HASH"
+          public=$(curl --fail-with-body -sS -H 'Origin: https://jadeltechrd.com' "https://${API_HOST}/api/v1/public-config")
+          sitekey=$(jq -r '.turnstile_sitekey // empty' <<<"$public")
+          test -n "$sitekey"
+          echo "account_id=$account" >> "$GITHUB_OUTPUT"
+          echo "sitekey=$sitekey" >> "$GITHUB_OUTPUT"
+          echo "CLOUDFLARE_API_TOKEN=$token" >> "$GITHUB_ENV"
+          echo PAYPAL_LIVE_CLOUDFLARE_PREFLIGHT=PASS
+
+      - name: Generate activation configuration
+        shell: bash
+        env:
+          TURNSTILE_SITEKEY: ${{ steps.cf.outputs.sitekey }}
+        run: |
+          set -euo pipefail
+          test "$(printf '%s' "$D1_DATABASE_ID" | sha256sum | awk '{print $1}')" = "$D1_DATABASE_HASH"
+          jq -n --arg db "$D1_DATABASE_ID" --arg sitekey "$TURNSTILE_SITEKEY" '{
+            "$schema":"./node_modules/wrangler/config-schema.json",
+            name:"jadel-commercial-runtime",
+            main:"src/project-entry.mjs",
+            compatibility_date:"2026-08-31",
+            keep_vars:true,
+            workers_dev:false,
+            observability:{enabled:true,head_sampling_rate:1},
+            vars:{
+              PUBLIC_ORIGIN:"https://jadeltechrd.com",
+              PUBLIC_TURNSTILE_SITEKEY:$sitekey,
+              TURNSTILE_EXPECTED_HOSTNAME:"jadeltechrd.com",
+              PAYPAL_ENVIRONMENT:"live",
+              PAYPAL_ORDER_CREATION_ENABLED:"true",
+              PAYPAL_LIVE_ORDER_CREATION_ENABLED:"true",
+              PRODUCTION_AUTHORIZED:"true",
+              FINANCIAL_EXECUTION_AUTHORIZED:"false",
+              MAX_AUTONOMOUS_CAPITAL_USD:"0"
+            },
+            d1_databases:[{binding:"DB",database_name:"jadel-commercial-runtime",database_id:$db}],
+            ratelimits:[{name:"PROJECT_REQUEST_RATE_LIMITER",namespace_id:"20260831",simple:{limit:5,period:60}}],
+            workflows:[{name:"jadel-project-lifecycle",binding:"PROJECT_WORKFLOW",class_name:"ProjectLifecycleWorkflow"}],
+            triggers:{crons:["*/2 * * * *"]}
+          }' > commercial-runtime/wrangler.paypal-live-activate.jsonc
+          jq -e '.vars.PAYPAL_ENVIRONMENT=="live" and .vars.PAYPAL_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_LIVE_ORDER_CREATION_ENABLED=="true" and .vars.PRODUCTION_AUTHORIZED=="true" and .vars.FINANCIAL_EXECUTION_AUTHORIZED=="false" and .vars.MAX_AUTONOMOUS_CAPITAL_USD=="0"' commercial-runtime/wrangler.paypal-live-activate.jsonc >/dev/null
+          echo PAYPAL_LIVE_ACTIVATION_CONFIG=PASS
+
+      - name: Install pinned Wrangler
+        shell: bash
+        working-directory: commercial-runtime
+        run: |
+          set -euo pipefail
+          npm install --no-save --ignore-scripts "wrangler@${WRANGLER_VERSION}"
+          test "$(npx wrangler --version | tr -d '\r\n[:space:]')" = "$WRANGLER_VERSION"
+
+      - name: Activate LIVE order creation
+        shell: bash
+        working-directory: commercial-runtime
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.cf.outputs.account_id }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          npx wrangler deploy --keep-vars --config wrangler.paypal-live-activate.jsonc
+          echo PAYPAL_LIVE_ORDER_CREATION_ACTIVATED=PASS
+
+      - name: Verify post-activation canaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          health=$(curl --fail-with-body -sS "https://${API_HOST}/health")
+          test "$(jq -r '.status // empty' <<<"$health")" = ok
+          code=$(curl -sS -o /tmp/paypal-activation-canary.json -w '%{http_code}' \
+            -X POST -H 'content-type: application/json' \
+            -H 'paypal-auth-algo: SHA256withRSA' \
+            -H 'paypal-cert-url: https://api.paypal.com/certs/jadel-activation.pem' \
+            -H 'paypal-transmission-id: jadel-live-activation' \
+            -H 'paypal-transmission-sig: deliberately-invalid' \
+            -H 'paypal-transmission-time: 2026-01-01T00:00:00Z' \
+            --data '{"id":"jadel-live-activation","event_type":"PAYMENT.CAPTURE.COMPLETED","resource":{"id":"ACTIVATION","status":"COMPLETED","amount":{"value":"0.01","currency_code":"USD"}}}' \
+            "https://${API_HOST}/api/v1/paypal/webhooks")
+          test "$code" = 403
+          test "$(jq -r '.error // empty' /tmp/paypal-activation-canary.json)" = PAYPAL_WEBHOOK_REJECTED
+          echo PAYPAL_LIVE_POST_ACTIVATION=PASS
+          {
+            echo '## PayPal LIVE order creation activated'
+            echo
+            echo 'Order creation: enabled'
+            echo 'Automatic capture: not implemented'
+            echo 'Financial execution authority: false'
+            echo 'Autonomous capital: US$0'
+            echo 'Rollback: dispatch Deploy commercial runtime on this exact main to restore false flags'
+          } >> "$GITHUB_STEP_SUMMARY"

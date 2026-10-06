@@ -4,24 +4,7 @@
   const SERVICE_ID_PATTERN = /^[a-z0-9-]{1,64}$/;
   const MAX_INTAKE_SERVICES = 8;
   const CONTACT_EMAIL = "darklife_jadel@hotmail.com";
-  const PAYPAL_PAYMENT_URL = "https://www.paypal.com/";
   const NEXUS_AGENT = "nexus_ai_automation_v0.3.0";
-  const PAYMENT_LINKS = {
-    architecture: {
-      setup: "https://www.paypal.com/ncp/payment/8XFP5NDQUN9J2"
-    },
-    support: {
-      setup: "https://www.paypal.com/ncp/payment/NN639WR9P7LPW",
-      monthly: "https://www.paypal.com/ncp/payment/G7EJQLHYUKLG8"
-    },
-    meta: {
-      setup: "https://www.paypal.com/ncp/payment/5EX2AGMB85P62"
-    },
-    governance: {
-      setup: "https://www.paypal.com/ncp/payment/3TQUF8WU2WHR2"
-    }
-  };
-
   const services = [
     {
       id: "architecture",
@@ -34,8 +17,7 @@
       statusLabel: "Servicio de ingeniería",
       setup: 250,
       monthly: 0,
-      priceLabel: "Desde US$250",
-      paymentLinks: PAYMENT_LINKS.architecture
+      priceLabel: "Desde US$250"
     },
     {
       id: "support",
@@ -48,8 +30,7 @@
       statusLabel: "Implementable",
       setup: 900,
       monthly: 149,
-      priceLabel: "US$900 + US$149/mes",
-      paymentLinks: PAYMENT_LINKS.support
+      priceLabel: "US$900 + US$149/mes"
     },
     {
       id: "sales",
@@ -101,8 +82,7 @@
       statusLabel: "Servicio de ingeniería",
       setup: 850,
       monthly: 0,
-      priceLabel: "Desde US$850",
-      paymentLinks: PAYMENT_LINKS.meta
+      priceLabel: "Desde US$850"
     },
     {
       id: "analytics",
@@ -154,8 +134,7 @@
       statusLabel: "Servicio de ingeniería",
       setup: 2500,
       monthly: 299,
-      priceLabel: "Desde US$2,500 + US$299/mes",
-      paymentLinks: PAYMENT_LINKS.governance
+      priceLabel: "Desde US$2,500 + US$299/mes"
     },
     {
       id: "multiagent",
@@ -198,32 +177,6 @@
     return `${INTAKE_PATH}?${params.toString()}`;
   };
 
-  const paymentLabel = {
-    setup: "Pagar implementación",
-    monthly: "Pagar soporte mensual"
-  };
-
-  const servicePaymentLinks = (service) => {
-    const links = Object.entries(service.paymentLinks || {});
-    if (!links.length) return "";
-    return `
-      <div class="service-payment-links" aria-label="Pagos PayPal disponibles para ${service.name}">
-        ${links.map(([type, url]) => `<a href="${url}" rel="noopener noreferrer" target="_blank">${paymentLabel[type]}</a>`).join("")}
-      </div>`;
-  };
-
-  const paymentOptionsMarkup = () => services
-    .filter((service) => service.paymentLinks)
-    .map((service) => `
-      <article>
-        <strong>${service.name}</strong>
-        <span>${service.priceLabel}</span>
-        <div>
-          ${Object.entries(service.paymentLinks).map(([type, url]) => `<a href="${url}" rel="noopener noreferrer" target="_blank">${paymentLabel[type]}</a>`).join("")}
-        </div>
-      </article>`)
-    .join("");
-
   const serviceCard = (service) => `
     <article class="service-card reveal" data-category="${service.category}" data-service-id="${service.id}">
       <div class="service-topline">
@@ -242,7 +195,6 @@
         </div>
         <button class="mini-action" type="button" data-add-service="${service.id}" aria-pressed="false">Añadir</button>
       </div>
-      ${servicePaymentLinks(service)}
     </article>`;
 
   const homeMarkup = `
@@ -390,23 +342,20 @@
         <div class="payment-panel reveal">
           <div>
             <div class="eyebrow">Pagos</div>
-            <h2>Contrata con PayPal y alcance confirmado.</h2>
-            <p>Cuenta PayPal autorizada por el propietario: <strong>${CONTACT_EMAIL}</strong>. Antes de enviar fondos, confirma alcance, moneda, entregables y fecha estimada de entrega.</p>
+            <h2>Pago PayPal vinculado a una cotización aprobada.</h2>
+            <p>Primero envía tu solicitud. Confirmamos alcance, moneda y entregables; después generamos un checkout PayPal único asociado a tu cotización para que el pago pueda verificarse y reconciliarse correctamente.</p>
           </div>
           <div class="payment-actions">
-            <a class="button primary full" href="${PAYPAL_PAYMENT_URL}" rel="noopener noreferrer">Abrir PayPal</a>
-            <a class="button secondary full" href="mailto:${CONTACT_EMAIL}?subject=Solicitud%20Jadel%20Tech%20RD&body=Hola%20Jadel%20Tech%20RD%2C%20quiero%20confirmar%20alcance%20y%20pago%20por%20PayPal.">Confirmar alcance</a>
-            <span>Formato Nexus: solicitud aprobada, pago PayPal, evidencia de pago, reconciliación y activación supervisada.</span>
+            <a class="button primary full" href="/solicitar-proyecto.html">Solicitar cotización</a>
+            <a class="button secondary full" href="mailto:${CONTACT_EMAIL}?subject=Solicitud%20Jadel%20Tech%20RD">Contactar</a>
+            <span>No envíes fondos a un enlace genérico: utiliza únicamente el checkout emitido para tu cotización aprobada.</span>
           </div>
         </div>
-        <div class="payment-link-grid reveal" aria-label="Enlaces PayPal oficiales por servicio">
-          ${paymentOptionsMarkup()}
-        </div>
         <div class="nexus-payment-protocol reveal" aria-label="Protocolo operativo Nexus">
-          <div><span>AUTO</span><strong>Selección y brief</strong><small>el configurador arma alcance, precio inicial y servicios.</small></div>
-          <div><span>HITL</span><strong>Confirmación humana</strong><small>alcance y entregables se aprueban antes del pago.</small></div>
-          <div><span>PAY</span><strong>PayPal</strong><small>pago manual o link oficial verificado cuando esté disponible.</small></div>
-          <div><span>OPS</span><strong>${NEXUS_AGENT}</strong><small>seguimiento, evidencias y operación con gates de seguridad.</small></div>
+          <div><span>AUTO</span><strong>Selección y brief</strong><small>el configurador prepara alcance y servicios.</small></div>
+          <div><span>HITL</span><strong>Cotización aprobada</strong><small>alcance, importe y entregables se aceptan antes del checkout.</small></div>
+          <div><span>PAY</span><strong>Checkout PayPal</strong><small>cada orden queda vinculada a quote_id y payment_order_id verificables.</small></div>
+          <div><span>OPS</span><strong>${NEXUS_AGENT}</strong><small>webhook firmado, ledger y reconciliación humana antes de marcar PAID.</small></div>
         </div>
       </section>
 
@@ -416,17 +365,17 @@
             <div class="eyebrow">Infraestructura comercial</div>
             <h2>Preparado para vender sin perder control operativo.</h2>
           </div>
-          <p>El sitio combina catálogo, solicitud gobernada, PayPal alojado y evidencia operacional. La automatización ayuda a preparar y reconciliar; pagos, contratos, publicaciones y trading siguen sujetos a aprobación humana.</p>
+          <p>El sitio combina catálogo, solicitud gobernada, checkout PayPal vinculado a cotización y evidencia operacional. La automatización ayuda a preparar y reconciliar; pagos, contratos, publicaciones y trading siguen sujetos a aprobación humana.</p>
         </div>
         <div class="revenue-infra-grid reveal" aria-label="Capas de infraestructura para ingresos">
-          <article><span>01</span><strong>Checkout alojado</strong><p>PayPal Payment Links para servicios listos; API y webhooks solo detrás del backend con secretos y reconciliación.</p><small>Activo para servicios con link</small></article>
+          <article><span>01</span><strong>Checkout alojado</strong><p>Cada checkout se crea desde una cotización aceptada; API, webhooks y ledger permanecen detrás del backend con secretos y reconciliación.</p><small>Activación LIVE detrás de gate humano</small></article>
           <article><span>02</span><strong>Intake verificable</strong><p>Formulario con Turnstile, límites, idempotencia y workflow durable antes de crear compromisos.</p><small>Activo con gates fail-closed</small></article>
           <article><span>03</span><strong>Ledger de evidencia</strong><p>Pagos, brief, alcance, aprobaciones y entregables deben quedar trazados antes de activar operación.</p><small>Siguiente expansión</small></article>
           <article><span>04</span><strong>Operación de agentes</strong><p>Nexus coordina briefs, scoring, tareas y reportes; no ejecuta pagos salientes, contratos, publicaciones ni trading real.</p><small>Supervisado</small></article>
         </div>
         <div class="revenue-state-strip reveal">
-          <div><span>ACTIVO</span><strong>Catálogo + Payment Links + intake</strong></div>
-          <div><span>PRÓXIMO</span><strong>Webhook PayPal + ledger + aprobaciones</strong></div>
+          <div><span>ACTIVO</span><strong>Catálogo + intake + checkout gobernado</strong></div>
+          <div><span>PRÓXIMO</span><strong>Webhook PayPal + ledger + reconciliación</strong></div>
           <div><span>GATE</span><strong>Sin evidencia humana, no hay fulfillment automático</strong></div>
         </div>
       </section>

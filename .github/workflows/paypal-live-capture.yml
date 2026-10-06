@@ -1,0 +1,232 @@
+name: Capture one approved PayPal LIVE order
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact protected main SHA approved for this single LIVE capture
+        required: true
+        type: string
+      paypal_order_id:
+        description: PayPal LIVE order ID already approved by the customer
+        required: true
+        type: string
+      payment_order_id:
+        description: Internal payment_order_id bound as PayPal custom_id
+        required: true
+        type: string
+      quote_id:
+        description: Internal quote_id bound as PayPal invoice_id
+        required: true
+        type: string
+      confirmation:
+        description: Type CAPTURE_PAYPAL_LIVE_ORDER
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jadel-paypal-live-capture-${{ inputs.payment_order_id }}
+  cancel-in-progress: false
+
+env:
+  D1_NAME: jadel-commercial-runtime
+  PAYPAL_LIVE_API: https://api-m.paypal.com
+
+jobs:
+  d1-preflight:
+    if: ${{ inputs.confirmation == 'CAPTURE_PAYPAL_LIVE_ORDER' }}
+    environment:
+      name: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    outputs:
+      amount_minor: ${{ steps.preflight.outputs.amount_minor }}
+    env:
+      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout immutable approved revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify exact main and authoritative internal order
+        id: preflight
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          PAYPAL_ORDER_ID: ${{ inputs.paypal_order_id }}
+          PAYMENT_ORDER_ID: ${{ inputs.payment_order_id }}
+          QUOTE_ID: ${{ inputs.quote_id }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PAYPAL_ORDER_ID" =~ ^[A-Za-z0-9-]{1,128}$ ]]
+          [[ "$PAYMENT_ORDER_ID" =~ ^[0-9a-fA-F-]{36}$ ]]
+          [[ "$QUOTE_ID" =~ ^[0-9a-fA-F-]{36}$ ]]
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+
+          token=$(printf '%s' "${CLOUDFLARE_D1_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          test -n "$token"; test -n "$account"; echo "::add-mask::$token"
+          auth=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
+          dbs=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database?name=${D1_NAME}&per_page=100")
+          test "$(jq -r '.success' <<<"$dbs")" = true
+          test "$(jq -r --arg n "$D1_NAME" '[.result[]|select(.name==$n)]|length' <<<"$dbs")" = 1
+          db=$(jq -r --arg n "$D1_NAME" '.result[]|select(.name==$n)|.uuid' <<<"$dbs")
+
+          sql="SELECT po.payment_order_id,po.provider_order_id,po.status AS payment_status,po.amount_minor,po.currency_code,po.project_id,po.quote_id,q.status AS quote_status,p.state AS project_state,p.policy_status FROM payment_orders po JOIN quotes q ON q.quote_id=po.quote_id JOIN project_requests p ON p.project_id=po.project_id WHERE po.payment_order_id='$PAYMENT_ORDER_ID' AND po.provider_order_id='$PAYPAL_ORDER_ID' AND po.quote_id='$QUOTE_ID' LIMIT 2;"
+          response=$(curl --fail-with-body -sS -X POST "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/accounts/$account/d1/database/$db/query" \
+            --data "$(jq -n --arg sql "$sql" '{sql:$sql}')")
+          test "$(jq -r '.success' <<<"$response")" = true
+          test "$(jq -r '.result[0].results | length' <<<"$response")" = 1
+          row=$(jq -c '.result[0].results[0]' <<<"$response")
+          test "$(jq -r '.payment_status' <<<"$row")" = PENDING
+          test "$(jq -r '.quote_status' <<<"$row")" = ACCEPTED
+          test "$(jq -r '.project_state' <<<"$row")" = PAYMENT_PENDING
+          test "$(jq -r '.policy_status' <<<"$row")" = ALLOWED
+          test "$(jq -r '.currency_code' <<<"$row")" = USD
+          amount=$(jq -r '.amount_minor' <<<"$row")
+          [[ "$amount" =~ ^[0-9]+$ ]] && [ "$amount" -gt 0 ]
+          echo "amount_minor=$amount" >> "$GITHUB_OUTPUT"
+          echo PAYPAL_LIVE_D1_ORDER_PREFLIGHT=PASS
+
+  capture:
+    needs: d1-preflight
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    outputs:
+      capture_id: ${{ steps.capture.outputs.capture_id }}
+    env:
+      PAYPAL_CLIENT_ID_RAW: ${{ secrets.PAYPAL_CLIENT_ID }}
+      PAYPAL_CLIENT_SECRET_RAW: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+    steps:
+      - name: Checkout immutable approved revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Recheck protected main
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain)"
+
+      - name: Capture exact approved PayPal LIVE order
+        id: capture
+        shell: bash
+        env:
+          PAYPAL_ORDER_ID: ${{ inputs.paypal_order_id }}
+          PAYMENT_ORDER_ID: ${{ inputs.payment_order_id }}
+          QUOTE_ID: ${{ inputs.quote_id }}
+          AMOUNT_MINOR: ${{ needs.d1-preflight.outputs.amount_minor }}
+        run: |
+          set -euo pipefail
+          client_id=$(printf '%s' "${PAYPAL_CLIENT_ID_RAW:-}" | tr -d '\r\n')
+          client_secret=$(printf '%s' "${PAYPAL_CLIENT_SECRET_RAW:-}" | tr -d '\r\n')
+          test -n "$client_id"; test -n "$client_secret"
+          echo "::add-mask::$client_id"; echo "::add-mask::$client_secret"
+          token=$(curl --fail-with-body -sS -u "$client_id:$client_secret" -d 'grant_type=client_credentials' "$PAYPAL_LIVE_API/v1/oauth2/token" | jq -r '.access_token // empty')
+          test -n "$token"; echo "::add-mask::$token"
+
+          before=$(curl --fail-with-body -sS -H "Authorization: Bearer $token" "$PAYPAL_LIVE_API/v2/checkout/orders/$PAYPAL_ORDER_ID")
+          status=$(jq -r '.status // empty' <<<"$before")
+          test "$(jq -r '.purchase_units[0].custom_id // empty' <<<"$before")" = "$PAYMENT_ORDER_ID"
+          test "$(jq -r '.purchase_units[0].invoice_id // empty' <<<"$before")" = "$QUOTE_ID"
+          test "$(jq -r '.purchase_units[0].amount.currency_code // empty' <<<"$before")" = USD
+          expected_amount=$(printf '%d.%02d' "$((AMOUNT_MINOR / 100))" "$((AMOUNT_MINOR % 100))")
+          test "$(jq -r '.purchase_units[0].amount.value // empty' <<<"$before")" = "$expected_amount"
+
+          if [ "$status" = COMPLETED ]; then
+            capture_id=$(jq -r '.purchase_units[0].payments.captures[0].id // empty' <<<"$before")
+            capture_status=$(jq -r '.purchase_units[0].payments.captures[0].status // empty' <<<"$before")
+            test -n "$capture_id"
+            test "$capture_status" = COMPLETED
+            echo PAYPAL_LIVE_CAPTURE=SKIPPED_ALREADY_COMPLETED
+          else
+            test "$status" = APPROVED || { echo "PAYPAL_LIVE_ORDER_NOT_APPROVED status=$status" >&2; exit 32; }
+            captured=$(curl --fail-with-body -sS -X POST \
+              -H "Authorization: Bearer $token" \
+              -H 'Content-Type: application/json' \
+              -H "PayPal-Request-Id: jadel-live-capture-$PAYMENT_ORDER_ID" \
+              --data '{}' \
+              "$PAYPAL_LIVE_API/v2/checkout/orders/$PAYPAL_ORDER_ID/capture")
+            capture_status=$(jq -r '.purchase_units[0].payments.captures[0].status // .status // empty' <<<"$captured")
+            test "$capture_status" = COMPLETED || { echo "PAYPAL_LIVE_CAPTURE_NOT_COMPLETED status=$capture_status" >&2; exit 34; }
+            capture_id=$(jq -r '.purchase_units[0].payments.captures[0].id // empty' <<<"$captured")
+            test -n "$capture_id"
+            echo PAYPAL_LIVE_CAPTURE=PASS
+          fi
+          echo "capture_id=$capture_id" >> "$GITHUB_OUTPUT"
+
+  verify-webhook:
+    needs:
+      - d1-preflight
+      - capture
+    environment:
+      name: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CAPTURE_ID: ${{ needs.capture.outputs.capture_id }}
+      PAYMENT_ORDER_ID: ${{ inputs.payment_order_id }}
+    steps:
+      - name: Verify signed completion webhook reached authoritative D1
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CAPTURE_ID" =~ ^[A-Za-z0-9-]{1,128}$ ]]
+          token=$(printf '%s' "${CLOUDFLARE_D1_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          test -n "$token"; test -n "$account"; echo "::add-mask::$token"
+          auth=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
+          dbs=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database?name=${D1_NAME}&per_page=100")
+          db=$(jq -r --arg n "$D1_NAME" '.result[]|select(.name==$n)|.uuid' <<<"$dbs")
+          test -n "$db" && test "$db" != null
+          observed=false
+          for attempt in $(seq 1 24); do
+            sql="SELECT l.ledger_id,l.ledger_state,e.verification_status,e.event_type,e.resource_id FROM payment_ledger l JOIN payment_events e ON e.provider_event_id=l.provider_event_id WHERE e.resource_id='$CAPTURE_ID' AND e.event_type='PAYMENT.CAPTURE.COMPLETED' ORDER BY l.created_at DESC LIMIT 2;"
+            response=$(curl --fail-with-body -sS -X POST "${auth[@]}" \
+              "https://api.cloudflare.com/client/v4/accounts/$account/d1/database/$db/query" \
+              --data "$(jq -n --arg sql "$sql" '{sql:$sql}')")
+            count=$(jq -r '.result[0].results | length' <<<"$response")
+            if [ "$count" = 1 ]; then
+              test "$(jq -r '.result[0].results[0].verification_status' <<<"$response")" = VERIFIED
+              test "$(jq -r '.result[0].results[0].ledger_state' <<<"$response")" = REQUIRES_HUMAN
+              observed=true
+              break
+            fi
+            sleep 5
+          done
+          test "$observed" = true || { echo PAYPAL_LIVE_SIGNED_WEBHOOK_NOT_OBSERVED=YES >&2; exit 35; }
+          echo PAYPAL_LIVE_SIGNED_WEBHOOK=PASS
+          {
+            echo '## LIVE payment captured'
+            echo
+            echo 'PayPal capture: COMPLETED'
+            echo 'Signed PAYMENT.CAPTURE.COMPLETED webhook: VERIFIED'
+            echo 'Ledger state: REQUIRES_HUMAN'
+            echo 'Next gate: reconcile the verified payment to the exact project/payment order in the operator console.'
+            echo 'No automatic reconciliation, refund, payout, or second capture was performed.'
+          } >> "$GITHUB_STEP_SUMMARY"

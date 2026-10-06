@@ -3,6 +3,7 @@ const APPROVALS_URL = `${API_ORIGIN}/api/v1/admin/approvals`;
 const PAYMENT_RECONCILE_URL = `${API_ORIGIN}/api/v1/admin/payments/reconcile`;
 const CATALOG_QUOTE_URL = `${API_ORIGIN}/api/v1/admin/quotes/from-catalog`;
 const QUOTE_ACCEPT_URL = `${API_ORIGIN}/api/v1/admin/quotes/accept`;
+const PAYMENT_ORDER_URL = `${API_ORIGIN}/api/v1/admin/payment-orders`;
 
 const form = document.getElementById("approval-auth");
 const tokenInput = document.getElementById("admin-token");
@@ -50,6 +51,31 @@ async function api(path, options = {}) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || `HTTP_${response.status}`);
   return body;
+}
+
+
+function safePayPalApprovalUrl(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(String(value));
+    return url.protocol === "https:" && url.hostname === "www.paypal.com" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function quotePaymentControls(quote, paymentOrders) {
+  if (quote.status !== "ACCEPTED") return "";
+  const order = paymentOrders.find((item) => item.quote_id === quote.quote_id);
+  const approvalUrl = safePayPalApprovalUrl(order?.provider_approval_url);
+  if (approvalUrl) {
+    return `<div><a href="${htmlEscape(approvalUrl)}" target="_blank" rel="noopener noreferrer">Abrir checkout PayPal</a></div>`;
+  }
+  return `<div>
+    <button data-payment-order-create="${htmlEscape(quote.quote_id)}">
+      ${order ? "Completar orden PayPal" : "Crear orden PayPal"}
+    </button>
+  </div>`;
 }
 
 function render(data) {
@@ -103,7 +129,7 @@ function render(data) {
                   aria-label="Evidencia de aceptación"
                 >
                 <button data-quote-accept="${htmlEscape(quote.quote_id)}">Registrar aceptación</button>
-              </div>` : "<span>Aceptada; lista para crear orden en un entorno PayPal autorizado.</span>"}
+              </div>` : quotePaymentControls(quote, paymentOrders)}
           </article>`).join("") : "<p>No hay cotizaciones activas.</p>"}
       </section>
       <section>
@@ -113,6 +139,9 @@ function render(data) {
             <strong>${htmlEscape(order.payment_order_id)}</strong>
             <span>${htmlEscape(order.status)} · ${htmlEscape(order.amount_minor)} minor units ${htmlEscape(order.currency_code)}</span>
             <small>Proyecto: ${htmlEscape(order.project_id)} · Quote: ${htmlEscape(order.quote_id)}</small>
+            ${safePayPalApprovalUrl(order.provider_approval_url)
+              ? `<a href="${htmlEscape(safePayPalApprovalUrl(order.provider_approval_url))}" target="_blank" rel="noopener noreferrer">Abrir checkout PayPal</a>`
+              : ""}
           </article>`).join("") : "<p>No hay órdenes internas pendientes.</p>"}
       </section>
       <section>
@@ -198,6 +227,29 @@ resultsNode?.addEventListener("click", async (event) => {
       setStatus("Aceptación registrada. La orden de pago sigue detrás de su gate.", "success");
     } catch {
       setStatus("No se pudo registrar la aceptación.", "error");
+    }
+    return;
+  }
+
+  const paymentOrderButton = event.target.closest("button[data-payment-order-create]");
+  if (paymentOrderButton) {
+    const quoteId = paymentOrderButton.dataset.paymentOrderCreate;
+    setStatus("Creando orden PayPal gobernada...", "working");
+    try {
+      const created = await api(PAYMENT_ORDER_URL, {
+        method:"POST",
+        body:JSON.stringify({ quote_id:quoteId }),
+      });
+      render(await api(APPROVALS_URL));
+      const approvalUrl = safePayPalApprovalUrl(created.approval_url);
+      setStatus(
+        approvalUrl
+          ? "Orden PayPal creada. Abre el checkout desde la cotización u orden pendiente."
+          : "Orden interna preparada; el gate del proveedor sigue cerrado.",
+        approvalUrl ? "success" : "working",
+      );
+    } catch (error) {
+      setStatus(`No se pudo crear la orden PayPal: ${error.message}`, "error");
     }
     return;
   }
