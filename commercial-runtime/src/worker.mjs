@@ -704,14 +704,122 @@ export async function handleAdminApprovals(request, env) {
   }
 
   const existingProject = await env.DB.prepare(
-    "SELECT project_id FROM project_requests WHERE project_id=? LIMIT 1"
+    "SELECT project_id,state,policy_status FROM project_requests WHERE project_id=? LIMIT 1"
   ).bind(projectId).first();
   if (!existingProject) return json({ error: "PROJECT_NOT_FOUND" }, 404);
 
+  if (decision === "APPROVED" && approvalType === "policy") {
+    if (!env.PROJECT_WORKFLOW) return json({ error: "PROJECT_WORKFLOW_NOT_CONFIGURED" }, 503);
+
+    const outboxResult = await env.DB.prepare(
+      "SELECT workflow_instance_id,status FROM dispatch_outbox WHERE project_id=? ORDER BY created_at"
+    ).bind(projectId).all();
+    const outboxRows = outboxResult.results || [];
+    if (outboxRows.length !== 1) {
+      return json({ error: "POLICY_APPROVAL_OUTBOX_CARDINALITY_MISMATCH" }, 409);
+    }
+    const outbox = outboxRows[0];
+    if (outbox.status !== "DISPATCHED" || !outbox.workflow_instance_id) {
+      return json({ error: "POLICY_APPROVAL_OUTBOX_NOT_DISPATCHED" }, 409);
+    }
+
+    const priorApproval = await env.DB.prepare(
+      "SELECT approval_id FROM approval_events WHERE project_id=? AND approval_type='policy' AND decision='APPROVED' ORDER BY created_at DESC LIMIT 1"
+    ).bind(projectId).first();
+
+    if (existingProject.state === "POLICY_ALLOWED" && existingProject.policy_status === "ALLOWED") {
+      if (!priorApproval?.approval_id) {
+        return json({ error: "POLICY_APPROVAL_EVIDENCE_MISSING" }, 409);
+      }
+      return json({
+        approval_id: priorApproval.approval_id,
+        project_id: projectId,
+        state: "POLICY_ALLOWED",
+        policy_status: "ALLOWED",
+        workflow_instance_id: outbox.workflow_instance_id,
+        replayed: true,
+      });
+    }
+
+    if (existingProject.state !== "POLICY_CHECK" || existingProject.policy_status !== "REQUIRES_HUMAN") {
+      return json({ error: "PROJECT_NOT_AWAITING_POLICY_APPROVAL" }, 409);
+    }
+
+    let instance;
+    let instanceStatus;
+    try {
+      instance = await env.PROJECT_WORKFLOW.get(outbox.workflow_instance_id);
+      instanceStatus = await instance.status();
+    } catch (error) {
+      console.error("policy_approval_workflow_lookup_failed", {
+        project_id: projectId,
+        workflow_instance_id: outbox.workflow_instance_id,
+        error: String(error?.name || "Error"),
+      });
+      return json({ error: "POLICY_APPROVAL_WORKFLOW_UNAVAILABLE" }, 503);
+    }
+    if (!new Set(["queued","running","waiting"]).has(instanceStatus?.status)) {
+      return json({ error: "POLICY_APPROVAL_WORKFLOW_NOT_ACTIVE" }, 409);
+    }
+
+    const now = new Date().toISOString();
+    let approvalId = priorApproval?.approval_id || null;
+    if (!approvalId) {
+      approvalId = crypto.randomUUID();
+      try {
+        await env.DB.batch([
+          env.DB.prepare(INSERT_APPROVAL_SQL).bind(
+            approvalId,projectId,"policy","APPROVED","admin",reason,
+            JSON.stringify({
+              source: "approval_console",
+              workflow_instance_id: outbox.workflow_instance_id,
+              workflow_event_type: "policy-approval",
+            }),now,
+          ),
+        ]);
+      } catch (error) {
+        console.error("policy_approval_evidence_write_failed", {
+          project_id: projectId,
+          workflow_instance_id: outbox.workflow_instance_id,
+          error: String(error?.name || "Error"),
+        });
+        return json({ error: "POLICY_APPROVAL_EVIDENCE_WRITE_FAILED" }, 503);
+      }
+    }
+
+    try {
+      await instance.sendEvent({
+        type: "policy-approval",
+        payload: { approved: true, project_id: projectId },
+      });
+    } catch (error) {
+      console.error("policy_approval_event_delivery_failed", {
+        project_id: projectId,
+        workflow_instance_id: outbox.workflow_instance_id,
+        error: String(error?.name || "Error"),
+      });
+      return json({
+        error: "POLICY_APPROVAL_EVENT_DELIVERY_FAILED",
+        approval_id: approvalId,
+        replayable: true,
+      }, 503);
+    }
+
+    return json({
+      approval_id: approvalId,
+      project_id: projectId,
+      state: "POLICY_CHECK",
+      policy_status: "REQUIRES_HUMAN",
+      workflow_instance_id: outbox.workflow_instance_id,
+      workflow_event: "policy-approval",
+      replayed: Boolean(priorApproval),
+    }, 202);
+  }
+
   const now = new Date().toISOString();
   const approvalId = crypto.randomUUID();
-  const nextPolicy = decision === "APPROVED" ? "ALLOWED" : decision === "DENIED" ? "DENIED" : "REQUIRES_HUMAN";
-  const nextState = decision === "APPROVED" ? "POLICY_ALLOWED" : "POLICY_CHECK";
+  const nextPolicy = decision === "DENIED" ? "DENIED" : "REQUIRES_HUMAN";
+  const nextState = "POLICY_CHECK";
   await env.DB.batch([
     env.DB.prepare(INSERT_APPROVAL_SQL).bind(
       approvalId,projectId,approvalType,decision,"admin",reason,JSON.stringify({ source: "approval_console" }),now,
