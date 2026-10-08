@@ -144,7 +144,7 @@ jobs:
           ORIGIN_IPV4: ${{ inputs.origin_ipv4 }}
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+          curl --fail --silent --show-error --location --insecure --proto '=https' --tlsv1.2 \
             --connect-timeout 10 --max-time 20 \
             --resolve "${SUBDOMAIN}:443:${ORIGIN_IPV4}" \
             "https://${SUBDOMAIN}/health" >/dev/null
