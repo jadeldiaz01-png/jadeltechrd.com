@@ -1,0 +1,122 @@
+name: Verify quote acceptance read-only
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: 'Exact protected main SHA approved for this read-only diagnostic'
+        required: true
+        type: string
+      project_id:
+        description: 'Project UUID to inspect'
+        required: true
+        type: string
+      confirmation:
+        description: 'Type VERIFY_QUOTE_ACCEPTANCE_READONLY'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  D1_NAME: jadel-commercial-runtime
+
+jobs:
+  diagnose:
+    if: ${{ inputs.confirmation == 'VERIFY_QUOTE_ACCEPTANCE_READONLY' }}
+    environment: d1-recovery-drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      PROJECT_ID: ${{ inputs.project_id }}
+    steps:
+      - name: Validate exact SHA and inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'EXPECTED_SHA_FORMAT=FAIL_CLOSED' >&2; exit 2; }
+          test "$GITHUB_SHA" = "$EXPECTED_SHA" || { echo "EXPECTED_SHA_MISMATCH expected=$EXPECTED_SHA actual=$GITHUB_SHA" >&2; exit 3; }
+          if ! [[ "$PROJECT_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ ]]; then
+            echo 'PROJECT_ID_FORMAT=FAIL_CLOSED' >&2
+            exit 4
+          fi
+          raw="${CLOUDFLARE_D1_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then token="${token:1:${#token}-2}"; fi
+          test -n "$token" || { echo 'CLOUDFLARE_D1_TOKEN_PRESENT=NO' >&2; exit 5; }
+          account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          [[ "$account" =~ ^[0-9a-fA-F]{32}$ ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_FORMAT=FAIL_CLOSED' >&2; exit 6; }
+          echo "::add-mask::$token"
+          printf 'CLOUDFLARE_D1_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          printf 'CLOUDFLARE_ACCOUNT_ID=%s\n' "$account" >> "$GITHUB_ENV"
+          echo 'INPUT_VALIDATION=PASS'
+
+      - name: Resolve exact D1 database
+        id: cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_D1_API_TOKEN}" -H 'Content-Type: application/json')
+          listed=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database?name=${D1_NAME}&per_page=100")
+          test "$(jq -r '.success' <<<"$listed")" = true
+          matches=$(jq -r --arg n "$D1_NAME" '[.result[] | select(.name==$n)] | length' <<<"$listed")
+          test "$matches" = 1 || { echo "D1_NAME_MATCHES=${matches}_FAIL_CLOSED" >&2; exit 10; }
+          database_id=$(jq -r --arg n "$D1_NAME" '.result[] | select(.name==$n) | .uuid' <<<"$listed")
+          test -n "$database_id" && test "$database_id" != null
+          echo "account_id=$CLOUDFLARE_ACCOUNT_ID" >> "$GITHUB_OUTPUT"
+          echo "database_id=$database_id" >> "$GITHUB_OUTPUT"
+          echo 'D1_RESOLUTION=PASS'
+
+      - name: Diagnose quote and acceptance evidence read-only
+        shell: bash
+        env:
+          ACCOUNT_ID: ${{ steps.cloudflare.outputs.account_id }}
+          DATABASE_ID: ${{ steps.cloudflare.outputs.database_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_D1_API_TOKEN}" -H 'Content-Type: application/json')
+          endpoint="https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/d1/database/${DATABASE_ID}/query"
+
+          quote_sql='SELECT quote_id,version,status,expires_at,created_at,updated_at FROM quotes WHERE project_id=? ORDER BY version,created_at'
+          approval_sql="SELECT approval_id,approval_type,decision,created_at FROM approval_events WHERE project_id=? AND approval_type='quote_acceptance' ORDER BY created_at"
+
+          quotes=$(curl --fail-with-body -sS -X POST "${auth[@]}" "$endpoint" \
+            --data "$(jq -nc --arg sql "$quote_sql" --arg project_id "$PROJECT_ID" '{sql:$sql,params:[$project_id]}')")
+          approvals=$(curl --fail-with-body -sS -X POST "${auth[@]}" "$endpoint" \
+            --data "$(jq -nc --arg sql "$approval_sql" --arg project_id "$PROJECT_ID" '{sql:$sql,params:[$project_id]}')")
+
+          test "$(jq -r '.success' <<<"$quotes")" = true
+          test "$(jq -r '.success' <<<"$approvals")" = true
+
+          quote_count=$(jq '[.result[].results[]?] | length' <<<"$quotes")
+          acceptance_count=$(jq '[.result[].results[]?] | length' <<<"$approvals")
+
+          echo "PROJECT_ID=$PROJECT_ID"
+          echo "QUOTE_COUNT=$quote_count"
+          echo "QUOTE_ACCEPTANCE_EVENT_COUNT=$acceptance_count"
+
+          if [ "$quote_count" -gt 0 ]; then
+            latest=$(jq -c '[.result[].results[]?] | sort_by(.version,.created_at) | last' <<<"$quotes")
+            echo "LATEST_QUOTE_ID=$(jq -r '.quote_id' <<<"$latest")"
+            echo "LATEST_QUOTE_VERSION=$(jq -r '.version' <<<"$latest")"
+            echo "LATEST_QUOTE_STATUS=$(jq -r '.status' <<<"$latest")"
+          else
+            echo 'LATEST_QUOTE_ID=NONE'
+            echo 'LATEST_QUOTE_VERSION=NONE'
+            echo 'LATEST_QUOTE_STATUS=NONE'
+          fi
+
+          while IFS= read -r row; do
+            echo "QUOTE_ROW=$row"
+          done < <(jq -c '.result[].results[]?' <<<"$quotes")
+
+          while IFS= read -r row; do
+            echo "QUOTE_ACCEPTANCE_ROW=$row"
+          done < <(jq -c '.result[].results[]?' <<<"$approvals")
+
+          echo 'PII_OUTPUT=NONE'
+          echo 'QUOTE_ACCEPTANCE_READONLY_DIAGNOSTIC=PASS'
