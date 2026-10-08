@@ -80,6 +80,29 @@ function corsHeaders(origin, env) {
   };
 }
 
+function adminCorsHeaders(origin, env) {
+  if (!origin || origin !== env.PUBLIC_ORIGIN) return {};
+  return {
+    "access-control-allow-origin": origin,
+    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-headers": "authorization,content-type",
+    "access-control-max-age": "600",
+    "vary": "Origin",
+  };
+}
+
+function withAdminCors(response, origin, env) {
+  const cors = adminCorsHeaders(origin, env);
+  if (!Object.keys(cors).length) return response;
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(cors)) headers.set(name, value);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function json(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), { status, headers: baseHeaders(extraHeaders) });
 }
@@ -1342,6 +1365,10 @@ export default {
     const url = new URL(request.url);
     const origin = request.headers.get("origin");
 
+    if (request.method === "OPTIONS" && url.pathname.startsWith("/api/v1/admin/")) {
+      if (!exactPublicOrigin(request, env)) return new Response(null, { status: 403, headers: baseHeaders() });
+      return new Response(null, { status: 204, headers: baseHeaders(adminCorsHeaders(origin, env)) });
+    }
     if (request.method === "OPTIONS" && url.pathname === "/api/v1/project-requests") {
       if (!exactPublicOrigin(request, env)) return new Response(null, { status: 403, headers: baseHeaders() });
       return new Response(null, { status: 204, headers: corsHeaders(origin, env) });
@@ -1361,22 +1388,22 @@ export default {
       return handlePayPalWebhook(request, env);
     }
     if (url.pathname === "/api/v1/admin/approvals") {
-      return handleAdminApprovals(request, env);
+      return withAdminCors(await handleAdminApprovals(request, env), origin, env);
     }
     if (url.pathname === "/api/v1/admin/quotes") {
-      return handleAdminQuoteCreate(request, env);
+      return withAdminCors(await handleAdminQuoteCreate(request, env), origin, env);
     }
     if (url.pathname === "/api/v1/admin/quotes/from-catalog") {
-      return handleAdminCatalogQuoteCreate(request, env);
+      return withAdminCors(await handleAdminCatalogQuoteCreate(request, env), origin, env);
     }
     if (url.pathname === "/api/v1/admin/quotes/accept") {
-      return handleAdminQuoteAcceptance(request, env);
+      return withAdminCors(await handleAdminQuoteAcceptance(request, env), origin, env);
     }
     if (url.pathname === "/api/v1/admin/payment-orders") {
-      return handleAdminPaymentOrderCreate(request, env);
+      return withAdminCors(await handleAdminPaymentOrderCreate(request, env), origin, env);
     }
     if (url.pathname === "/api/v1/admin/payments/reconcile") {
-      return handleAdminPaymentReconciliation(request, env);
+      return withAdminCors(await handleAdminPaymentReconciliation(request, env), origin, env);
     }
     if (url.pathname === "/api/v1/revenue-agent/opportunities") {
       return handleRevenueAgentOpportunities(request, env);
@@ -1385,7 +1412,7 @@ export default {
       return handleRevenueRuntimeAuthorization(request, env);
     }
     if (url.pathname === "/api/v1/admin/revenue-intelligence") {
-      return handleAdminRevenueIntelligence(request, env);
+      return withAdminCors(await handleAdminRevenueIntelligence(request, env), origin, env);
     }
     return json({ error: "NOT_FOUND" }, 404);
   },
