@@ -47,9 +47,14 @@ jobs:
           path = Path(".github/workflows/paypal-live-pending-readonly.yml")
           text = path.read_text(encoding="utf-8")
 
-          required = [
+          header, jobs = text.split("\n\njobs:", 1)
+          live_payload = jobs.split("\n  d1-candidates:", 1)[1]
+
+          required_header = [
               "VERIFY_PAYPAL_LIVE_PENDING_READONLY",
               "BASELINE_SHA: 8aafb343e4ff1fa70ee38e4a3c12fad46c3fc403",
+          ]
+          required_live_payload = [
               "po.status='PENDING'",
               "q.status='ACCEPTED'",
               "p.state='PAYMENT_PENDING'",
@@ -58,9 +63,12 @@ jobs:
               "/v2/checkout/orders/$provider_order_id",
               "PAYPAL_PENDING_READONLY_COMPLETE=PASS",
           ]
-          for fragment in required:
-              if fragment not in text:
-                  raise SystemExit(f"READONLY_REQUIRED_FRAGMENT_MISSING={fragment}")
+          for fragment in required_header:
+              if fragment not in header:
+                  raise SystemExit(f"READONLY_REQUIRED_HEADER_FRAGMENT_MISSING={fragment}")
+          for fragment in required_live_payload:
+              if fragment not in live_payload:
+                  raise SystemExit(f"READONLY_REQUIRED_LIVE_FRAGMENT_MISSING={fragment}")
 
           forbidden = [
               "/capture",
@@ -79,12 +87,11 @@ jobs:
               "DROP TABLE",
               "ALTER TABLE",
           ]
-          payload = text.split("\n  d1-candidates:", 1)[1]
           for fragment in forbidden:
-              if fragment in payload:
+              if fragment in live_payload:
                   raise SystemExit(f"READONLY_FORBIDDEN_FRAGMENT={fragment}")
 
-          if re.search(r"\$PAYPAL_LIVE_API/v2/checkout/orders/[^\n]*\n[^\n]*-X\s+POST", text):
+          if re.search(r"\$PAYPAL_LIVE_API/v2/checkout/orders/[^\n]*\n[^\n]*-X\s+POST", live_payload):
               raise SystemExit("PAYPAL_ORDER_POST_PRESENT=FAIL")
 
           print("PAYPAL_PENDING_READONLY_CONTRACT=PASS")
