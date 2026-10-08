@@ -1,0 +1,162 @@
+name: Reconcile Cloudflare Telegram Origin
+
+on:
+  workflow_dispatch:
+    inputs:
+      subdomain:
+        description: Telegram webhook hostname
+        required: true
+        default: telegram.jadeltechrd.com
+      origin_ipv4:
+        description: VPS origin IPv4
+        required: true
+        default: 158.69.48.17
+      set_ssl_full:
+        description: Set Cloudflare zone SSL mode to full
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile-telegram-origin:
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      DOMAIN: jadeltechrd.com
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+    steps:
+      - name: Normalize Cloudflare token safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then
+            token="${token:1:${#token}-2}"
+          elif [[ "$token" == \'*\' && "$token" == *\' ]]; then
+            token="${token:1:${#token}-2}"
+          fi
+          if [ -z "$token" ]; then
+            echo 'No supported Cloudflare Environment secret is available.' >&2
+            exit 2
+          fi
+          echo "::add-mask::$token"
+          printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+
+      - name: Validate requested target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.subdomain }}" = "telegram.jadeltechrd.com"
+          test "${{ inputs.origin_ipv4 }}" = "158.69.48.17"
+          echo 'TARGET_VALIDATION=PASS'
+
+      - name: Resolve Cloudflare zone
+        id: zone
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          zones_tmp=$(mktemp)
+          zones_code=$(curl -sS -o "$zones_tmp" -w '%{http_code}' "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/zones?name=${DOMAIN}&status=active&per_page=50" || true)
+          if [ "$zones_code" != 200 ]; then
+            echo "Cloudflare zone API failed with HTTP ${zones_code}." >&2
+            jq -r '.errors[]? | "Cloudflare error code=\(.code) message=\(.message)"' "$zones_tmp" >&2 || true
+            exit 7
+          fi
+          zone_id=$(jq -r --arg d "$DOMAIN" '.result[] | select(.name==$d) | .id' "$zones_tmp" | head -n1)
+          test -n "$zone_id"
+          test "$zone_id" != null
+          echo "zone_id=$zone_id" >> "$GITHUB_OUTPUT"
+          echo 'CLOUDFLARE_ZONE_ACCESS=PASS'
+
+      - name: Reconcile Telegram DNS record only
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.zone.outputs.zone_id }}
+          SUBDOMAIN: ${{ inputs.subdomain }}
+          ORIGIN_IPV4: ${{ inputs.origin_ipv4 }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          records=$(curl --fail-with-body -sS "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?name=${SUBDOMAIN}&per_page=100")
+          test "$(jq -r '.success' <<<"$records")" = true
+
+          jq -r '.result[] | select(.type=="AAAA" or .type=="CNAME") | .id' <<<"$records" | while read -r conflict_id; do
+            [ -n "$conflict_id" ] || continue
+            response=$(curl --fail-with-body -sS -X DELETE "${auth[@]}" \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${conflict_id}")
+            test "$(jq -r '.success' <<<"$response")" = true
+            echo "Removed conflicting telegram exact record id=${conflict_id}."
+          done
+
+          records=$(curl --fail-with-body -sS "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?name=${SUBDOMAIN}&per_page=100")
+          extra_a=$(jq -r --arg ip "$ORIGIN_IPV4" '.result[] | select(.type=="A" and .content!=$ip) | .id' <<<"$records")
+          for record_id in $extra_a; do
+            response=$(curl --fail-with-body -sS -X DELETE "${auth[@]}" \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${record_id}")
+            test "$(jq -r '.success' <<<"$response")" = true
+            echo "Removed stale telegram A record id=${record_id}."
+          done
+
+          records=$(curl --fail-with-body -sS "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?name=${SUBDOMAIN}&type=A&per_page=100")
+          record_id=$(jq -r --arg ip "$ORIGIN_IPV4" '.result[] | select(.content==$ip) | .id' <<<"$records" | head -n1)
+          payload=$(jq -nc --arg name "$SUBDOMAIN" --arg content "$ORIGIN_IPV4" '{type:"A",name:$name,content:$content,ttl:1,proxied:true}')
+          if [ -n "$record_id" ] && [ "$record_id" != null ]; then
+            response=$(curl --fail-with-body -sS -X PATCH "${auth[@]}" \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${record_id}" --data "$payload")
+          else
+            response=$(curl --fail-with-body -sS -X POST "${auth[@]}" \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" --data "$payload")
+          fi
+          test "$(jq -r '.success' <<<"$response")" = true
+          echo "TELEGRAM_DNS_ORIGIN=PASS ${SUBDOMAIN} -> ${ORIGIN_IPV4} proxied=true"
+
+      - name: Set Cloudflare SSL mode to Full when requested
+        if: ${{ inputs.set_ssl_full }}
+        shell: bash
+        env:
+          ZONE_ID: ${{ steps.zone.outputs.zone_id }}
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H 'Content-Type: application/json')
+          response=$(curl --fail-with-body -sS -X PATCH "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/settings/ssl" \
+            --data '{"value":"full"}')
+          test "$(jq -r '.success' <<<"$response")" = true
+          value=$(jq -r '.result.value' <<<"$response")
+          test "$value" = full
+          echo 'CLOUDFLARE_SSL_MODE=full'
+
+      - name: Verify public Telegram edge and origin route
+        shell: bash
+        env:
+          SUBDOMAIN: ${{ inputs.subdomain }}
+          ORIGIN_IPV4: ${{ inputs.origin_ipv4 }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 10 --max-time 20 \
+            --resolve "${SUBDOMAIN}:443:${ORIGIN_IPV4}" \
+            "https://${SUBDOMAIN}/health" >/dev/null
+          echo 'ORIGIN_DIRECT_HEALTH=PASS'
+          for attempt in $(seq 1 18); do
+            if curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+              --connect-timeout 10 --max-time 20 "https://${SUBDOMAIN}/health" >/dev/null; then
+              echo 'TELEGRAM_PUBLIC_HEALTH=PASS'
+              exit 0
+            fi
+            echo "Waiting for Cloudflare telegram edge convergence (${attempt}/18)..."
+            sleep 10
+          done
+          echo 'TELEGRAM_PUBLIC_HEALTH=FAIL' >&2
+          exit 6
