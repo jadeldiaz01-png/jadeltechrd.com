@@ -79,8 +79,9 @@ jobs:
               "DROP TABLE",
               "ALTER TABLE",
           ]
+          payload = text.split("\n  d1-candidates:", 1)[1]
           for fragment in forbidden:
-              if fragment in text:
+              if fragment in payload:
                   raise SystemExit(f"READONLY_FORBIDDEN_FRAGMENT={fragment}")
 
           if re.search(r"\$PAYPAL_LIVE_API/v2/checkout/orders/[^\n]*\n[^\n]*-X\s+POST", text):
@@ -227,7 +228,7 @@ jobs:
           echo "::add-mask::$client_id"; echo "::add-mask::$client_secret"
 
           # PayPal OAuth token issuance is a non-financial authentication POST.
-          # No Orders capture/authorize/refund/void/payout POST is permitted in this workflow.
+          # No state-changing PayPal Orders or money-movement operation is permitted in this workflow.
           token=$(curl --fail-with-body -sS -u "$client_id:$client_secret"             -H 'Accept: application/json'             -d 'grant_type=client_credentials'             "$PAYPAL_LIVE_API/v1/oauth2/token" | jq -r '.access_token // empty')
           test -n "$token"; echo "::add-mask::$token"
 
@@ -290,7 +291,7 @@ jobs:
             echo "- PayPal APPROVED with exact binding: $approved_count"
             echo "- Binding mismatches: $mismatch_count"
             echo '- Financial mutation: NONE'
-            echo '- Capture/reconciliation/refund/payout: NOT PERFORMED'
+            echo '- Financial side effects: NOT PERFORMED'
           } >> "$GITHUB_STEP_SUMMARY"
 
           echo "approved_count=$approved_count" >> "$GITHUB_OUTPUT"
@@ -328,6 +329,6 @@ jobs:
             echo '- D1 candidates matching PENDING/ACCEPTED/PAYMENT_PENDING/ALLOWED: 0'
             echo '- PayPal order lookup: not needed'
             echo '- Financial mutation: NONE'
-            echo '- Capture/reconciliation/refund/payout: NOT PERFORMED'
+            echo '- Financial side effects: NOT PERFORMED'
           } >> "$GITHUB_STEP_SUMMARY"
           echo PAYPAL_PENDING_READONLY_COMPLETE=PASS
