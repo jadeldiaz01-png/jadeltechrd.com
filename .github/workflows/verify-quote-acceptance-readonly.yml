@@ -24,7 +24,7 @@ env:
 
 jobs:
   diagnose:
-    if: ${{ inputs.confirmation == 'VERIFY_QUOTE_ACCEPTANCE_READONLY' }}
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'VERIFY_QUOTE_ACCEPTANCE_READONLY' }}
     environment: d1-recovery-drill
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -34,12 +34,25 @@ jobs:
       EXPECTED_SHA: ${{ inputs.expected_sha }}
       PROJECT_ID: ${{ inputs.project_id }}
     steps:
-      - name: Validate exact SHA and inputs
+      - name: Checkout protected main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Validate protected main exact SHA and inputs
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'EXPECTED_SHA_FORMAT=FAIL_CLOSED' >&2; exit 2; }
-          test "$GITHUB_SHA" = "$EXPECTED_SHA" || { echo "EXPECTED_SHA_MISMATCH expected=$EXPECTED_SHA actual=$GITHUB_SHA" >&2; exit 3; }
+          test "$GITHUB_REF" = 'refs/heads/main' || { echo "GITHUB_REF_NOT_MAIN actual=$GITHUB_REF" >&2; exit 2; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'EXPECTED_SHA_FORMAT=FAIL_CLOSED' >&2; exit 3; }
+          git fetch --no-tags --depth=1 origin main
+          origin_main=$(git rev-parse refs/remotes/origin/main)
+          checkout_sha=$(git rev-parse HEAD)
+          test "$GITHUB_SHA" = "$EXPECTED_SHA" || { echo "GITHUB_SHA_MISMATCH expected=$EXPECTED_SHA actual=$GITHUB_SHA" >&2; exit 4; }
+          test "$origin_main" = "$EXPECTED_SHA" || { echo "ORIGIN_MAIN_MISMATCH expected=$EXPECTED_SHA actual=$origin_main" >&2; exit 5; }
+          test "$checkout_sha" = "$EXPECTED_SHA" || { echo "CHECKOUT_SHA_MISMATCH expected=$EXPECTED_SHA actual=$checkout_sha" >&2; exit 6; }
+          echo "PROTECTED_MAIN_SHA_GATE=PASS sha=$EXPECTED_SHA"
           if ! [[ "$PROJECT_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ ]]; then
             echo 'PROJECT_ID_FORMAT=FAIL_CLOSED' >&2
             exit 4
