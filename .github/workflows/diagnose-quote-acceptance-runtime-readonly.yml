@@ -1,0 +1,281 @@
+name: Diagnose quote acceptance runtime read-only
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: 'Exact protected main SHA approved for this read-only diagnostic'
+        required: true
+        type: string
+      confirmation:
+        description: 'Type DIAGNOSE_QUOTE_ACCEPTANCE_RUNTIME_READONLY'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  D1_NAME: jadel-commercial-runtime
+  WORKER_NAME: jadel-commercial-runtime
+  API_HOST: intake.jadeltechrd.com
+  PUBLIC_ORIGIN: https://jadeltechrd.com
+  PROJECT_ID: 422c8a90-8d41-48d9-ae60-61381249e1b7
+  QUOTE_ID: 5d910a30-69ac-4849-bf4b-77a1cbcf2be7
+
+jobs:
+  d1-readonly:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'DIAGNOSE_QUOTE_ACCEPTANCE_RUNTIME_READONLY' }}
+    environment:
+      name: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      account_id: ${{ steps.d1.outputs.account_id }}
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout immutable approved revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify protected main exact SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || { echo "DISPATCH_REF=FAIL actual=$GITHUB_REF" >&2; exit 2; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'EXPECTED_SHA_FORMAT=FAIL' >&2; exit 3; }
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          checkout_sha=$(git rev-parse HEAD)
+          origin_main=$(git rev-parse refs/remotes/origin/main)
+          test "$GITHUB_SHA" = "$EXPECTED_SHA" || { echo 'GITHUB_SHA_MATCH=FAIL' >&2; exit 4; }
+          test "$checkout_sha" = "$EXPECTED_SHA" || { echo 'CHECKOUT_SHA_MATCH=FAIL' >&2; exit 5; }
+          test "$origin_main" = "$EXPECTED_SHA" || { echo 'ORIGIN_MAIN_SHA_MATCH=FAIL' >&2; exit 6; }
+          echo 'PROTECTED_MAIN_SHA_GATE=PASS'
+
+      - name: Normalize dedicated D1 credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_D1_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then token="${token:1:${#token}-2}"; fi
+          account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          test -n "$token" || { echo 'D1_TOKEN_PRESENT=NO' >&2; exit 10; }
+          [[ "$account" =~ ^[0-9a-fA-F]{32}$ ]] || { echo 'ACCOUNT_ID_FORMAT=FAIL' >&2; exit 11; }
+          echo "::add-mask::$token"
+          printf 'CLOUDFLARE_D1_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          printf 'CLOUDFLARE_ACCOUNT_ID=%s\n' "$account" >> "$GITHUB_ENV"
+          echo 'D1_CREDENTIAL_NORMALIZATION=PASS'
+
+      - name: Resolve exact D1 database
+        id: d1
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_D1_API_TOKEN}" -H 'Content-Type: application/json')
+          listed=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database?name=${D1_NAME}&per_page=100")
+          test "$(jq -r '.success' <<<"$listed")" = true
+          matches=$(jq -r --arg n "$D1_NAME" '[.result[] | select(.name==$n)] | length' <<<"$listed")
+          test "$matches" = 1 || { echo "D1_NAME_MATCHES=${matches}_FAIL" >&2; exit 12; }
+          database_id=$(jq -r --arg n "$D1_NAME" '.result[] | select(.name==$n) | .uuid' <<<"$listed")
+          test -n "$database_id" && test "$database_id" != null
+          echo "account_id=$CLOUDFLARE_ACCOUNT_ID" >> "$GITHUB_OUTPUT"
+          printf 'DATABASE_ID=%s\n' "$database_id" >> "$GITHUB_ENV"
+          echo 'D1_RESOLUTION=PASS'
+
+      - name: Inspect project quote acceptance and schema read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer ${CLOUDFLARE_D1_API_TOKEN}" -H 'Content-Type: application/json')
+          endpoint="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${DATABASE_ID}/query"
+
+          query_one() {
+            local sql="$1"
+            local value="$2"
+            curl --fail-with-body -sS -X POST "${auth[@]}" "$endpoint" \
+              --data "$(jq -nc --arg sql "$sql" --arg value "$value" '{sql:$sql,params:[$value]}')"
+          }
+
+          query_two() {
+            local sql="$1"
+            local first="$2"
+            local second="$3"
+            curl --fail-with-body -sS -X POST "${auth[@]}" "$endpoint" \
+              --data "$(jq -nc --arg sql "$sql" --arg first "$first" --arg second "$second" '{sql:$sql,params:[$first,$second]}')"
+          }
+
+          query_raw() {
+            local sql="$1"
+            curl --fail-with-body -sS -X POST "${auth[@]}" "$endpoint" \
+              --data "$(jq -nc --arg sql "$sql" '{sql:$sql}')"
+          }
+
+          project=$(query_one 'SELECT project_id,state,policy_status,created_at,updated_at FROM project_requests WHERE project_id=? LIMIT 1' "$PROJECT_ID")
+          quote=$(query_two 'SELECT quote_id,project_id,version,status,expires_at,accepted_at,created_at,updated_at FROM quotes WHERE project_id=? AND quote_id=? LIMIT 1' "$PROJECT_ID" "$QUOTE_ID")
+          approvals=$(query_one "SELECT approval_id,approval_type,decision,created_at FROM approval_events WHERE project_id=? AND approval_type='quote_acceptance' ORDER BY created_at" "$PROJECT_ID")
+          quotes_schema=$(query_raw 'PRAGMA table_info(quotes)')
+          approvals_schema=$(query_raw 'PRAGMA table_info(approval_events)')
+          projects_schema=$(query_raw 'PRAGMA table_info(project_requests)')
+          fk=$(query_raw 'PRAGMA foreign_key_check')
+
+          for payload in "$project" "$quote" "$approvals" "$quotes_schema" "$approvals_schema" "$projects_schema" "$fk"; do
+            test "$(jq -r '.success' <<<"$payload")" = true
+          done
+
+          project_count=$(jq '[.result[].results[]?] | length' <<<"$project")
+          quote_count=$(jq '[.result[].results[]?] | length' <<<"$quote")
+          acceptance_count=$(jq '[.result[].results[]?] | length' <<<"$approvals")
+          test "$project_count" = 1 || { echo "PROJECT_CARDINALITY=${project_count}_FAIL" >&2; exit 20; }
+          test "$quote_count" = 1 || { echo "QUOTE_CARDINALITY=${quote_count}_FAIL" >&2; exit 21; }
+
+          project_state=$(jq -r '.result[].results[0].state' <<<"$project")
+          policy_status=$(jq -r '.result[].results[0].policy_status' <<<"$project")
+          quote_status=$(jq -r '.result[].results[0].status' <<<"$quote")
+          quote_version=$(jq -r '.result[].results[0].version' <<<"$quote")
+          accepted_at=$(jq -r '.result[].results[0].accepted_at // empty' <<<"$quote")
+
+          schema_names() {
+            jq -r '[.result[].results[]?.name] | sort | join(",")'
+          }
+
+          quote_columns=$(schema_names <<<"$quotes_schema")
+          approval_columns=$(schema_names <<<"$approvals_schema")
+          project_columns=$(schema_names <<<"$projects_schema")
+
+          for required in quote_id project_id version status expires_at accepted_at created_at updated_at; do
+            [[ ",$quote_columns," == *",$required,"* ]] || { echo "QUOTES_SCHEMA_COLUMN_${required}=MISSING" >&2; exit 22; }
+          done
+          for required in approval_id project_id approval_type decision created_at; do
+            [[ ",$approval_columns," == *",$required,"* ]] || { echo "APPROVAL_EVENTS_SCHEMA_COLUMN_${required}=MISSING" >&2; exit 23; }
+          done
+          for required in project_id state policy_status created_at updated_at; do
+            [[ ",$project_columns," == *",$required,"* ]] || { echo "PROJECT_REQUESTS_SCHEMA_COLUMN_${required}=MISSING" >&2; exit 24; }
+          done
+
+          fk_count=$(jq '[.result[].results[]?] | length' <<<"$fk")
+
+          echo "PROJECT_STATE=$project_state"
+          echo "POLICY_STATUS=$policy_status"
+          echo "QUOTE_STATUS=$quote_status"
+          echo "QUOTE_VERSION=$quote_version"
+          if [ -n "$accepted_at" ]; then echo 'QUOTE_ACCEPTED_AT_PRESENT=YES'; else echo 'QUOTE_ACCEPTED_AT_PRESENT=NO'; fi
+          echo "QUOTE_ACCEPTANCE_EVENT_COUNT=$acceptance_count"
+          echo 'QUOTES_SCHEMA=PASS'
+          echo 'APPROVAL_EVENTS_SCHEMA=PASS'
+          echo 'PROJECT_REQUESTS_SCHEMA=PASS'
+          echo "FOREIGN_KEY_CHECK_COUNT=$fk_count"
+          test "$fk_count" = 0 || { echo 'FOREIGN_KEY_CHECK=FAIL' >&2; exit 25; }
+          echo 'FOREIGN_KEY_CHECK=PASS'
+          echo 'D1_RUNTIME_DIAGNOSTIC=PASS'
+          echo 'PII_OUTPUT=NONE'
+
+  edge-worker-readonly:
+    needs: d1-readonly
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'DIAGNOSE_QUOTE_ACCEPTANCE_RUNTIME_READONLY' && needs.d1-readonly.result == 'success' }}
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      ACCOUNT_ID: ${{ needs.d1-readonly.outputs.account_id }}
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+    steps:
+      - name: Checkout immutable approved revision
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify protected main exact SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/main' || { echo "DISPATCH_REF=FAIL actual=$GITHUB_REF" >&2; exit 30; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'EXPECTED_SHA_FORMAT=FAIL' >&2; exit 31; }
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          checkout_sha=$(git rev-parse HEAD)
+          origin_main=$(git rev-parse refs/remotes/origin/main)
+          test "$GITHUB_SHA" = "$EXPECTED_SHA" || { echo 'GITHUB_SHA_MATCH=FAIL' >&2; exit 32; }
+          test "$checkout_sha" = "$EXPECTED_SHA" || { echo 'CHECKOUT_SHA_MATCH=FAIL' >&2; exit 33; }
+          test "$origin_main" = "$EXPECTED_SHA" || { echo 'ORIGIN_MAIN_SHA_MATCH=FAIL' >&2; exit 34; }
+          echo 'PROTECTED_MAIN_SHA_GATE=PASS'
+
+      - name: Verify served approval console contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(mktemp)
+          headers=$(mktemp)
+          code=$(curl -sS -D "$headers" -o "$body" -w '%{http_code}' "${PUBLIC_ORIGIN}/approval-console.js")
+          test "$code" = 200 || { echo "APPROVAL_CONSOLE_GET=FAIL_HTTP_${code}" >&2; exit 40; }
+          grep -Fq '/api/v1/admin/quotes/accept' "$body" || { echo 'APPROVAL_CONSOLE_ACCEPT_ROUTE=MISSING' >&2; exit 41; }
+          grep -Fq 'acceptance_evidence' "$body" || { echo 'APPROVAL_CONSOLE_ACCEPTANCE_EVIDENCE_CONTRACT=MISSING' >&2; exit 42; }
+          bytes=$(wc -c < "$body" | tr -d '[:space:]')
+          digest=$(sha256sum "$body" | awk '{print $1}')
+          echo "APPROVAL_CONSOLE_HTTP=200"
+          echo "APPROVAL_CONSOLE_BYTES=$bytes"
+          echo "APPROVAL_CONSOLE_SHA256=$digest"
+          echo 'APPROVAL_CONSOLE_ACCEPT_ROUTE=PASS'
+          echo 'APPROVAL_CONSOLE_ACCEPTANCE_EVIDENCE_CONTRACT=PASS'
+
+      - name: Verify admin acceptance CORS preflight without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          headers=$(mktemp)
+          code=$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' -X OPTIONS \
+            -H "Origin: ${PUBLIC_ORIGIN}" \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: authorization,content-type' \
+            "https://${API_HOST}/api/v1/admin/quotes/accept")
+          test "$code" = 204 || { echo "QUOTE_ACCEPT_CORS_PREFLIGHT=FAIL_HTTP_${code}" >&2; exit 43; }
+          grep -qi "^access-control-allow-origin: ${PUBLIC_ORIGIN}" "$headers" || { echo 'QUOTE_ACCEPT_CORS_ORIGIN=FAIL' >&2; exit 44; }
+          grep -qi '^access-control-allow-methods:.*POST' "$headers" || { echo 'QUOTE_ACCEPT_CORS_METHOD=FAIL' >&2; exit 45; }
+          grep -qi '^access-control-allow-headers:.*authorization' "$headers" || { echo 'QUOTE_ACCEPT_CORS_AUTH_HEADER=FAIL' >&2; exit 46; }
+          grep -qi '^access-control-allow-headers:.*content-type' "$headers" || { echo 'QUOTE_ACCEPT_CORS_CONTENT_TYPE_HEADER=FAIL' >&2; exit 47; }
+          echo 'QUOTE_ACCEPT_CORS_PREFLIGHT=PASS'
+
+      - name: Normalize Worker read credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${CLOUDFLARE_API_TOKEN_RAW:-}"
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"*\" && "$token" == *\" ]]; then token="${token:1:${#token}-2}"; fi
+          test -n "$token" || { echo 'WORKER_TOKEN_PRESENT=NO' >&2; exit 48; }
+          [[ "$ACCOUNT_ID" =~ ^[0-9a-fA-F]{32}$ ]] || { echo 'WORKER_ACCOUNT_ID_FORMAT=FAIL' >&2; exit 49; }
+          echo "::add-mask::$token"
+          printf 'CLOUDFLARE_API_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+          echo 'WORKER_CREDENTIAL_NORMALIZATION=PASS'
+
+      - name: Verify deployed Worker markers by GET only
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(mktemp)
+          code=$(curl -sS -o "$body" -w '%{http_code}' \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${WORKER_NAME}/content/v2")
+          test "$code" = 200 || { echo "WORKER_CONTENT_GET=FAIL_HTTP_${code}" >&2; exit 50; }
+          LC_ALL=C grep -aFq 'quotes/accept' "$body" || { echo 'WORKER_ACCEPT_ROUTE_MARKER=MISSING' >&2; exit 51; }
+          LC_ALL=C grep -aFq 'quote_acceptance' "$body" || { echo 'WORKER_ACCEPTANCE_TYPE_MARKER=MISSING' >&2; exit 52; }
+          LC_ALL=C grep -aFq 'CUSTOMER_APPROVED' "$body" || { echo 'WORKER_CUSTOMER_APPROVED_MARKER=MISSING' >&2; exit 53; }
+          bytes=$(wc -c < "$body" | tr -d '[:space:]')
+          digest=$(sha256sum "$body" | awk '{print $1}')
+          echo "WORKER_CONTENT_HTTP=200"
+          echo "WORKER_CONTENT_BYTES=$bytes"
+          echo "WORKER_CONTENT_SHA256=$digest"
+          echo 'WORKER_ACCEPT_ROUTE_MARKER=PASS'
+          echo 'WORKER_ACCEPTANCE_TYPE_MARKER=PASS'
+          echo 'WORKER_CUSTOMER_APPROVED_MARKER=PASS'
+          echo 'WORKER_RUNTIME_DIAGNOSTIC=PASS'
+          echo 'PII_OUTPUT=NONE'
