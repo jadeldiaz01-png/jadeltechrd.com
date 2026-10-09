@@ -17,6 +17,13 @@ This is a research-informed, machine-validated **readiness contract**, not proof
 
 Evidence is not inherited between products. An old SHA reference proves which code was inspected, not that the code ran successfully on a target system. Exact provider credentials must never be stored here.
 
+### P2 hardening — evidence identity and external provenance
+
+The static G0 validator now requires **all nine unique evidence blockers**, all nine immutable `id -> URL` research references (source type, frozen review date and `REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED` status), and all four unique `id -> path -> git blob SHA` local code observations with strict record shape. Missing, duplicated, substituted, misbound or injected fields fail closed. This is a **structural integrity and local Git-blob check**, not independent verification that any cited external web page remains accessible or accurate today. External research must be revalidated during the relevant gate.
+
+The private `ai-income-revenue-engine` provenance is explicitly **`REGISTRY_COMMIT_REFERENCE_ONLY / NOT_CERTIFIED`**. Local sales capability/readiness documents must agree on the reference SHA, but this does not authenticate the private source tree, transitive build inputs, signed artifact, deployment digest or real provider receipts. All these fields remain false/null/empty with an enumerated evidence inventory. To promote the engine, a *different authorized read-only certification process* must establish source-to-artifact-to-runtime binding with independently verified provenance, separate provider contract tests, and human approval. This PR does not invoke that process, access secrets, connect a CRM, send messages or enable production.
+
+
 ## 2. Architectural decision ADR-SALES-001
 
 Use existing boundaries before introducing new infrastructure:
