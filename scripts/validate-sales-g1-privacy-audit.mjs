@@ -20,7 +20,8 @@ const expectedObservations = Object.freeze({
   intake_schema:['commercial-runtime/migrations/0001_init.sql','9db8b4e1169c236af868998843368a5fe0bfaa8b','PII_STORED_WITHOUT_DEDICATED_CONSENT_AUDIT_COLUMN'],
   lead_schema:['commercial-runtime/migrations/0004_revenue_intelligence.sql','cea3dd7f63a78454230061e937010b59bf963514','LEAD_SOURCE_ENUM_NOT_LAWFUL_COLLECTION_PROOF'],
   retention_schema:['commercial-runtime/migrations/0007_offer_attribution.sql','4be100d3764e94fafb8d325c33a3dd1f08824069','ATTRIBUTION_COLUMNS_ONLY_NO_RETENTION'],
-  privacy_notice:['index.html','abd83fbf3fb46710af91c15459223954a2fcbdfa','PUBLIC_PRIVACY_DELETION_INSTRUCTIONS_PRESENT'],
+  privacy_notice:['index.html','abd83fbf3fb46710af91c15459223954a2fcbdfa','PRIVACY_NOTICE_STATIC_DELETION_ROUTE_DYNAMIC'],
+  privacy_deletion_renderer:['app.js','f3243c64b50bae5713e62e2da6ff926ca20cd201','PUBLIC_DELETION_ARTICLE_GENERATED_BY_APP_JS'],
   analytics_consent:['analytics-consent.js','c3902f0dca45d969458bce916185060885808233','SEPARATE_ANALYTICS_CONSENT_NOT_MARKETING'],
   sales_policy:['config/sales-lead-intelligence-production-readiness-2026.json','cd07982b25537a6f156b607ce730433aeecb34db','G1_PREEXISTING_BLOCKED']
 });
@@ -63,6 +64,7 @@ function assertSourceSemantics(corpus) {
   const sql=corpus['commercial-runtime/migrations/0001_init.sql'];
   const leads=corpus['commercial-runtime/migrations/0004_revenue_intelligence.sql'];
   const landing=corpus['index.html'];
+  const privacyRenderer=corpus['app.js'];
   const analytics=corpus['analytics-consent.js'];
   const sales=JSON.parse(corpus[SALES_PATH]);
   if (!/id="privacy-consent"[^>]*type="checkbox"[^>]*required/.test(form)) fail('consent checkbox UI no longer matches inspected state');
@@ -75,7 +77,10 @@ function assertSourceSemantics(corpus) {
   if (!/CREATE TABLE IF NOT EXISTS project_requests/.test(sql) || !/email TEXT NOT NULL/.test(sql)) fail('stored PII inventory changed');
   if (/consent|privacy_notice|legal_basis|retention_class/i.test(sql)) fail('intake table privacy columns changed');
   if (!/source IN \('human','crm','verified_import'\)/.test(leads)) fail('lead source schema changed');
-  if (!/data-view="privacy"/.test(landing) || !/data-view="data-deletion"/.test(landing)) fail('public privacy rights notice changed');
+  if (!/data-view="privacy"/.test(landing) || !/href="\/\?view=data-deletion"/.test(landing) ||
+      !/article\.dataset\.view\s*=\s*"data-deletion"/.test(privacyRenderer)) {
+    fail('public privacy/deletion rights route changed');
+  }
   if (!/jadel\.analytics_consent\.v1/.test(analytics)) fail('analytics consent baseline changed');
   if (sales.gates?.G1_data_privacy?.status!=='BLOCKED' || sales.claim?.production_authorized!==false) fail('sales policy G1/promotions changed');
 }
