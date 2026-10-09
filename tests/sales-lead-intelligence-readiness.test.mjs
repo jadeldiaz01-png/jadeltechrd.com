@@ -55,6 +55,13 @@ test('rejects removing existing readiness blockers', () => {
 
 
 const poisonedEvidence = [
+  ['joined identifier bypass using delimiter collision', m => {
+    const ids = [...m.evidence.evidence_missing].sort();
+    ids.splice(0,2,ids[0] + '|' + ids[1]);
+    m.evidence.evidence_missing = ids;
+  }],
+  ['forged code evidence narrative', m => {m.evidence.code_observations[0].fact = 'Production deployed and independently certified';}],
+  ['diluted cross-repo disclaimer', m => {m.evidence.cross_repository_provenance.warning = 'not evidence of executable runtime identity; but verified now';}],
   ['missing consent blocker', m => {m.evidence.evidence_missing = m.evidence.evidence_missing.filter(x => x !== 'consent_and_jurisdiction_review');}],
   ['duplicate blocker masquerading as full inventory', m => {m.evidence.evidence_missing[1] = m.evidence.evidence_missing[0];}],
   ['fabricated extra blocker identifier', m => {m.evidence.evidence_missing.push('false_proof');}],
