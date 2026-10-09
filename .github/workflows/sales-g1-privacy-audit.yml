@@ -15,6 +15,7 @@ on:
       - 'commercial-runtime/migrations/0004_revenue_intelligence.sql'
       - 'commercial-runtime/migrations/0007_offer_attribution.sql'
       - 'index.html'
+      - 'app.js'
       - 'analytics-consent.js'
       - 'config/sales-lead-intelligence-production-readiness-2026.json'
 permissions:
