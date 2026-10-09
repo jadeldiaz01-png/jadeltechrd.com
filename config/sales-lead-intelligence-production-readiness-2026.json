@@ -310,22 +310,26 @@
       {
         "path": "agent-services.json",
         "blob_sha": "d3c3ac2b2ac22bdd3684ea54420654c07007d5f4",
-        "fact": "Sales service advertised only as SUPERVISED_PILOT"
+        "fact": "Sales service advertised only as SUPERVISED_PILOT",
+        "id": "sales_public_catalog"
       },
       {
         "path": "config/service-capability-registry.json",
         "blob_sha": "8c04b1d45a2c8c7c67d0505161dacfdc97993bdd",
-        "fact": "Sales gates include CRM/contact policy/external campaign evidence"
+        "fact": "Sales gates include CRM/contact policy/external campaign evidence",
+        "id": "sales_capability_registry"
       },
       {
         "path": "config/agent-production-readiness.json",
         "blob_sha": "eb99f9a91a56126817545c23e9b9a152fe90adfc",
-        "fact": "Sales promotion is BLOCKED; external campaign evidence missing"
+        "fact": "Sales promotion is BLOCKED; external campaign evidence missing",
+        "id": "sales_readiness_gate"
       },
       {
         "path": "commercial-runtime/src/service-pricing.mjs",
         "blob_sha": "0b71664a7a3a425db5af3f28b0aa0f90e607942c",
-        "fact": "Sales quote setup minimum 150000 cents; monthly exact 29900 cents"
+        "fact": "Sales quote setup minimum 150000 cents; monthly exact 29900 cents",
+        "id": "sales_price_catalog"
       }
     ],
     "production_receipts": [],
@@ -339,7 +343,28 @@
       "signed_release_attestation",
       "restore_drill_and_SLO_window",
       "approved_operational_budget"
-    ]
+    ],
+    "cross_repository_provenance": {
+      "source_repository": "jadeldiaz01-png/ai-income-revenue-engine",
+      "registry_referenced_commit_sha": "914324c794d18624c52f8adb0f8b2f1a39cb972f",
+      "scope": "REGISTRY_COMMIT_REFERENCE_ONLY",
+      "verification_status": "NOT_CERTIFIED",
+      "source_commit_and_tree_verified": false,
+      "executable_build_binding_verified": false,
+      "attestation_verified": false,
+      "runtime_release_digest": null,
+      "signed_provenance_reference": null,
+      "independently_verified_receipts": [],
+      "production_authority": false,
+      "required_independent_evidence": [
+        "authenticated_source_commit_and_tree",
+        "pinned_build_materials_and_artifact_digest",
+        "verified_signed_slsa_provenance",
+        "independent_runtime_artifact_identity",
+        "provider_receipts_and_connector_scope"
+      ],
+      "warning": "A commit SHA recorded by another repository is not evidence of executable runtime identity, artifact integrity, a completed deployment, consent, or production authority."
+    }
   },
   "gates": {
     "G0_code_contract": {
@@ -379,47 +404,65 @@
     {
       "kind": "external_primary",
       "url": "https://www.nist.gov/itl/ai-risk-management-framework",
-      "as_of": "2026-10-08"
+      "as_of": "2026-10-08",
+      "id": "nist_ai_rmf",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
     },
     {
       "kind": "external_primary",
       "url": "https://csrc.nist.gov/pubs/sp/800/218/final",
-      "as_of": "2026-10-08"
+      "as_of": "2026-10-08",
+      "id": "nist_ssdf",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
     },
     {
       "kind": "external_primary",
       "url": "https://genai.owasp.org/2026/09/01/owasp-genai-security-project-unveils-2026-top-10-for-llm-applications-new-agent-control-standard-and-sponsors-as-community-tops-30000-members/",
-      "as_of": "2026-10-08"
+      "as_of": "2026-10-08",
+      "id": "owasp_agent_security",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
     },
     {
       "kind": "external_primary",
       "url": "https://slsa.dev/spec/v1.2/",
-      "as_of": "2026-10-08"
+      "as_of": "2026-10-08",
+      "id": "slsa_build_integrity",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
     },
     {
       "kind": "external_primary",
       "url": "https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business",
-      "as_of": "2026-10-08"
+      "as_of": "2026-10-08",
+      "id": "ftc_email_marketing",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
     },
     {
       "kind": "external_primary",
       "url": "https://commission.europa.eu/law/law-topic/data-protection/information-business-and-organisations/dealing-requests-individuals_en",
-      "as_of": "2026-10-08"
+      "as_of": "2026-10-08",
+      "id": "eu_data_subject_rights",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
     },
     {
       "kind": "external_primary",
       "url": "https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai",
-      "as_of": "2026-10-08"
+      "as_of": "2026-10-08",
+      "id": "eu_ai_regulatory_framework",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
     },
     {
       "kind": "external_primary",
       "url": "https://support.google.com/mail/answer/81126?hl=en",
-      "as_of": "2026-10-08"
+      "as_of": "2026-10-08",
+      "id": "gmail_sender_guidelines",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
     },
     {
       "kind": "external_primary",
       "url": "https://www.dgcp.gob.do/transparencia/marco-legal",
-      "as_of": "2026-10-08"
+      "as_of": "2026-10-08",
+      "id": "do_legal_portal",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
     }
   ],
   "review": "Research date reflects knowledge available October 8 2026. Current laws, platform policies and permissions must be rechecked for each geography and connector before promotion."
