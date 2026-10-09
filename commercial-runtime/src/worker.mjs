@@ -1009,6 +1009,49 @@ export async function handleAdminCatalogQuoteCreate(request, env) {
   }, 201);
 }
 
+const ACCEPTABLE_QUOTE_PROJECT_STATES = new Set(["QUOTED","POLICY_ALLOWED"]);
+
+function quoteAcceptanceReadiness(quote, nowIso = new Date().toISOString()) {
+  if (!quote) return { ready:false, code:"QUOTE_NOT_FOUND" };
+  if (quote.status !== "ISSUED") return { ready:false, code:"QUOTE_NOT_ISSUED" };
+  if (quote.policy_status !== "ALLOWED") return { ready:false, code:"POLICY_NOT_ALLOWED" };
+  if (!ACCEPTABLE_QUOTE_PROJECT_STATES.has(quote.project_state)) {
+    return { ready:false, code:"PROJECT_STATE_NOT_ACCEPTABLE" };
+  }
+  if (quote.expires_at && Date.parse(quote.expires_at) <= Date.parse(nowIso)) {
+    return { ready:false, code:"QUOTE_EXPIRED" };
+  }
+  return { ready:true, code:"QUOTE_ACCEPTANCE_READY" };
+}
+
+export async function handleAdminQuoteAcceptanceReadiness(request, env) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+  if (request.method !== "GET") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  const url = new URL(request.url);
+  const quoteId = typeof url.searchParams.get("quote_id") === "string" && QUOTE_ID_RE.test(url.searchParams.get("quote_id"))
+    ? url.searchParams.get("quote_id")
+    : null;
+  if (!quoteId) return json({ error: "INVALID_QUOTE_ID" }, 400);
+
+  const quote = await env.DB.prepare(
+    "SELECT q.quote_id,q.project_id,q.status,q.expires_at,p.state AS project_state,p.policy_status FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.quote_id=? LIMIT 1"
+  ).bind(quoteId).first();
+  const readiness = quoteAcceptanceReadiness(quote);
+  if (!quote) return json({ ready:false, code:readiness.code, quote_id:quoteId }, 404);
+
+  return json({
+    ready:readiness.ready,
+    code:readiness.code,
+    quote_id:quote.quote_id,
+    quote_status:quote.status,
+    project_state:quote.project_state,
+    policy_status:quote.policy_status,
+    expired:readiness.code === "QUOTE_EXPIRED",
+  }, 200);
+}
+
 export async function handleAdminQuoteAcceptance(request, env) {
   if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
   if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
@@ -1024,30 +1067,41 @@ export async function handleAdminQuoteAcceptance(request, env) {
   const quote = await env.DB.prepare(
     "SELECT q.quote_id,q.project_id,q.status,q.expires_at,p.state AS project_state,p.policy_status FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.quote_id=? LIMIT 1"
   ).bind(quoteId).first();
+  const now = new Date().toISOString();
+  const readiness = quoteAcceptanceReadiness(quote, now);
   if (!quote) return json({ error: "QUOTE_NOT_FOUND" }, 404);
-  if (quote.status !== "ISSUED" || quote.policy_status !== "ALLOWED" || !new Set(["QUOTED","POLICY_ALLOWED"]).has(quote.project_state)) {
+  if (!readiness.ready && readiness.code !== "QUOTE_EXPIRED") {
     return json({ error: "QUOTE_NOT_ACCEPTABLE" }, 409);
   }
-
-  const now = new Date().toISOString();
-  if (quote.expires_at && Date.parse(quote.expires_at) <= Date.parse(now)) {
+  if (readiness.code === "QUOTE_EXPIRED") {
     await env.DB.prepare(
       "UPDATE quotes SET status='EXPIRED',updated_at=? WHERE quote_id=? AND status='ISSUED'"
     ).bind(now,quoteId).run();
     return json({ error: "QUOTE_EXPIRED" }, 409);
   }
+
   const approvalId = crypto.randomUUID();
-  await env.DB.batch([
-    env.DB.prepare(INSERT_APPROVAL_SQL).bind(
-      approvalId,quote.project_id,"quote_acceptance","APPROVED","admin",
-      "Operator recorded customer quote acceptance.",
-      JSON.stringify({ quote_id:quoteId, acceptance_evidence:evidence }),now,
-    ),
-    env.DB.prepare("UPDATE quotes SET status='ACCEPTED',accepted_at=?,updated_at=? WHERE quote_id=? AND status='ISSUED'")
-      .bind(now,now,quoteId),
-    env.DB.prepare("UPDATE project_requests SET state='CUSTOMER_APPROVED',updated_at=? WHERE project_id=?")
-      .bind(now,quote.project_id),
-  ]);
+  try {
+    await env.DB.batch([
+      env.DB.prepare(INSERT_APPROVAL_SQL).bind(
+        approvalId,quote.project_id,"quote_acceptance","APPROVED","admin",
+        "Operator recorded customer quote acceptance.",
+        JSON.stringify({ quote_id:quoteId, acceptance_evidence:evidence }),now,
+      ),
+      env.DB.prepare("UPDATE quotes SET status='ACCEPTED',accepted_at=?,updated_at=? WHERE quote_id=? AND status='ISSUED'")
+        .bind(now,now,quoteId),
+      env.DB.prepare("UPDATE project_requests SET state='CUSTOMER_APPROVED',updated_at=? WHERE project_id=?")
+        .bind(now,quote.project_id),
+    ]);
+  } catch (error) {
+    console.error("quote_acceptance_persistence_failed", {
+      quote_id:quoteId,
+      project_id:quote.project_id,
+      error_name:String(error?.name || error?.constructor?.name || "Error").slice(0, 80),
+    });
+    return json({ error: "QUOTE_ACCEPTANCE_PERSISTENCE_FAILED" }, 503);
+  }
+
   return json({
     quote_id:quoteId,
     project_id:quote.project_id,
@@ -1503,6 +1557,9 @@ export default {
     }
     if (url.pathname === "/api/v1/admin/quotes/from-catalog") {
       return withAdminCors(await handleAdminCatalogQuoteCreate(request, env), origin, env);
+    }
+    if (url.pathname === "/api/v1/admin/quotes/acceptance-readiness") {
+      return withAdminCors(await handleAdminQuoteAcceptanceReadiness(request, env), origin, env);
     }
     if (url.pathname === "/api/v1/admin/quotes/accept") {
       return withAdminCors(await handleAdminQuoteAcceptance(request, env), origin, env);
