@@ -3,6 +3,7 @@ const APPROVALS_URL = `${API_ORIGIN}/api/v1/admin/approvals`;
 const PAYMENT_RECONCILE_URL = `${API_ORIGIN}/api/v1/admin/payments/reconcile`;
 const CATALOG_QUOTE_URL = `${API_ORIGIN}/api/v1/admin/quotes/from-catalog`;
 const QUOTE_ACCEPT_URL = `${API_ORIGIN}/api/v1/admin/quotes/accept`;
+const QUOTE_ACCEPT_READINESS_URL = `${API_ORIGIN}/api/v1/admin/quotes/acceptance-readiness`;
 const PAYMENT_ORDER_URL = `${API_ORIGIN}/api/v1/admin/payment-orders`;
 
 const form = document.getElementById("approval-auth");
@@ -36,20 +37,46 @@ function formatMinor(value, currency = "USD") {
   }).format(amount / 100);
 }
 
+const SAFE_ERROR_CODE_RE = /^[A-Z][A-Z0-9_]{0,79}$/;
+
+function safeApiCode(value, fallback = "UNKNOWN_ERROR") {
+  return typeof value === "string" && SAFE_ERROR_CODE_RE.test(value) ? value : fallback;
+}
+
+function apiError(status, code) {
+  const safeStatus = Number.isInteger(status) && status >= 100 && status <= 599 ? status : 0;
+  const safeCode = safeApiCode(code, safeStatus ? `HTTP_${safeStatus}` : "NETWORK_ERROR");
+  const error = new Error(safeCode);
+  error.status = safeStatus;
+  error.code = safeCode;
+  return error;
+}
+
+function formatApiError(error) {
+  const status = Number.isInteger(error?.status) ? error.status : 0;
+  const code = safeApiCode(error?.code, status ? `HTTP_${status}` : "NETWORK_ERROR");
+  return status ? `HTTP ${status} · ${code}` : code;
+}
+
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    cache: "no-store",
-    credentials: "omit",
-    redirect: "error",
-    headers: {
-      "content-type": "application/json",
-      "authorization": `Bearer ${token}`,
-      ...(options.headers || {}),
-    },
-  });
+  let response;
+  try {
+    response = await fetch(path, {
+      ...options,
+      cache: "no-store",
+      credentials: "omit",
+      redirect: "error",
+      headers: {
+        "content-type": "application/json",
+        "authorization": `Bearer ${token}`,
+        ...(options.headers || {}),
+      },
+    });
+  } catch {
+    throw apiError(0, "NETWORK_ERROR");
+  }
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || `HTTP_${response.status}`);
+  if (!response.ok) throw apiError(response.status, body.error);
   return body;
 }
 
@@ -128,7 +155,8 @@ function render(data) {
                   placeholder="Evidencia de aceptación del cliente"
                   aria-label="Evidencia de aceptación"
                 >
-                <button data-quote-accept="${htmlEscape(quote.quote_id)}">Registrar aceptación</button>
+                <button data-quote-readiness="${htmlEscape(quote.quote_id)}">Comprobar readiness</button>
+                <button data-quote-accept="${htmlEscape(quote.quote_id)}" disabled>Registrar aceptación</button>
               </div>` : quotePaymentControls(quote, paymentOrders)}
           </article>`).join("") : "<p>No hay cotizaciones activas.</p>"}
       </section>
@@ -185,8 +213,8 @@ form?.addEventListener("submit", async (event) => {
     render(await api(APPROVALS_URL));
     setStatus("Pendientes cargados.", "success");
     tokenInput.value = "";
-  } catch {
-    setStatus("No se pudo cargar la consola. Verifica token y runtime.", "error");
+  } catch (error) {
+    setStatus(`No se pudo cargar la consola: ${formatApiError(error)}`, "error");
   }
 });
 
@@ -201,8 +229,30 @@ resultsNode?.addEventListener("click", async (event) => {
       });
       render(await api(APPROVALS_URL));
       setStatus("Cotización canónica creada.", "success");
-    } catch {
-      setStatus("No se pudo crear la cotización canónica.", "error");
+    } catch (error) {
+      setStatus(`No se pudo crear la cotización canónica: ${formatApiError(error)}`, "error");
+    }
+    return;
+  }
+
+  const quoteReadinessButton = event.target.closest("button[data-quote-readiness]");
+  if (quoteReadinessButton) {
+    const quoteId = quoteReadinessButton.dataset.quoteReadiness;
+    const acceptButton = [...resultsNode.querySelectorAll("button[data-quote-accept]")]
+      .find((node) => node.dataset.quoteAccept === quoteId);
+    if (acceptButton) acceptButton.disabled = true;
+    setStatus("Comprobando readiness de aceptación...", "working");
+    try {
+      const readiness = await api(`${QUOTE_ACCEPT_READINESS_URL}?quote_id=${encodeURIComponent(quoteId)}`);
+      const code = safeApiCode(readiness.code, "INVALID_READINESS_RESPONSE");
+      if (readiness.ready === true && code === "QUOTE_ACCEPTANCE_READY") {
+        if (acceptButton) acceptButton.disabled = false;
+        setStatus("Readiness de aceptación: PASS · QUOTE_ACCEPTANCE_READY", "success");
+      } else {
+        setStatus(`Readiness de aceptación bloqueado · ${code}`, "error");
+      }
+    } catch (error) {
+      setStatus(`No se pudo comprobar readiness: ${formatApiError(error)}`, "error");
     }
     return;
   }
@@ -225,8 +275,8 @@ resultsNode?.addEventListener("click", async (event) => {
       });
       render(await api(APPROVALS_URL));
       setStatus("Aceptación registrada. La orden de pago sigue detrás de su gate.", "success");
-    } catch {
-      setStatus("No se pudo registrar la aceptación.", "error");
+    } catch (error) {
+      setStatus(`No se pudo registrar la aceptación: ${formatApiError(error)}`, "error");
     }
     return;
   }
@@ -249,7 +299,7 @@ resultsNode?.addEventListener("click", async (event) => {
         approvalUrl ? "success" : "working",
       );
     } catch (error) {
-      setStatus(`No se pudo crear la orden PayPal: ${error.message}`, "error");
+      setStatus(`No se pudo crear la orden PayPal: ${formatApiError(error)}`, "error");
     }
     return;
   }
@@ -285,8 +335,8 @@ resultsNode?.addEventListener("click", async (event) => {
       });
       render(await api(APPROVALS_URL));
       setStatus("Reconciliación registrada.", "success");
-    } catch {
-      setStatus("No se pudo reconciliar el pago.", "error");
+    } catch (error) {
+      setStatus(`No se pudo reconciliar el pago: ${formatApiError(error)}`, "error");
     }
     return;
   }
@@ -306,7 +356,7 @@ resultsNode?.addEventListener("click", async (event) => {
     });
     render(await api(APPROVALS_URL));
     setStatus("Decisión registrada.", "success");
-  } catch {
-    setStatus("No se pudo registrar la decisión.", "error");
+  } catch (error) {
+    setStatus(`No se pudo registrar la decisión: ${formatApiError(error)}`, "error");
   }
 });
