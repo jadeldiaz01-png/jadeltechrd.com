@@ -1,0 +1,35 @@
+name: Sales Lead Intelligence readiness contract
+on:
+  pull_request:
+    paths:
+      - "config/sales-lead-intelligence-production-readiness-2026.json"
+      - "scripts/validate-sales-lead-intelligence-readiness.mjs"
+      - "tests/sales-lead-intelligence-readiness.test.mjs"
+      - "docs/SALES-LEAD-INTELLIGENCE-2026.md"
+      - "agent-services.json"
+      - "config/service-capability-registry.json"
+      - "config/agent-production-readiness.json"
+      - "commercial-runtime/src/service-pricing.mjs"
+      - ".github/workflows/sales-lead-intelligence-readiness.yml"
+permissions:
+  contents: read
+concurrency:
+  group: sales-readiness-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  fail-closed-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact PR source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Validate immutable blob bindings and no-production-authority
+        run: node scripts/validate-sales-lead-intelligence-readiness.mjs
+      - name: Run adversarial contract regression
+        run: node --test tests/sales-lead-intelligence-readiness.test.mjs
