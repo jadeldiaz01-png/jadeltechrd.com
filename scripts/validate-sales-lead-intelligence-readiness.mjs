@@ -71,14 +71,25 @@ export function validateSalesManifest(m, publicCatalog, readiness, capabilityReg
     'config/agent-production-readiness.json': 'sales_readiness_gate',
     'commercial-runtime/src/service-pricing.mjs': 'sales_price_catalog'
   };
+  const observedFacts = {
+    sales_public_catalog: 'Sales service advertised only as SUPERVISED_PILOT',
+    sales_capability_registry: 'Sales gates include CRM/contact policy/external campaign evidence',
+    sales_readiness_gate: 'Sales promotion is BLOCKED; external campaign evidence missing',
+    sales_price_catalog: 'Sales quote setup minimum 150000 cents; monthly exact 29900 cents'
+  };
   const exactRecord = (x, keys, name) => {
     if (x === null || typeof x !== 'object' || Array.isArray(x) ||
-        Object.keys(x).sort().join('|') !== [...keys].sort().join('|')) fail(name + ': invalid record shape');
+        Object.keys(x).length !== keys.length || !keys.every(k => Object.hasOwn(x, k))) {
+      fail(name + ': invalid record shape');
+    }
   };
   const exactIds = (ids, expected, name) => {
-    if (!Array.isArray(ids) || ids.some(x => typeof x !== 'string') ||
-        ids.length !== new Set(ids).size ||
-        [...ids].sort().join('|') !== [...expected].sort().join('|')) fail(name + ': missing/duplicate/extra evidence IDs');
+    if (!Array.isArray(ids) || ids.length !== expected.length ||
+        ids.some(x => typeof x !== 'string') ||
+        new Set(ids).size !== expected.length ||
+        !expected.every(id => ids.includes(id))) {
+      fail(name + ': missing/duplicate/extra evidence IDs');
+    }
   };
   if (!Array.isArray(m.evidence?.production_receipts) || m.evidence.production_receipts.length !== 0) fail('unexpected production receipts');
   exactIds(m.evidence?.evidence_missing, requiredBlockers, 'blocked evidence');
@@ -97,6 +108,7 @@ export function validateSalesManifest(m, publicCatalog, readiness, capabilityReg
   for (const observation of m.evidence.code_observations) {
     exactRecord(observation, ['id','path','blob_sha','fact'], 'code observation');
     eq(observation.id, codeEvidenceIds[observation.path], 'code evidence ID/path binding');
+    eq(observation.fact, observedFacts[observation.id], 'code observation claim must match the reviewed fact');
     if (!isSha(observation.blob_sha) || !nonEmpty(observation.fact) || observation.fact.length > 300) {
       fail('code observation missing valid blob SHA/factual statement');
     }
@@ -134,9 +146,9 @@ export function validateSalesManifest(m, publicCatalog, readiness, capabilityReg
     'independent_runtime_artifact_identity',
     'provider_receipts_and_connector_scope'
   ], 'cross repository independent certification requirements');
-  if (!nonEmpty(cross.warning) || !cross.warning.includes('not evidence of executable runtime identity')) {
-    fail('cross repo limitations absent');
-  }
+  eq(cross.warning,
+    'A commit SHA recorded by another repository is not evidence of executable runtime identity, artifact integrity, a completed deployment, consent, or production authority.',
+    'cross repo limitations must not be diluted');
   const requiredGates = ['G0_code_contract','G1_data_privacy','G2_security_supply_chain','G3_offline_quant_evaluation','G4_connector_sandbox','G5_supervised_campaign','G6_recovery_SLO_finops','G7_human_production_promotion'];
   for (const key of requiredGates) {
     const g = m.gates?.[key];
