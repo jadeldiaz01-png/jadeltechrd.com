@@ -63,7 +63,13 @@
         "id": "privacy_notice",
         "path": "index.html",
         "blob_sha": "abd83fbf3fb46710af91c15459223954a2fcbdfa",
-        "observation": "PUBLIC_PRIVACY_DELETION_INSTRUCTIONS_PRESENT"
+        "observation": "PRIVACY_NOTICE_STATIC_DELETION_ROUTE_DYNAMIC"
+      },
+      {
+        "id": "privacy_deletion_renderer",
+        "path": "app.js",
+        "blob_sha": "f3243c64b50bae5713e62e2da6ff926ca20cd201",
+        "observation": "PUBLIC_DELETION_ARTICLE_GENERATED_BY_APP_JS"
       },
       {
         "id": "analytics_consent",
