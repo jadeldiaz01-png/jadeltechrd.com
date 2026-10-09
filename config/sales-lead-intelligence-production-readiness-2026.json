@@ -1,0 +1,469 @@
+{
+  "schema_version": "2026-10-08.1",
+  "id": "sales-lead-intelligence-production-readiness",
+  "service_id": "sales",
+  "name": "Sales & Lead Intelligence",
+  "baseline": {
+    "website_repository": "jadeldiaz01-png/jadeltechrd.com",
+    "website_main_sha_at_review": "ebdba272b69c2858c60713fa742f00f69bd2f5e8",
+    "revenue_repository": "jadeldiaz01-png/ai-income-revenue-engine",
+    "revenue_evidence_sha_from_registry": "914324c794d18624c52f8adb0f8b2f1a39cb972f",
+    "source_registry": "config/service-capability-registry.json",
+    "source_public_catalog": "agent-services.json",
+    "source_readiness": "config/agent-production-readiness.json"
+  },
+  "claim": {
+    "public_maturity": "SUPERVISED_PILOT",
+    "operational_state": "BLOCKED",
+    "production_ready": false,
+    "production_authorized": false,
+    "external_outreach_enabled": false,
+    "auto_publish_enabled": false,
+    "live_financial_execution_enabled": false,
+    "max_autonomous_capital_usd": 0,
+    "require_explicit_human_promotion": true,
+    "no_fabricated_customers_or_uplift": true
+  },
+  "architecture": {
+    "default": "deterministic_workflow",
+    "optional_agents": [
+      "research_assistant",
+      "evidence_extractor",
+      "proposal_drafter"
+    ],
+    "agent_policy": "Tool results are untrusted data. Agent outputs never grant authorization.",
+    "runtime": "universal-multi-project-runtime, separately certified before use",
+    "system_of_record": "existing governed commercial intake and revenue ledger",
+    "boundaries": [
+      "public_intake",
+      "policy_engine",
+      "decision_plane",
+      "human_approval",
+      "connector_gateway",
+      "evidence_ledger"
+    ],
+    "unnecessary_components_disallowed": "Do not deploy autonomous swarm, vector DB, graph DB, message broker or extra model until a measured use case justifies it.",
+    "contracts": [
+      "versioned_payloads",
+      "tenant_scoped_authz",
+      "idempotency_keys",
+      "outbox_if_external_actions",
+      "signed_policy_decisions",
+      "provider_reconciliation",
+      "backpressure",
+      "dead_letter_review"
+    ]
+  },
+  "data": {
+    "classification": "PII_CONFIDENTIAL_WHEN_CONTACTS_PRESENT",
+    "default_minimization": true,
+    "allowed_sources": [
+      "first_party_validated_intake",
+      "official_or_licensed_apis_with_current_permissions",
+      "lawfully_accessible_business_sources_with_documented_terms"
+    ],
+    "blocked_sources": [
+      "unapproved_scraping",
+      "automated_linkedin_collection_without_permission",
+      "data_broker_lists_without_legal_basis_and_provenance",
+      "purchased_contact_data_with_undocumented_consent",
+      "sensitive_personal_data_for_profiling"
+    ],
+    "required_fields": [
+      "tenant_id",
+      "subject_or_company_key",
+      "source_type",
+      "source_uri_or_authorized_reference",
+      "source_observed_at",
+      "evidence_sha256",
+      "collection_purpose",
+      "legal_basis_or_permission",
+      "retention_class",
+      "consent_or_objection_status",
+      "lineage_version"
+    ],
+    "pii_in_llm_prompts": "MINIMIZE_OR_REDACT",
+    "cross_tenant_retrieval": false,
+    "retention_days": null,
+    "retention_requires_approved_schedule": true,
+    "dsar_delete_and_objection_workflow_required": true,
+    "suppression_list_checked_at_decision_and_send": true,
+    "model_training_on_customer_pii": false,
+    "point_in_time_features_required": true
+  },
+  "connectors": {
+    "crm": {
+      "status": "NOT_CERTIFIED",
+      "write_enabled": false,
+      "required": [
+        "provider_scopes",
+        "tenant_binding",
+        "sandbox_contract_tests",
+        "reconciliation",
+        "approved_connector_identity",
+        "secret_storage"
+      ]
+    },
+    "email": {
+      "status": "NOT_CERTIFIED",
+      "send_enabled": false,
+      "required": [
+        "jurisdiction_specific_legal_review",
+        "verified_sender_identity",
+        "SPF_DKIM_DMARC",
+        "unsubscribe_and_suppression",
+        "rate_limits",
+        "bounce_and_complaint_handling",
+        "approval_id"
+      ]
+    },
+    "whatsapp": {
+      "status": "NOT_CERTIFIED",
+      "send_enabled": false,
+      "required": [
+        "official_business_api",
+        "provider_template_approval_if_needed",
+        "recipient_opt_in",
+        "approved_template_or_session_policy",
+        "approval_id"
+      ]
+    },
+    "social": {
+      "status": "RESEARCH_ONLY",
+      "publish_enabled": false,
+      "required": [
+        "official_apis_or_explicit_terms_permission",
+        "rights_review",
+        "approval_id"
+      ]
+    },
+    "mcp": {
+      "tools_default_deny": true,
+      "external_writes_enabled": false,
+      "scoped_capability_registry": true,
+      "prompt_injection_guard": true,
+      "revalidate_permissions_at_use": true
+    }
+  },
+  "authority": {
+    "research_and_scoring": "ALLOWED_WITH_APPROVED_SOURCES",
+    "drafting": "PREPARE_ONLY",
+    "contact_discovery": "ONLY_PERMITTED_SOURCES",
+    "crm_mutation": "HUMAN_APPROVAL_AND_CERTIFIED_CONNECTOR_REQUIRED",
+    "external_submission": "HUMAN_APPROVAL_AND_CERTIFIED_CONNECTOR_REQUIRED",
+    "email_or_whatsapp_send": "HUMAN_APPROVAL_AND_CERTIFIED_CONNECTOR_REQUIRED",
+    "payment_contract_deploy": "HUMAN_APPROVAL_REQUIRED",
+    "approval_contract": [
+      "approval_id",
+      "request_digest",
+      "tenant_id",
+      "actor_id",
+      "action",
+      "destination_id",
+      "expires_at",
+      "policy_version",
+      "single_use_nonce"
+    ],
+    "stop_on_missing_approval": true,
+    "bulk_outreach": false,
+    "impersonation": false,
+    "anti_bot_bypass": false
+  },
+  "risk": {
+    "frameworks": [
+      "NIST_AI_RMF_GAI_PROFILE",
+      "OWASP_GENAI_LLM_TOP10_2026",
+      "OWASP_AGENT_CONTROL_STANDARD_2026",
+      "OWASP_API_TOP10",
+      "NIST_SSDF_FINAL",
+      "SLSA_V1_2"
+    ],
+    "threats": [
+      "prompt_injection",
+      "tool_output_poisoning",
+      "cross_tenant_access",
+      "ssrf",
+      "overprivileged_mcp",
+      "data_exfiltration",
+      "sensitive_attribute_inference",
+      "stale_consent",
+      "duplicate_outreach",
+      "false_attribution",
+      "unsafe_link_following",
+      "cost_exhaustion"
+    ],
+    "mitigations": [
+      "taint_untrusted_content",
+      "deterministic_authorization",
+      "per_tool_allowlist",
+      "deny_by_default",
+      "domain_allowlist_for_url_fetching",
+      "no_private_metadata_fetch",
+      "signed_and_expiring_approvals",
+      "privacy_impact_review",
+      "auditable_denials",
+      "kill_switch"
+    ]
+  },
+  "evaluation": {
+    "current_measured_metrics": null,
+    "verified_campaign_count": 0,
+    "production_quality_certified": false,
+    "offline_policy": "No optimization on holdout; temporal split; group same company/account; log sampling bias; preserve time-of-observation; audit label delay.",
+    "minimum_candidate_eval": {
+      "min_holdout_leads": 200,
+      "min_holdout_conversions": 30,
+      "comparator": "documented_deterministic_baseline",
+      "precision_at_k_k": 20,
+      "required_metrics": [
+        "PR_AUC",
+        "precision_at_20",
+        "lift_at_20",
+        "Brier_score",
+        "ECE",
+        "calibration_by_segment",
+        "expected_cost_per_qualified_lead",
+        "false_positive_review_rate"
+      ],
+      "proposed_lift_at_20_min": 1.2,
+      "require_bootstrap_ci_lower_bound_above_baseline": true,
+      "subgroup_privacy_and_fairness_review": true
+    },
+    "agent_quality": {
+      "citation_grounding_rate_target": 0.99,
+      "tool_policy_violation_target": 0,
+      "unsupported_business_claim_target": 0,
+      "red_team_scenarios_min": 30,
+      "regression_corpus_required": true
+    },
+    "note": "All thresholds are proposed release acceptance criteria, not measured results or claimed industry averages."
+  },
+  "reliability": {
+    "availability_slo_proposed": 0.995,
+    "scoring_p95_ms_proposed": 2000,
+    "queue_staleness_p95_minutes_proposed": 15,
+    "duplicate_external_send_target": 0,
+    "unauthorized_external_action_target": 0,
+    "suppression_check_target": 1,
+    "source_attribution_target": 1,
+    "data_quality": {
+      "valid_source_rate_target": 1,
+      "required_field_completeness_target": 1,
+      "stale_source_quarantine": true
+    },
+    "observability": [
+      "OpenTelemetry_traces_metrics_logs",
+      "tenant_redacted_audit_events",
+      "SLI_dashboards",
+      "error_budget",
+      "alerts",
+      "incident_runbooks",
+      "backup_restore_drills"
+    ],
+    "rpo_minutes_proposed": 60,
+    "rto_minutes_proposed": 240,
+    "production_slo_certified": false,
+    "restore_drill_passed": false
+  },
+  "finops": {
+    "cost_baseline_measured": false,
+    "external_spend_approved": false,
+    "max_external_autonomous_spend_usd": 0,
+    "monthly_budget_usd": null,
+    "budget_requires_human_approval": true,
+    "required_unit_economics": [
+      "cost_per_source_record",
+      "cost_per_enriched_lead",
+      "cost_per_human_qualified_lead",
+      "cost_per_booked_meeting",
+      "net_margin_per_reconciled_sale"
+    ],
+    "constraints": [
+      "per_tenant_quota",
+      "per_connector_rate_limits",
+      "per_run_token_limit",
+      "model_routing_by_measured_quality_per_cost",
+      "no_background_crawl_without_budget",
+      "alerts_on_cost_anomaly"
+    ],
+    "auto_cap_excess": "HARD_STOP"
+  },
+  "supply_chain": {
+    "policy": "fail_closed",
+    "required": [
+      "protected_branch",
+      "exact_sha_review",
+      "locked_dependencies",
+      "immutable_action_refs",
+      "SAST_SCA_secret_scan",
+      "CycloneDX_SBOM",
+      "SLSA_1_2_provenance_verification",
+      "signed_build_or_equivalent",
+      "reproducible_attestation_check",
+      "vulnerability_triage_and_exception_expiry"
+    ],
+    "provenance_verified_for_service": false
+  },
+  "evidence": {
+    "principle": "Only signed/hashed provenance linked to executable blobs and authenticated provider receipts count as production evidence; repository presence alone is not operational evidence.",
+    "code_observations": [
+      {
+        "path": "agent-services.json",
+        "blob_sha": "d3c3ac2b2ac22bdd3684ea54420654c07007d5f4",
+        "fact": "Sales service advertised only as SUPERVISED_PILOT",
+        "id": "sales_public_catalog"
+      },
+      {
+        "path": "config/service-capability-registry.json",
+        "blob_sha": "8c04b1d45a2c8c7c67d0505161dacfdc97993bdd",
+        "fact": "Sales gates include CRM/contact policy/external campaign evidence",
+        "id": "sales_capability_registry"
+      },
+      {
+        "path": "config/agent-production-readiness.json",
+        "blob_sha": "eb99f9a91a56126817545c23e9b9a152fe90adfc",
+        "fact": "Sales promotion is BLOCKED; external campaign evidence missing",
+        "id": "sales_readiness_gate"
+      },
+      {
+        "path": "commercial-runtime/src/service-pricing.mjs",
+        "blob_sha": "0b71664a7a3a425db5af3f28b0aa0f90e607942c",
+        "fact": "Sales quote setup minimum 150000 cents; monthly exact 29900 cents",
+        "id": "sales_price_catalog"
+      }
+    ],
+    "production_receipts": [],
+    "evidence_missing": [
+      "crm_connector_authz_and_sandbox",
+      "consent_and_jurisdiction_review",
+      "campaign_delivery_provider_receipts",
+      "suppression_enforcement_e2e",
+      "tenant_isolation_adversarial_e2e",
+      "point_in_time_calibration_report",
+      "signed_release_attestation",
+      "restore_drill_and_SLO_window",
+      "approved_operational_budget"
+    ],
+    "cross_repository_provenance": {
+      "source_repository": "jadeldiaz01-png/ai-income-revenue-engine",
+      "registry_referenced_commit_sha": "914324c794d18624c52f8adb0f8b2f1a39cb972f",
+      "scope": "REGISTRY_COMMIT_REFERENCE_ONLY",
+      "verification_status": "NOT_CERTIFIED",
+      "source_commit_and_tree_verified": false,
+      "executable_build_binding_verified": false,
+      "attestation_verified": false,
+      "runtime_release_digest": null,
+      "signed_provenance_reference": null,
+      "independently_verified_receipts": [],
+      "production_authority": false,
+      "required_independent_evidence": [
+        "authenticated_source_commit_and_tree",
+        "pinned_build_materials_and_artifact_digest",
+        "verified_signed_slsa_provenance",
+        "independent_runtime_artifact_identity",
+        "provider_receipts_and_connector_scope"
+      ],
+      "warning": "A commit SHA recorded by another repository is not evidence of executable runtime identity, artifact integrity, a completed deployment, consent, or production authority."
+    }
+  },
+  "gates": {
+    "G0_code_contract": {
+      "status": "PENDING",
+      "evidence_ref": null
+    },
+    "G1_data_privacy": {
+      "status": "BLOCKED",
+      "evidence_ref": null
+    },
+    "G2_security_supply_chain": {
+      "status": "BLOCKED",
+      "evidence_ref": null
+    },
+    "G3_offline_quant_evaluation": {
+      "status": "BLOCKED",
+      "evidence_ref": null
+    },
+    "G4_connector_sandbox": {
+      "status": "BLOCKED",
+      "evidence_ref": null
+    },
+    "G5_supervised_campaign": {
+      "status": "BLOCKED",
+      "evidence_ref": null
+    },
+    "G6_recovery_SLO_finops": {
+      "status": "BLOCKED",
+      "evidence_ref": null
+    },
+    "G7_human_production_promotion": {
+      "status": "BLOCKED",
+      "evidence_ref": null
+    }
+  },
+  "source_references": [
+    {
+      "kind": "external_primary",
+      "url": "https://www.nist.gov/itl/ai-risk-management-framework",
+      "as_of": "2026-10-08",
+      "id": "nist_ai_rmf",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
+    },
+    {
+      "kind": "external_primary",
+      "url": "https://csrc.nist.gov/pubs/sp/800/218/final",
+      "as_of": "2026-10-08",
+      "id": "nist_ssdf",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
+    },
+    {
+      "kind": "external_primary",
+      "url": "https://genai.owasp.org/2026/09/01/owasp-genai-security-project-unveils-2026-top-10-for-llm-applications-new-agent-control-standard-and-sponsors-as-community-tops-30000-members/",
+      "as_of": "2026-10-08",
+      "id": "owasp_agent_security",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
+    },
+    {
+      "kind": "external_primary",
+      "url": "https://slsa.dev/spec/v1.2/",
+      "as_of": "2026-10-08",
+      "id": "slsa_build_integrity",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
+    },
+    {
+      "kind": "external_primary",
+      "url": "https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business",
+      "as_of": "2026-10-08",
+      "id": "ftc_email_marketing",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
+    },
+    {
+      "kind": "external_primary",
+      "url": "https://commission.europa.eu/law/law-topic/data-protection/information-business-and-organisations/dealing-requests-individuals_en",
+      "as_of": "2026-10-08",
+      "id": "eu_data_subject_rights",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
+    },
+    {
+      "kind": "external_primary",
+      "url": "https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai",
+      "as_of": "2026-10-08",
+      "id": "eu_ai_regulatory_framework",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
+    },
+    {
+      "kind": "external_primary",
+      "url": "https://support.google.com/mail/answer/81126?hl=en",
+      "as_of": "2026-10-08",
+      "id": "gmail_sender_guidelines",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
+    },
+    {
+      "kind": "external_primary",
+      "url": "https://www.dgcp.gob.do/transparencia/marco-legal",
+      "as_of": "2026-10-08",
+      "id": "do_legal_portal",
+      "verification_status": "REFERENCE_ONLY_NOT_INDEPENDENTLY_VERIFIED"
+    }
+  ],
+  "review": "Research date reflects knowledge available October 8 2026. Current laws, platform policies and permissions must be rechecked for each geography and connector before promotion."
+}
