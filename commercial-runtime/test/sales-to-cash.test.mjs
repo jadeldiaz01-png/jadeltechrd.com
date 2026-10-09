@@ -4,6 +4,7 @@ import {
   handleAdminQuoteCreate,
   handleAdminCatalogQuoteCreate,
   handleAdminQuoteAcceptance,
+  handleAdminQuoteAcceptanceReadiness,
   handleAdminPaymentOrderCreate,
 } from "../src/worker.mjs";
 
@@ -146,6 +147,182 @@ test("quote acceptance requires durable evidence and promotes to CUSTOMER_APPROV
   assert.equal(body.quote_status, "ACCEPTED");
   assert.equal(body.project_state, "CUSTOMER_APPROVED");
   assert.equal(batches[0].length, 3);
+});
+
+function readinessRequest(quoteId = QUOTE_ID, method = "GET", authenticated = true) {
+  return new Request(`https://intake.jadeltechrd.com/api/v1/admin/quotes/acceptance-readiness?quote_id=${quoteId}`, {
+    method,
+    headers: authenticated ? { authorization:"Bearer admin-secret-token" } : {},
+  });
+}
+
+test("quote acceptance readiness is authenticated, GET-only, and read-only", async () => {
+  let batchCalls = 0;
+  let runCalls = 0;
+  const db = {
+    prepare(sql) {
+      assert.match(sql, /^SELECT /);
+      return {
+        bind(value) {
+          assert.equal(value, QUOTE_ID);
+          return {
+            first: async () => ({
+              quote_id:QUOTE_ID,
+              project_id:PROJECT_ID,
+              status:"ISSUED",
+              expires_at:null,
+              project_state:"QUOTED",
+              policy_status:"ALLOWED",
+            }),
+          };
+        },
+      };
+    },
+    async batch() { batchCalls += 1; throw new Error("unexpected batch"); },
+    async run() { runCalls += 1; throw new Error("unexpected run"); },
+  };
+
+  const unauthorized = await handleAdminQuoteAcceptanceReadiness(
+    readinessRequest(QUOTE_ID, "GET", false),
+    { ADMIN_API_TOKEN:"admin-secret-token", DB:db },
+  );
+  assert.equal(unauthorized.status, 401);
+
+  const wrongMethod = await handleAdminQuoteAcceptanceReadiness(
+    readinessRequest(QUOTE_ID, "POST", true),
+    { ADMIN_API_TOKEN:"admin-secret-token", DB:db },
+  );
+  assert.equal(wrongMethod.status, 405);
+
+  const response = await handleAdminQuoteAcceptanceReadiness(
+    readinessRequest(),
+    { ADMIN_API_TOKEN:"admin-secret-token", DB:db },
+  );
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.ready, true);
+  assert.equal(body.code, "QUOTE_ACCEPTANCE_READY");
+  assert.equal(body.quote_status, "ISSUED");
+  assert.equal(body.project_state, "QUOTED");
+  assert.equal(body.policy_status, "ALLOWED");
+  assert.equal(body.expired, false);
+  assert.equal(batchCalls, 0);
+  assert.equal(runCalls, 0);
+  assert.equal("acceptance_evidence" in body, false);
+});
+
+test("quote acceptance readiness reports non-ready states without mutation", async () => {
+  const cases = [
+    [{ status:"ACCEPTED", project_state:"QUOTED", policy_status:"ALLOWED", expires_at:null }, "QUOTE_NOT_ISSUED"],
+    [{ status:"ISSUED", project_state:"QUOTED", policy_status:"DENIED", expires_at:null }, "POLICY_NOT_ALLOWED"],
+    [{ status:"ISSUED", project_state:"CUSTOMER_APPROVED", policy_status:"ALLOWED", expires_at:null }, "PROJECT_STATE_NOT_ACCEPTABLE"],
+    [{ status:"ISSUED", project_state:"QUOTED", policy_status:"ALLOWED", expires_at:"2000-01-01T00:00:00.000Z" }, "QUOTE_EXPIRED"],
+  ];
+
+  for (const [fields, expectedCode] of cases) {
+    let writes = 0;
+    const db = {
+      prepare(sql) {
+        assert.match(sql, /^SELECT /);
+        return {
+          bind() {
+            return {
+              first: async () => ({
+                quote_id:QUOTE_ID,
+                project_id:PROJECT_ID,
+                ...fields,
+              }),
+              run: async () => { writes += 1; },
+            };
+          },
+        };
+      },
+      batch: async () => { writes += 1; },
+    };
+    const response = await handleAdminQuoteAcceptanceReadiness(
+      readinessRequest(),
+      { ADMIN_API_TOKEN:"admin-secret-token", DB:db },
+    );
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.ready, false);
+    assert.equal(body.code, expectedCode);
+    assert.equal(writes, 0);
+  }
+});
+
+test("quote acceptance readiness returns safe not-found and validates quote id", async () => {
+  let queries = 0;
+  const db = {
+    prepare(sql) {
+      queries += 1;
+      assert.match(sql, /^SELECT /);
+      return { bind: () => ({ first: async () => null }) };
+    },
+  };
+
+  const missing = await handleAdminQuoteAcceptanceReadiness(
+    readinessRequest(),
+    { ADMIN_API_TOKEN:"admin-secret-token", DB:db },
+  );
+  assert.equal(missing.status, 404);
+  assert.deepEqual(await missing.json(), { ready:false, code:"QUOTE_NOT_FOUND", quote_id:QUOTE_ID });
+
+  const beforeInvalid = queries;
+  const invalid = await handleAdminQuoteAcceptanceReadiness(
+    readinessRequest("not-a-uuid"),
+    { ADMIN_API_TOKEN:"admin-secret-token", DB:db },
+  );
+  assert.equal(invalid.status, 400);
+  assert.equal((await invalid.json()).error, "INVALID_QUOTE_ID");
+  assert.equal(queries, beforeInvalid);
+});
+
+test("quote acceptance persistence failure returns only the safe error contract", async () => {
+  const evidence = "customer confirmed quote by reviewed email thread";
+  const db = {
+    prepare() {
+      return {
+        bind() {
+          return {
+            first: async () => ({
+              quote_id:QUOTE_ID,
+              project_id:PROJECT_ID,
+              status:"ISSUED",
+              expires_at:null,
+              project_state:"QUOTED",
+              policy_status:"ALLOWED",
+            }),
+          };
+        },
+      };
+    },
+    async batch() {
+      const error = new Error("internal database detail");
+      error.name = "D1BatchError";
+      throw error;
+    },
+  };
+
+  const captured = [];
+  const originalError = console.error;
+  console.error = (...args) => captured.push(args);
+  try {
+    const response = await handleAdminQuoteAcceptance(adminRequest("/api/v1/admin/quotes/accept", {
+      quote_id:QUOTE_ID,
+      acceptance_evidence:evidence,
+    }), { ADMIN_API_TOKEN:"admin-secret-token", DB:db });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error:"QUOTE_ACCEPTANCE_PERSISTENCE_FAILED" });
+  } finally {
+    console.error = originalError;
+  }
+
+  const serializedLogs = JSON.stringify(captured);
+  assert.equal(serializedLogs.includes(evidence), false);
+  assert.equal(serializedLogs.includes("internal database detail"), false);
+  assert.match(serializedLogs, /quote_acceptance_persistence_failed/);
+  assert.match(serializedLogs, /D1BatchError/);
 });
 
 test("payment order is internal-only and promotes accepted quote to PAYMENT_PENDING", async () => {
