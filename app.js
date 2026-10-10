@@ -245,6 +245,36 @@
         <div><strong>04</strong><span>evidencia y observabilidad incorporadas al diseño</span></div>
       </section>
 
+      <section class="section-block conversion-path-section" aria-labelledby="conversion-path-title">
+        <div class="section-heading reveal">
+          <div>
+            <div class="eyebrow">Rutas de implementación</div>
+            <h2 id="conversion-path-title">Elige por resultado, no por tecnología.</h2>
+          </div>
+          <p>Las mejores páginas B2B reducen fricción: cada visitante debe reconocer su problema, ver un camino concreto y solicitar alcance sin perderse en jerga técnica.</p>
+        </div>
+        <div class="conversion-path-grid reveal">
+          <a class="conversion-path-card" href="/solicitar-proyecto.html?services=support,analytics&utm_source=use_case_path&utm_medium=homepage&utm_campaign=service_intake">
+            <span>Operaciones</span>
+            <strong>Responder clientes y tickets con trazabilidad.</strong>
+            <p>Soporte, clasificación, dashboard y escalación humana.</p>
+            <small>Soporte & Tickets + Dashboards</small>
+          </a>
+          <a class="conversion-path-card" href="/solicitar-proyecto.html?services=sales,revenue&utm_source=use_case_path&utm_medium=homepage&utm_campaign=service_intake">
+            <span>Crecimiento</span>
+            <strong>Encontrar oportunidades sin prometer ingresos.</strong>
+            <p>Research, scoring, brief comercial y ledger de evidencia.</p>
+            <small>Sales + Revenue Intelligence</small>
+          </a>
+          <a class="conversion-path-card" href="/solicitar-proyecto.html?services=governance,multiagent&utm_source=use_case_path&utm_medium=homepage&utm_campaign=service_intake">
+            <span>Gobernanza</span>
+            <strong>Llevar agentes a producción con controles.</strong>
+            <p>Policies, approvals, observabilidad, SLOs y workflows durables.</p>
+            <small>AI Governance + Multi-Agent</small>
+          </a>
+        </div>
+      </section>
+
       <section class="section-block" id="servicios">
         <div class="section-heading reveal">
           <div>

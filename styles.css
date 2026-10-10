@@ -329,6 +329,14 @@ h1, h2, h3 {
 .signal-strip > div { min-height: 126px; display: flex; flex-direction: column; justify-content: center; padding: 1.2rem; background: #080c15; }
 .signal-strip strong { font-size: 1.8rem; letter-spacing: -.05em; }
 .signal-strip span { color: var(--muted-2); font-size: .78rem; max-width: 18ch; }
+.conversion-path-section { padding-top: clamp(4.5rem, 7vw, 6.5rem); }
+.conversion-path-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.conversion-path-card { min-height: 245px; display: grid; align-content: start; gap: .75rem; padding: 1.25rem; border: 1px solid rgba(116,192,252,.16); border-radius: 18px; text-decoration: none; color: var(--text); background: linear-gradient(180deg, rgba(116,192,252,.065), rgba(255,255,255,.018)), rgba(3,5,10,.36); transition: transform .25s ease, border-color .25s ease, background .25s ease; }
+.conversion-path-card:hover { transform: translateY(-4px); border-color: rgba(99,230,190,.34); background: linear-gradient(180deg, rgba(99,230,190,.07), rgba(116,192,252,.026)), rgba(3,5,10,.42); }
+.conversion-path-card span { width: fit-content; padding: .35rem .55rem; border: 1px solid rgba(99,230,190,.18); border-radius: 999px; color: var(--accent); font-size: .66rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.conversion-path-card strong { font-size: 1.18rem; line-height: 1.25; }
+.conversion-path-card p { margin: 0; color: var(--muted); line-height: 1.6; }
+.conversion-path-card small { align-self: end; color: var(--accent-2); font-weight: 850; }
 .section-block { padding: clamp(5.5rem, 11vw, 9rem) 0 0; }
 .section-heading { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); align-items: end; gap: 2rem; margin-bottom: 2rem; }
 .section-heading h2, .governance-panel h2, .final-cta h2 { margin: .55rem 0 0; font-size: clamp(2.2rem, 5vw, 4.5rem); max-width: 15ch; }
@@ -691,6 +699,7 @@ h1, h2, h3 {
   .hero-v2 h1 { max-width: 13ch; }
   .agent-console { width: min(680px, 100%); }
   .services-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .conversion-path-grid { grid-template-columns: 1fr; }
   .pricing-grid { grid-template-columns: repeat(2, 1fr); }
   .pricing-card.featured { transform: none; }
   .process-grid { grid-template-columns: repeat(2, 1fr); }
