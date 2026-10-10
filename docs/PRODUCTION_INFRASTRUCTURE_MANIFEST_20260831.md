@@ -71,3 +71,25 @@ Required GitHub/Cloudflare secrets before production deployment:
 Cloudflare DNS reconciliation requires `Zone:DNS:Read` and `Zone:DNS:Edit` for the `jadeltechrd.com` zone.
 
 GitHub Pages domain verification runbook: `docs/operations/GITHUB_PAGES_DOMAIN_VERIFICATION_2026.md`.
+
+## 2026-10-09 production evidence update
+
+Current production evidence is tracked in `docs/PRODUCTION_REVENUE_GAP_AUDIT_20261009.md`.
+
+Implemented or verified since the original manifest:
+
+- Public site returns HTTP 200 under Cloudflare.
+- Intake runtime health returns `status=ok` and `write_mode=fail-closed`.
+- PayPal webhook endpoint rejects invalid signatures with HTTP 403 before ledger writes.
+- Project intake evidence, PayPal live readiness, PayPal sandbox E2E and sales-to-cash sandbox canaries have recent successful workflow evidence.
+- GitHub Pages domain verification is no longer a known blocker when the account Pages screen shows `jadeltechrd.com` as verified.
+
+Remaining production blockers:
+
+- Archive a real human-approved PayPal settlement or live pending-readonly evidence path before claiming fully certified live sales-to-cash.
+- Complete owner-only approval console hardening and smoke evidence.
+- Execute and archive a D1 restore drill against a non-production clone.
+- Activate GA4 only after privacy/CSP tests and DebugView or Realtime lead-event proof.
+- Keep Sales & Lead Intelligence in supervised pilot until lawful outbound, suppression, sandbox provider receipts, quant lift and cost evidence are verified.
+- Bind Nexus through private queue/work orders; public pages must not expose admin endpoints, VPS controls or secrets.
+- Restore formal security scan execution by installing or exposing a supported Python runtime for the Codex security tooling, or by archiving an equivalent CI scan.
