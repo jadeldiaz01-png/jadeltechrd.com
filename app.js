@@ -193,7 +193,10 @@
           <span class="price-caption">Precio de lanzamiento</span>
           <strong>${service.priceLabel}</strong>
         </div>
-        <button class="mini-action" type="button" data-add-service="${service.id}" aria-pressed="false">Añadir</button>
+        <div class="service-actions">
+          <button class="mini-action" type="button" data-add-service="${service.id}" aria-pressed="false">Añadir</button>
+          <a class="mini-action service-quote" href="${governedIntakeUrl([service.id])}&utm_source=service_catalog&utm_medium=homepage&utm_campaign=service_intake">Cotizar</a>
+        </div>
       </div>
     </article>`;
 
