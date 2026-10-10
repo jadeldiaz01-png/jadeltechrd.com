@@ -8,6 +8,7 @@ const PAYMENT_ORDER_URL = `${API_ORIGIN}/api/v1/admin/payment-orders`;
 
 const form = document.getElementById("approval-auth");
 const tokenInput = document.getElementById("admin-token");
+const protectedShaInput = document.getElementById("protected-main-sha");
 const statusNode = document.getElementById("approval-status");
 const resultsNode = document.getElementById("approval-results");
 
@@ -35,6 +36,11 @@ function formatMinor(value, currency = "USD") {
     style:"currency",
     currency,
   }).format(amount / 100);
+}
+
+function protectedMainSha() {
+  const value = protectedShaInput?.value.trim() || "";
+  return /^[0-9a-f]{40}$/.test(value) ? value : "<protected_main_sha>";
 }
 
 const SAFE_ERROR_CODE_RE = /^[A-Z][A-Z0-9_]{0,79}$/;
@@ -105,6 +111,25 @@ function quotePaymentControls(quote, paymentOrders) {
   </div>`;
 }
 
+function captureAssist(order) {
+  if (order.status !== "PENDING" || !order.provider_order_id) return "";
+  const command = [
+    "gh workflow run paypal-live-capture.yml",
+    "--repo jadeldiaz01-png/jadeltechrd.com",
+    "--ref main",
+    `-f expected_sha=${protectedMainSha()}`,
+    `-f paypal_order_id=${order.provider_order_id}`,
+    `-f payment_order_id=${order.payment_order_id}`,
+    `-f quote_id=${order.quote_id}`,
+    "-f confirmation=CAPTURE_PAYPAL_LIVE_ORDER",
+  ].join(" ");
+  return `<details class="approval-command">
+    <summary>Preparar captura asistida</summary>
+    <p>Ejecutar solo después de confirmar aprobación del cliente en PayPal. No reconcilia, no reembolsa y no hace pagos salientes.</p>
+    <code>${htmlEscape(command)}</code>
+  </details>`;
+}
+
 function render(data) {
   const projects = data.projects || [];
   const quotableProjects = data.quotable_projects || [];
@@ -170,6 +195,7 @@ function render(data) {
             ${safePayPalApprovalUrl(order.provider_approval_url)
               ? `<a href="${htmlEscape(safePayPalApprovalUrl(order.provider_approval_url))}" target="_blank" rel="noopener noreferrer">Abrir checkout PayPal</a>`
               : ""}
+            ${captureAssist(order)}
           </article>`).join("") : "<p>No hay órdenes internas pendientes.</p>"}
       </section>
       <section>
