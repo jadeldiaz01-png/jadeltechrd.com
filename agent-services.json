@@ -19,6 +19,70 @@
     "autonomous_production_deploy": false,
     "human_intake_required": true
   },
+  "nexus_ai_automation_v0_3_0": {
+    "agent_id": "nexus_ai_automation_v0.3.0",
+    "public_role": "Governed service router and evidence coordinator for Jadel Tech RD",
+    "public_mode": "DISCOVERY_AND_INTAKE_ONLY",
+    "production_runtime": "PRIVATE_CONTROL_PLANE_REQUIRED",
+    "runtime_interfaces": {
+      "public_site": "https://jadeltechrd.com/",
+      "human_intake": "https://jadeltechrd.com/solicitar-proyecto.html",
+      "service_catalog": "https://jadeltechrd.com/agent-services.json",
+      "llms_txt": "https://jadeltechrd.com/llms.txt",
+      "approval_console": "https://jadeltechrd.com/approval-console.html"
+    },
+    "capabilities": [
+      "service_intake_briefing",
+      "service_routing",
+      "opportunity_scoring",
+      "proposal_draft_preparation",
+      "quote_payment_workflow_coordination",
+      "paypal_order_evidence_reconciliation",
+      "work_order_generation",
+      "support_ticket_triage",
+      "lead_research_packet_preparation",
+      "social_trend_research_packet_preparation",
+      "media_pipeline_quality_review",
+      "dashboard_reporting",
+      "governance_readiness_review",
+      "multi_agent_orchestration_design",
+      "quant_research_control_review"
+    ],
+    "human_approval_required_for": [
+      "policy_approval",
+      "quote_acceptance",
+      "payment_capture",
+      "payment_reconciliation",
+      "external_messages",
+      "social_publication",
+      "oauth_scope_grants",
+      "production_deployments",
+      "contract_acceptance",
+      "infrastructure_changes"
+    ],
+    "blocked_actions": [
+      "secret_exposure",
+      "refunds",
+      "payouts",
+      "withdrawals",
+      "autonomous_financial_execution",
+      "autonomous_contract_acceptance",
+      "autonomous_social_publication",
+      "real_trading",
+      "spam",
+      "impersonation",
+      "unauthorized_scraping"
+    ],
+    "evidence_outputs": [
+      "trace_id",
+      "project_id",
+      "quote_id",
+      "payment_order_id",
+      "approval_receipt",
+      "ledger_event",
+      "work_order_id"
+    ]
+  },
   "currency": "USD",
   "pricing_semantics": {
     "exact": "Published catalog amount",

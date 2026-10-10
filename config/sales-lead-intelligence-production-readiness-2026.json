@@ -309,7 +309,7 @@
     "code_observations": [
       {
         "path": "agent-services.json",
-        "blob_sha": "d3c3ac2b2ac22bdd3684ea54420654c07007d5f4",
+        "blob_sha": "47e0eca30beac9007cac2f53c6713b4e18127038",
         "fact": "Sales service advertised only as SUPERVISED_PILOT",
         "id": "sales_public_catalog"
       },

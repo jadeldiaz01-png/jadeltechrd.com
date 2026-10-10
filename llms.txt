@@ -8,6 +8,7 @@ Machine-readable service catalog: https://jadeltechrd.com/agent-services.json
 Privacy: https://jadeltechrd.com/?view=privacy
 Terms: https://jadeltechrd.com/?view=terms
 Data deletion: https://jadeltechrd.com/?view=data-deletion
+Nexus automation profile: nexus_ai_automation_v0.3.0
 
 ## Commercial capabilities
 
@@ -19,6 +20,7 @@ Data deletion: https://jadeltechrd.com/?view=data-deletion
 - AI governance and production readiness
 - Multi-agent orchestration
 - Revenue opportunity intelligence
+- Governed Nexus intake, quote, PayPal order, ledger, approval and work-order coordination
 
 ## Interaction and authority
 
@@ -28,6 +30,9 @@ execution are not autonomous capabilities.
 
 The current commercial payment flow is human-controlled. Machine-payment
 capabilities are experimental/testnet until separately certified and promoted.
+nexus_ai_automation_v0.3.0 may prepare briefs, scoring, proposals, work orders,
+evidence packets and dashboards, but critical external actions require human
+approval and private runtime authorization.
 
 ## Agent interoperability
 
