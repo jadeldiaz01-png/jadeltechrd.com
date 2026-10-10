@@ -30,6 +30,10 @@ def main() -> None:
 
     pages = WORKFLOWS / "pages.yml"
     pages_text = pages.read_text(encoding="utf-8")
+    if "runs-on: ubuntu-latest" in pages_text:
+        failures.append(f"{pages}: public Pages deploy must pin ubuntu-24.04 runner")
+    if "runs-on: ubuntu-24.04" not in pages_text:
+        failures.append(f"{pages}: missing pinned ubuntu-24.04 runner")
     for required in sorted(REQUIRED_PAGES_REFS):
         if required not in pages_text:
             failures.append(f"{pages}: missing required public Pages action pin {required}")
