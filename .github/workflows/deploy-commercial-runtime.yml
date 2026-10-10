@@ -55,7 +55,7 @@ jobs:
           echo DISPATCH_REF_MAIN=PASS
 
       - name: Checkout immutable approved revision
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ inputs.expected_sha }}
           fetch-depth: 1
@@ -74,7 +74,7 @@ jobs:
           echo PROTECTED_MAIN_SHA_MATCH=PASS
 
       - name: Use Node 22
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '22'
 
@@ -238,7 +238,7 @@ jobs:
       D1_DATABASE_HASH: ${{ needs.prepare-production-d1.outputs.database_hash }}
     steps:
       - name: Checkout immutable approved revision
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ inputs.expected_sha }}
           fetch-depth: 1
@@ -257,7 +257,7 @@ jobs:
           echo WORKER_PROTECTED_MAIN_SHA_MATCH=PASS
 
       - name: Use Node 22
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '22'
 

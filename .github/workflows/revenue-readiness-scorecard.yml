@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {persist-credentials: false}
       - name: Validate read-only contract
         shell: bash
@@ -53,7 +53,7 @@ jobs:
       CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {ref: '${{ github.sha }}', fetch-depth: 1, persist-credentials: false}
       - name: Exact SHA gate
         shell: bash
@@ -89,7 +89,7 @@ jobs:
           node scripts/revenue-readiness-scorecard.mjs --facts evidence/revenue-readiness-facts.json --config config/revenue-readiness-scorecard.json --json evidence/revenue-readiness-scorecard.json --markdown evidence/revenue-readiness-scorecard.md
           sha256sum evidence/revenue-readiness-facts.json evidence/revenue-readiness-scorecard.json > evidence/revenue-readiness-scorecard.sha256
           cat evidence/revenue-readiness-scorecard.md >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: revenue-readiness-scorecard-${{ github.run_id }}-${{ github.run_attempt }}
           path: evidence/revenue-readiness-*

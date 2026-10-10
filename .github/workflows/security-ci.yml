@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 8
     steps:
       - name: Checkout immutable revision
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Validate web source security
@@ -76,6 +76,11 @@ jobs:
               raise SystemExit(1)
           print('IMMUTABLE_ACTIONS=PASS')
           PY
+      - name: Require Node 24 compatible GitHub Actions pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/validate_github_actions_runtime_pins.py
       - name: Validate commercial runtime deploy governance
         shell: bash
         run: |
