@@ -77,6 +77,7 @@ Implemented:
 - PayPal order workflow coordination documented with LIVE order creation kept behind separate activation gates.
 - Intake evidence workflow with project IDs.
 - Owner approval console boundary.
+- Approval console assisted-capture command generation for exact `paypal_order_id`, `payment_order_id`, `quote_id` and protected `main` SHA.
 
 Remaining before full automated fulfillment:
 
