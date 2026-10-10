@@ -350,12 +350,14 @@ h1, h2, h3 {
 .service-deliverables { display: flex; flex-wrap: wrap; gap: .42rem; padding: 0; margin: 1.2rem 0 1.5rem; list-style: none; }
 .service-deliverables li { padding: .35rem .52rem; border: 1px solid rgba(255,255,255,.08); border-radius: .55rem; color: var(--muted-2); font-size: .68rem; background: rgba(255,255,255,.025); }
 .service-footer { margin-top: auto; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,.07); display: flex; align-items: end; justify-content: space-between; gap: .75rem; }
+.service-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .45rem; }
 .price-caption { display: block; color: var(--muted-2); font-size: .62rem; text-transform: uppercase; letter-spacing: .08em; }
 .service-footer strong { display: block; margin-top: .2rem; font-size: .82rem; }
 .mini-action { padding: .46rem .65rem; border: 1px solid rgba(99,230,190,.25); border-radius: .65rem; background: rgba(99,230,190,.07); color: var(--accent); cursor: pointer;  font-size: .72rem;
   font-weight: 800;
 }
 .mini-action[aria-pressed="true"] { color: #04110d; background: var(--accent); }
+.service-quote { text-decoration: none; color: var(--accent-2); border-color: rgba(116,192,252,.26); background: rgba(116,192,252,.07); }
 .service-payment-links {
   display: flex;
   flex-wrap: wrap;
