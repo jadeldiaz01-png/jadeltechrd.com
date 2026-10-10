@@ -233,6 +233,7 @@ jobs:
     timeout-minutes: 15
     env:
       CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+      NEXUS_POLICY_SERVICE_RAW: ${{ vars.NEXUS_POLICY_SERVICE }}
       D1_ACCOUNT_HASH: ${{ needs.prepare-production-d1.outputs.account_hash }}
       D1_DATABASE_ID: ${{ needs.prepare-production-d1.outputs.database_id }}
       D1_DATABASE_HASH: ${{ needs.prepare-production-d1.outputs.database_hash }}
@@ -322,17 +323,41 @@ jobs:
           echo "sitekey=$sitekey" >> "$GITHUB_OUTPUT"
           echo 'PUBLIC_TURNSTILE_CONTRACT=PASS'
 
+      - name: Verify certified private Nexus Worker exists (read-only, fail-closed)
+        shell: bash
+        env:
+          ACCOUNT_ID: ${{ steps.cloudflare.outputs.account_id }}
+        run: |
+          set -euo pipefail
+          service="$NEXUS_POLICY_SERVICE_RAW"
+          if [[ ! "$service" =~ ^[a-z0-9][a-z0-9-]{2,62}$ ]] || [ "$service" = "$WORKER_NAME" ]; then
+            echo 'NEXUS_POLICY_SERVICE_UNCERTIFIED=FAIL_CLOSED' >&2
+            exit 60
+          fi
+          # Only a script existence check. Do not call Nexus policy endpoints.
+          code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/scripts/$service/content/v2" || true)
+          if [ "$code" != 200 ]; then
+            echo "NEXUS_SERVICE_PREFLIGHT=FAIL_HTTP_$code" >&2
+            exit 61
+          fi
+          printf 'NEXUS_POLICY_SERVICE=%s\n' "$service" >> "$GITHUB_ENV"
+          echo 'NEXUS_SERVICE_PREFLIGHT=PASS'
+
       - name: Generate least-privilege Worker deployment configuration
         shell: bash
         env:
           DATABASE_ID: ${{ needs.prepare-production-d1.outputs.database_id }}
           TURNSTILE_SITEKEY: ${{ steps.public.outputs.sitekey }}
+          NEXUS_POLICY_SERVICE: ${{ vars.NEXUS_POLICY_SERVICE }}
         run: |
           set -euo pipefail
           test -n "$DATABASE_ID"
           test -n "$TURNSTILE_SITEKEY"
+          test -n "$NEXUS_POLICY_SERVICE"
           test "$(printf '%s' "$DATABASE_ID" | sha256sum | awk '{print $1}')" = "$D1_DATABASE_HASH"
-          jq -n --arg db "$DATABASE_ID" --arg sitekey "$TURNSTILE_SITEKEY" '{
+          jq -n --arg db "$DATABASE_ID" --arg sitekey "$TURNSTILE_SITEKEY" --arg nexus "$NEXUS_POLICY_SERVICE" '{
             "$schema":"./node_modules/wrangler/config-schema.json",
             name:"jadel-commercial-runtime",
             main:"src/project-entry.mjs",
@@ -366,10 +391,13 @@ jobs:
               binding:"PROJECT_WORKFLOW",
               class_name:"ProjectLifecycleWorkflow"
             }],
+            services:[{binding:"NEXUS_POLICY",service:$nexus}],
             triggers:{crons:["*/2 * * * *"]}
           }' > commercial-runtime/wrangler.deploy.jsonc
           jq -e 'has("routes") | not' commercial-runtime/wrangler.deploy.jsonc >/dev/null
           jq -e '.workers_dev == false' commercial-runtime/wrangler.deploy.jsonc >/dev/null
+          jq -e --arg service "$NEXUS_POLICY_SERVICE" '.services == [{binding:"NEXUS_POLICY",service:$service}]' commercial-runtime/wrangler.deploy.jsonc >/dev/null
+          echo 'NEXUS_POLICY_BINDING_CONFIG=PASS'
           echo 'DEPLOY_CONFIG_NO_ROUTE_MUTATION=PASS'
 
       - name: Install pinned Wrangler

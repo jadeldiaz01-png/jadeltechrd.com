@@ -1,7 +1,5 @@
 import { WorkflowEntrypoint } from "cloudflare:workers";
-
-const NEXUS_POLICY_URL = "https://nexus.internal/v1/project-readiness";
-const ALLOWED_DECISIONS = new Set(["ALLOW", "DENY", "REQUIRES_HUMAN"]);
+import { evaluateNexusPolicy, persistNexusPolicyDecision } from "./nexus-policy.mjs";
 
 async function updateProject(env, projectId, state, policyStatus) {
   const now = new Date().toISOString();
@@ -27,43 +25,21 @@ export class ProjectLifecycleWorkflow extends WorkflowEntrypoint {
     const policy = await step.do("Nexus readiness and policy evaluation", {
       retries: { limit: 3, delay: "5 seconds", backoff: "exponential" },
       timeout: "30 seconds"
-    }, async () => {
-      if (!this.env.NEXUS_POLICY) {
-        return { decision: "REQUIRES_HUMAN", reason: "NEXUS_POLICY_BINDING_MISSING", fail_closed: true };
-      }
-      const response = await this.env.NEXUS_POLICY.fetch(new Request(NEXUS_POLICY_URL, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          project_id: project.project_id,
-          service_ids: JSON.parse(project.service_ids_json),
-          requested_transition: "POLICY_ALLOWED"
-        })
-      }));
-      if (!response.ok) return { decision: "REQUIRES_HUMAN", reason: `NEXUS_HTTP_${response.status}`, fail_closed: true };
-      const result = await response.json();
-      if (!ALLOWED_DECISIONS.has(result?.decision)) {
-        return { decision: "REQUIRES_HUMAN", reason: "INVALID_NEXUS_DECISION", fail_closed: true };
-      }
-      return {
-        decision: result.decision,
-        reason: String(result.reason || "unspecified").slice(0, 500),
-        evidence_id: result.evidence_id || null,
-        fail_closed: result.decision !== "ALLOW"
-      };
+    }, async () => evaluateNexusPolicy(this.env, project));
+
+    // Persist reason/evidence before deciding the next state, including fail-closed outcomes.
+    await step.do("persist Nexus policy decision", async () => {
+      const state = policy.decision === "DENY" ? "VALIDATED" : "POLICY_CHECK";
+      const policyStatus = policy.decision === "DENY" ? "DENIED"
+        : policy.decision === "REQUIRES_HUMAN" ? "REQUIRES_HUMAN" : "PENDING";
+      await persistNexusPolicyDecision(this.env, projectId, policy, state, policyStatus);
     });
 
     if (policy.decision === "DENY") {
-      await step.do("persist policy denial", async () => {
-        await updateProject(this.env, projectId, "VALIDATED", "DENIED");
-      });
       return { project_id: projectId, state: "VALIDATED", policy_status: "DENIED" };
     }
 
     if (policy.decision === "REQUIRES_HUMAN") {
-      await step.do("persist human review requirement", async () => {
-        await updateProject(this.env, projectId, "POLICY_CHECK", "REQUIRES_HUMAN");
-      });
       let approval;
       try {
         approval = await step.waitForEvent("wait for authorized policy approval", {
