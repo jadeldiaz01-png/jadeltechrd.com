@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  BASELINE_SHA: 8aafb343e4ff1fa70ee38e4a3c12fad46c3fc403
+  BASELINE_SHA: 79bbd49d1e76a6087bcf0dfa18ff528a19f9cb86
   D1_NAME: jadel-commercial-runtime
   PAYPAL_LIVE_API: https://api-m.paypal.com
 
@@ -52,7 +52,7 @@ jobs:
 
           required_header = [
               "VERIFY_PAYPAL_LIVE_PENDING_READONLY",
-              "BASELINE_SHA: 8aafb343e4ff1fa70ee38e4a3c12fad46c3fc403",
+              "BASELINE_SHA: 79bbd49d1e76a6087bcf0dfa18ff528a19f9cb86",
           ]
           required_live_payload = [
               "po.status='PENDING'",
