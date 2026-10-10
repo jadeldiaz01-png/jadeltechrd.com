@@ -15,7 +15,7 @@ Jadel Tech RD is production-capable for supervised commercial intake, quote appr
 | PayPal live readiness | Latest inspected `paypal-live-readiness.yml` main run succeeded. | PASS |
 | PayPal sandbox E2E | Latest inspected `paypal-real-sandbox-e2e.yml` main run succeeded. | PASS |
 | Sales-to-cash canary | Latest inspected `sales-to-cash-sandbox-canary.yml` main run succeeded. | PASS |
-| Local runtime contract tests | `node --test commercial-runtime\test\*.test.mjs` passed with three bash-dependent tests skipped when host policy blocks bash. | PASS |
+| Local runtime contract tests | `node --test commercial-runtime/test/*.test.mjs` passed with three bash-dependent tests skipped when host policy blocks bash. | PASS |
 | Static readiness validators | Production manifest, revenue funnel, revenue control plane, sales lead intelligence and service registry validators passed. | PASS |
 | Formal Codex Security preflight | Security scan preflight could not run because Python is not installed or not discoverable on this host. | BLOCKED |
 
