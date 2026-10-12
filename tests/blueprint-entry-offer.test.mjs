@@ -23,16 +23,14 @@ test("Agentic Blueprint links to a measurable, preselected intake", () => {
   assert.match(offerCard, /href="\/solicitar-proyecto\.html\?services=architecture&amp;offer_id=automation_blueprint[^\"]*utm_campaign=blueprint_entry"/);
 });
 
-});
-
 test("the JavaScript-rendered pricing card exposes the same offer and attribution", () => {
-  const offerCard = renderedHome.match(/<article class="pricing-card reveal">[\\s\\S]*?Agentic Blueprint[\\s\\S]*?<\\/article>/)?.[0];
+  const offerCard = renderedHome.match(/<article class="pricing-card reveal">[\s\S]*?Agentic Blueprint[\s\S]*?<\/article>/)?.[0];
   assert.ok(offerCard, "rendered Agentic Blueprint pricing card exists");
   assert.match(offerCard, /Mapa de procesos/);
   assert.match(offerCard, /Arquitectura objetivo/);
   assert.match(offerCard, /Backlog priorizado/);
   assert.match(offerCard, /Plan de integración/);
-  assert.match(offerCard, /href="\\/solicitar-proyecto\\.html\\?services=architecture&amp;offer_id=automation_blueprint&amp;utm_source=pricing&amp;utm_medium=homepage&amp;utm_campaign=blueprint_entry"/);
+  assert.match(offerCard, /href="\/solicitar-proyecto\.html\?services=architecture&amp;offer_id=automation_blueprint&amp;utm_source=pricing&amp;utm_medium=homepage&amp;utm_campaign=blueprint_entry"/);
 });
 
 test("the intake accepts the offer's service and campaign attribution", () => {
@@ -42,8 +40,9 @@ test("the intake accepts the offer's service and campaign attribution", () => {
   assert.match(intakeScript, /offer_id/);
 });
 
-test("offer copy does not guarantee revenue", () => {
+test("offer copy does not guarantee revenue or imply automatic fulfillment", () => {
   const offerCard = home.match(/<article class="pricing-card reveal">[\s\S]*?Agentic Blueprint[\s\S]*?<\/article>/)?.[0] || "";
   assert.doesNotMatch(offerCard, /garantiza(?:r)? ingresos|ingresos garantizados|ganancia garantizada/i);
-  assert.match(offerCard, /Solicitar alcance/);
+  assert.match(offerCard, /Cotizar|Solicitar alcance/);
 });
+
