@@ -49,7 +49,7 @@ jobs:
             exit 1
           fi
           ! grep -Fq 'PAYMENT_LINKS' app.js
-          grep -Fq 'checkout PayPal único asociado a tu cotización' index.html
+          grep -Fq 'checkout PayPal vinculado a tu cotización' index.html
           echo 'GOVERNED_PUBLIC_CHECKOUT_ONLY=PASS'
           echo 'SOURCE_SECURITY=PASS'
       - name: Require immutable GitHub Actions
