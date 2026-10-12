@@ -32,6 +32,8 @@ The commercial payment flow is human-controlled. PayPal order creation follows
 quote approval; capture is not automatic. A payment is not described as settled
 or reconciled revenue until signed provider evidence and the corresponding ledger
 entry are verified. This discovery page is not a self-service checkout.
+Machine-to-machine payment (x402) remains testnet-only until separately certified
+and promoted.
 nexus_ai_automation_v0.3.0 may prepare briefs, scoring, proposals, work orders,
 evidence packets and dashboards, but critical external actions require human
 approval and private runtime authorization.
