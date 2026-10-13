@@ -28,8 +28,12 @@ for (const offer of cfg.offers) {
   if (!sitemap.includes(url)) fail("sitemap missing " + url);
 }
 const analytics = fs.readFileSync("revenue-funnel.js", "utf8");
-for (const token of ["email","phone","notes","payment"]) {
-  if (!analytics.includes("prohibitedKeyPattern")) fail("analytics PII guard missing");
+const ga4Loader = fs.readFileSync("ga4-loader.js", "utf8");
+for (const source of [analytics, ga4Loader]) {
+  if (!source.includes("allowedAttributionValues")) fail("fixed attribution allowlist missing");
+  if (!source.includes('utm_source: new Set(["website"')) fail("source values must be enumerated");
+  if (/params\.get\(["']utm_term["']\)/.test(source)) fail("free-text utm_term must not be collected");
+  if (!source.includes("prohibitedKeyPattern") && !source.includes("const forbidden =")) fail("analytics PII key guard missing");
 }
 
 const homepage = fs.readFileSync("index.html", "utf8");
