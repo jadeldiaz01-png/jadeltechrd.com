@@ -251,7 +251,6 @@
             <div class="eyebrow">Rutas de implementación</div>
             <h2 id="conversion-path-title">Elige por resultado, no por tecnología.</h2>
           </div>
-          
         </div>
         <div class="conversion-path-grid reveal">
           <a class="conversion-path-card" href="/solicitar-proyecto.html?services=support,analytics&utm_source=use_case_path&utm_medium=homepage&utm_campaign=service_intake">
