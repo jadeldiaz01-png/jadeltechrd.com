@@ -1,68 +1,92 @@
-name: Apply commercial SEO metadata
+name: Validate commercial SEO assets
 
 on:
-  push:
-    branches: [feat/agent-services-2026]
+  pull_request:
     paths:
       - '.github/workflows/commercial-seo.yml'
+      - 'index.html'
+      - 'robots.txt'
+      - 'sitemap.xml'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   seo:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: feat/agent-services-2026
+          persist-credentials: false
 
-      - name: Apply server-visible metadata and discovery files
-        shell: bash
+      - name: Validate server-visible metadata and discovery files
+        shell: python
         run: |
-          set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
+          import re
           from html.parser import HTMLParser
+          from pathlib import Path
+          from xml.etree import ElementTree
 
-          path = Path('index.html')
-          html = path.read_text(encoding='utf-8')
+          class MetadataParser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.meta = {}
+                  self.title = False
 
-          html = html.replace(
-              '<meta name="description" content="Jadel Tech RD - Página principal, Política de Privacidad y Condiciones del Servicio de la aplicación.">',
-              '<meta name="description" content="Jadel Tech RD diseña e integra agentes de IA, automatización, social intelligence, video premium, datos y sistemas agentic con seguridad y supervisión.">'
-          )
-          html = html.replace('<title>Jadel Tech RD</title>', '<title>Agentes de IA & Automatización | Jadel Tech RD</title>')
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  if tag == "meta":
+                      key = attrs.get("name") or attrs.get("property")
+                      if key:
+                          self.meta[key] = attrs.get("content", "").strip()
+                  elif tag == "title":
+                      self.title = True
 
-          marker = '<title>Agentes de IA & Automatización | Jadel Tech RD</title>'
-          additions = '''\n  <link rel="canonical" href="https://jadeltechrd.com/">\n  <meta property="og:type" content="website">\n  <meta property="og:site_name" content="Jadel Tech RD">\n  <meta property="og:title" content="Agentes de IA & Automatización | Jadel Tech RD">\n  <meta property="og:description" content="Diseño e integración de agentes de IA, automatización y sistemas agentic con controles reales.">\n  <meta property="og:url" content="https://jadeltechrd.com/">\n  <meta name="twitter:card" content="summary_large_image">\n  <meta name="twitter:title" content="Agentes de IA & Automatización | Jadel Tech RD">\n  <meta name="twitter:description" content="Agentes, automatización, media intelligence, integraciones y gobernanza para operaciones reales.">\n'''
-          if 'property="og:title"' not in html:
-              html = html.replace(marker, marker + additions)
+              def handle_endtag(self, tag):
+                  if tag == "title":
+                      self.title = False
 
-          class P(HTMLParser):
-              pass
-          P().feed(html)
-          assert 'Agentes de IA & Automatización | Jadel Tech RD' in html
-          assert 'https://jadeltechrd.com/' in html
-          path.write_text(html, encoding='utf-8')
+          html = Path("index.html").read_text(encoding="utf-8")
+          parser = MetadataParser()
+          parser.feed(html)
+          title = re.search(r"<title>(.*?)</title>", html, re.I | re.S)
+          assert title and title.group(1).strip(), "Title must be non-empty"
+          assert title.group(1).strip() == "Agentes de IA & Automatización | Jadel Tech RD"
+          assert '<link rel="canonical" href="https://jadeltechrd.com/">' in html
+          assert parser.meta.get("description"), "Meta description must be non-empty"
+          for key in (
+              "og:type",
+              "og:site_name",
+              "og:title",
+              "og:description",
+              "og:url",
+              "twitter:card",
+              "twitter:title",
+              "twitter:description",
+          ):
+              assert parser.meta.get(key), f"Missing or empty social metadata: {key}"
 
-          Path('robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: https://jadeltechrd.com/sitemap.xml\n', encoding='utf-8')
-          Path('sitemap.xml').write_text('''<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/sitemap/0.9">\n  <url><loc>https://jadeltechrd.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>\n  <url><loc>https://jadeltechrd.com/?view=privacy</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>\n  <url><loc>https://jadeltechrd.com/?view=terms</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>\n  <url><loc>https://jadeltechrd.com/?view=data-deletion</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>\n</urlset>\n''', encoding='utf-8')
-          print('COMMERCIAL_SEO=PASS')
-          PY
+          sitemap = ElementTree.parse("sitemap.xml").getroot()
+          namespace = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+          urls = {node.text for node in sitemap.findall("sm:url/sm:loc", namespace)}
+          expected = {
+              "https://jadeltechrd.com/",
+              "https://jadeltechrd.com/solicitar-proyecto.html",
+              "https://jadeltechrd.com/agent-readiness.html",
+              "https://jadeltechrd.com/whatsapp-ia-empresas-rd.html",
+              "https://jadeltechrd.com/automatizacion-procesos-ia-rd.html",
+              "https://jadeltechrd.com/agente-ventas-ia-rd.html",
+              "https://jadeltechrd.com/?view=privacy",
+              "https://jadeltechrd.com/?view=terms",
+              "https://jadeltechrd.com/?view=data-deletion",
+          }
+          assert expected <= urls, f"Missing sitemap URLs: {sorted(expected - urls)}"
 
-      - name: Commit SEO assets
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html robots.txt sitemap.xml
-          if git diff --cached --quiet; then
-            echo 'No SEO changes to commit.'
-            exit 0
-          fi
-          git commit -m 'feat: add server-visible commercial SEO [skip ci]'
-          git push origin HEAD:feat/agent-services-2026
+          robots = Path("robots.txt").read_text(encoding="utf-8")
+          assert "User-agent: *" in robots
+          assert "Allow: /" in robots
+          assert "Sitemap: https://jadeltechrd.com/sitemap.xml" in robots
+
+          print("COMMERCIAL_SEO_VALIDATION=PASS")
