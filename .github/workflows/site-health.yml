@@ -104,10 +104,17 @@ jobs:
           curl --fail --silent --show-error --location \
             --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 \
             --output "$home" "https://${DOMAIN}/"
+          grep -Fq 'Jadel Tech RD' "$home"
+          app_src=$(grep -oE '<script[^>]+src="/app\.[0-9a-f]{40}\.js"[^>]*>' "$home" \
+            | sed -E 's/.*src="([^"]+)".*/\1/' | head -n 1)
+          if [ -z "$app_src" ]; then
+            echo 'Immutable application asset reference not found in served homepage.' >&2
+            exit 1
+          fi
+          echo "IMMUTABLE_APP_ASSET=$app_src"
           curl --fail --silent --show-error --location \
             --connect-timeout 8 --max-time 20 --proto '=https' --tlsv1.2 \
-            --output "$app" "https://${DOMAIN}/app.js"
-          grep -Fq 'Jadel Tech RD' "$home"
+            --output "$app" "https://${DOMAIN}${app_src}"
           grep -Fq 'data-deletion' "$app"
           rm -f "$home" "$app"
           echo 'HOME_CONTENT=PASS'
