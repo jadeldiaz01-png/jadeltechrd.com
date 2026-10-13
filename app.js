@@ -195,7 +195,7 @@
         </div>
         <div class="service-actions">
           <button class="mini-action" type="button" data-add-service="${service.id}" aria-pressed="false">Añadir</button>
-          <a class="mini-action service-quote" href="${governedIntakeUrl([service.id])}&utm_source=service_catalog&utm_medium=homepage&utm_campaign=service_intake">Cotizar</a>
+          <a class="mini-action service-quote" data-revenue-event="offer_cta_click" data-cta-id="service_quote_${service.id}" href="${governedIntakeUrl([service.id])}&utm_source=service_catalog&utm_medium=homepage&utm_campaign=service_intake">Cotizar</a>
         </div>
       </div>
     </article>`;
