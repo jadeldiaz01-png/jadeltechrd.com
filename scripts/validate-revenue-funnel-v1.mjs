@@ -34,11 +34,11 @@ for (const token of ["email","phone","notes","payment"]) {
 
 const homepage = fs.readFileSync("index.html", "utf8");
 const app = fs.readFileSync("app.js", "utf8");
-const quoteCtas = [...homepage.matchAll(/<a\\b(?=[^>]*\\bclass="[^"]*\\bservice-quote\\b)[^>]*>/g)].map((match) => match[0]);
+const quoteCtas = [...homepage.matchAll(/<a\b(?=[^>]*\bclass="[^"]*\bservice-quote\b)[^>]*>/g)].map((match) => match[0]);
 if (quoteCtas.length !== 11) fail("homepage static quote CTA count");
 const ctaIds = quoteCtas.map((anchor) => {
   if (!anchor.includes('data-revenue-event="offer_cta_click"')) fail("static quote CTA event");
-  const match = anchor.match(/\\bdata-cta-id="(service_quote_[a-z0-9]+)"/);
+  const match = anchor.match(/\bdata-cta-id="(service_quote_[a-z0-9]+)"/);
   if (!match) fail("static quote CTA id");
   return match[1];
 });
