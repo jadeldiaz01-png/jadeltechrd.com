@@ -396,7 +396,7 @@
         <div class="section-heading reveal">
           <div>
             <div class="eyebrow">Infraestructura comercial</div>
-            <h2>Preparado para vender sin perder control operativo.</h2>
+            <h2>Intake activo; conciliación de pagos pendiente.</h2>
           </div>
           <p>El sitio recibe solicitudes y prepara checkouts vinculados a cotizaciones aprobadas. El webhook firmado y el ledger de pagos aún requieren validación; Nexus no marca PAID sin conciliación humana.</p>
         </div>
@@ -407,7 +407,7 @@
           <article><span>04</span><strong>Operación de agentes</strong><p>Nexus coordina briefs, scoring, tareas y reportes; no ejecuta pagos salientes, contratos, publicaciones ni trading real.</p><small>Supervisado</small></article>
         </div>
         <div class="revenue-state-strip reveal">
-          <div><span>ACTIVO</span><strong>Catálogo + intake + checkout gobernado</strong></div>
+          <div><span>ACTIVO</span><strong>Catálogo + intake + órdenes PayPal supervisadas</strong></div>
           <div><span>PRÓXIMO</span><strong>Webhook PayPal + ledger + reconciliación</strong></div>
           <div><span>GATE</span><strong>Sin evidencia humana, no hay fulfillment automático</strong></div>
         </div>
