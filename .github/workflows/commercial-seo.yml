@@ -24,13 +24,49 @@ jobs:
       - name: Validate server-visible metadata and discovery files
         shell: python
         run: |
+          import re
+          from html.parser import HTMLParser
           from pathlib import Path
           from xml.etree import ElementTree
 
+          class MetadataParser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.meta = {}
+                  self.title = False
+
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  if tag == "meta":
+                      key = attrs.get("name") or attrs.get("property")
+                      if key:
+                          self.meta[key] = attrs.get("content", "").strip()
+                  elif tag == "title":
+                      self.title = True
+
+              def handle_endtag(self, tag):
+                  if tag == "title":
+                      self.title = False
+
           html = Path("index.html").read_text(encoding="utf-8")
-          assert "<title>Agentes de IA &amp; Automatización | Jadel Tech RD</title>" in html or "<title>Agentes de IA & Automatización | Jadel Tech RD</title>" in html
+          parser = MetadataParser()
+          parser.feed(html)
+          title = re.search(r"<title>(.*?)</title>", html, re.I | re.S)
+          assert title and title.group(1).strip(), "Title must be non-empty"
+          assert title.group(1).strip() == "Agentes de IA & Automatización | Jadel Tech RD"
           assert '<link rel="canonical" href="https://jadeltechrd.com/">' in html
-          assert '<meta name="description" content="' in html
+          assert parser.meta.get("description"), "Meta description must be non-empty"
+          for key in (
+              "og:type",
+              "og:site_name",
+              "og:title",
+              "og:description",
+              "og:url",
+              "twitter:card",
+              "twitter:title",
+              "twitter:description",
+          ):
+              assert parser.meta.get(key), f"Missing or empty social metadata: {key}"
 
           sitemap = ElementTree.parse("sitemap.xml").getroot()
           namespace = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
