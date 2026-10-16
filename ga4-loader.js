@@ -29,7 +29,7 @@
     offer_id: new Set(["whatsapp_support", "automation_blueprint", "sales_lead_intelligence"]),
     service_id: new Set(["architecture", "support", "sales", "social", "cineforge", "meta", "analytics", "revenue", "quant", "governance", "multiagent"]),
     landing_path: new Set(["/", "/automatizacion-procesos-ia-rd.html", "/whatsapp-ia-empresas-rd.html", "/agente-ventas-ia-rd.html", "/solicitar-proyecto.html"]),
-    lead_source: new Set(["website"])
+    lead_source: new Set(["website", "project_request"])
   });
   const measurementPattern = /^G-[A-Z0-9]+$/;
   let initialized = false;
