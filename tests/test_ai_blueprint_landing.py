@@ -61,8 +61,26 @@ class BlueprintTests(unittest.TestCase):
                 })
         intake = [u for u in self.page.links if u.startswith('/solicitar-proyecto.html?')]
         self.assertEqual(len(intake), 2)
+        expected_attribution = {
+            'offer_id': 'automation_blueprint',
+            'utm_source': 'website',
+            'utm_medium': 'organic',
+            'utm_campaign': 'automation_blueprint',
+            'utm_content': 'automation_blueprint',
+        }
         for href in intake:
-            self.assertEqual(parse_qs(urlparse(href).query).get('services'), ['architecture'])
+            params = parse_qs(urlparse(href).query)
+            self.assertEqual(params.get('services'), ['architecture'])
+            for key, value in expected_attribution.items():
+                self.assertEqual(params.get(key), [value])
+        for script_name in ('revenue-funnel.js', 'ga4-loader.js'):
+            script = (ROOT / script_name).read_text(encoding='utf-8')
+            for key, value in expected_attribution.items():
+                allowlist = next(
+                    (line for line in script.splitlines() if line.strip().startswith(f'{key}: new Set(')),
+                    '',
+                )
+                self.assertIn(f'"{value}"', allowlist, f'{script_name} must allow {key}={value}')
 
     def test_no_misleading_production_claim(self):
         self.assertIn('no un agente entregado en producción', self.html)
