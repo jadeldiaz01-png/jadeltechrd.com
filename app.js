@@ -232,7 +232,7 @@
           </div>
           <div class="console-events" aria-live="polite">
             <div><span class="event-ok">PASS</span><b>Policy gate</b><small>external action requires approval</small></div>
-            <div><span class="event-ok">PASS</span><b>Evidence ledger</b><small>trace id attached</small></div>
+            <div><span class="event-wait">PENDING</span><b>Payment evidence</b><small>webhook and ledger reconciliation not yet verified</small></div>
             <div><span class="event-wait">HITL</span><b>Human approval</b><small>waiting before side effect</small></div>
           </div>
         </div>
