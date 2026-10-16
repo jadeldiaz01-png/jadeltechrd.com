@@ -349,6 +349,7 @@
             <p>Para identificar el primer workflow con ROI y controles claros.</p>
             <ul><li>Mapa de procesos</li><li>Arquitectura objetivo</li><li>Backlog priorizado</li><li>Plan de integración</li></ul>
             <a href="/solicitar-proyecto.html?services=architecture&amp;offer_id=automation_blueprint&amp;utm_source=pricing&amp;utm_medium=homepage&amp;utm_campaign=blueprint_entry" class="button primary full">Solicitar alcance</a>
+            <a href="/ai-automation-blueprint.html" class="mini-action">Ver detalles ES / EN</a>
           </article>
           <article class="pricing-card featured reveal">
             <div class="popular-pill">Más adaptable</div><span class="plan-label">Build</span><h3>Business Agent</h3><div class="plan-price"><strong>US$1.5k</strong><span>setup desde</span></div>

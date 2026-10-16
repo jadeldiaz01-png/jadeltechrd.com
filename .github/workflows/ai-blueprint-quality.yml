@@ -1,0 +1,60 @@
+name: Validate AI Blueprint landing
+
+on:
+  pull_request:
+    paths:
+      - 'ai-automation-blueprint.html'
+      - 'index.html'
+      - 'app.js'
+      - 'sitemap.xml'
+      - 'tests/test_ai_blueprint_landing.py'
+      - '.github/workflows/pages.yml'
+      - '.github/workflows/ai-blueprint-quality.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ai-automation-blueprint.html'
+      - 'index.html'
+      - 'app.js'
+      - 'sitemap.xml'
+      - 'tests/test_ai_blueprint_landing.py'
+      - '.github/workflows/pages.yml'
+      - '.github/workflows/ai-blueprint-quality.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  blueprint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout proposed revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Verify page accessibility metadata and local links
+        run: python3 -m unittest discover -s tests -p test_ai_blueprint_landing.py -v
+
+      - name: Verify public asset delivery and internal discovery links
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          from xml.etree import ElementTree
+          page = "ai-automation-blueprint.html"
+          pages = Path(".github/workflows/pages.yml").read_text(encoding="utf-8")
+          match = re.search(r"public_assets=\(\s*([\s\S]*?)\s*\)", pages)
+          assert match, "GitHub Pages explicit public allowlist missing"
+          assert re.search(r"^\s*" + re.escape(page) + r"\s*$", match.group(1), re.M), "Landing omitted from Pages deployment"
+          homepage = Path("index.html").read_text(encoding="utf-8")
+          dynamic = Path("app.js").read_text(encoding="utf-8")
+          assert f'href="/{page}"' in homepage, "Static homepage has no inbound offer link"
+          assert f'href="/{page}"' in dynamic, "Dynamic homepage has no inbound offer link"
+          urls = {node.text for node in ElementTree.parse("sitemap.xml").iter() if node.tag.endswith("loc")}
+          assert f"https://jadeltechrd.com/{page}" in urls, "Missing landing sitemap URL"
+          print("BLUEPRINT_DELIVERY_GATE=PASS")
+
+      - name: Check existing homepage JavaScript syntax
+        run: node --check app.js
