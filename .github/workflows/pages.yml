@@ -78,6 +78,7 @@ jobs:
             project-request.css
             project-request.js
             solicitar-proyecto.html
+            ai-automation-blueprint.html
             revenue-funnel.js
             ga4-config.js
             ga4-loader.js
