@@ -1,0 +1,42 @@
+name: Sales G1 Privacy Evidence (Read Only)
+on:
+  pull_request:
+    paths:
+      - 'config/sales-g1-privacy-audit-2026.json'
+      - 'scripts/validate-sales-g1-privacy-audit.mjs'
+      - 'tests/sales-g1-privacy-audit.test.mjs'
+      - 'docs/SALES-G1-PRIVACY-AUDIT-2026.md'
+      - '.github/workflows/sales-g1-privacy-audit.yml'
+      - 'solicitar-proyecto.html'
+      - 'project-request.js'
+      - 'commercial-runtime/src/validation.mjs'
+      - 'commercial-runtime/src/worker.mjs'
+      - 'commercial-runtime/migrations/0001_init.sql'
+      - 'commercial-runtime/migrations/0004_revenue_intelligence.sql'
+      - 'commercial-runtime/migrations/0007_offer_attribution.sql'
+      - 'index.html'
+      - 'app.js'
+      - 'analytics-consent.js'
+      - 'config/sales-lead-intelligence-production-readiness-2026.json'
+permissions:
+  contents: read
+concurrency:
+  group: sales-g1-privacy-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  static-evidence-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout PR source (no persisted auth)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install pinned Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Check G1 source blobs and blocked certification
+        run: node scripts/validate-sales-g1-privacy-audit.mjs
+      - name: Negative tests against fake consent or inflated maturity
+        run: node --test tests/sales-g1-privacy-audit.test.mjs
