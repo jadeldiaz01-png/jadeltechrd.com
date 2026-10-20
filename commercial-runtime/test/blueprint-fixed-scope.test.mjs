@@ -59,7 +59,7 @@ test("fixed-scope preparation fails closed on custom or ambiguous implementation
       /BLUEPRINT_SCOPE_REVIEW_REQUIRED/);
   }
   assert.throws(() => prepareBlueprintFixedQuotePreview(),
-    /BLUEPRINT_OFFER_MISMATCH/);
+    /BLUEPRINT_INPUT_INVALID/);
 });
 
 test("preview requires an explicit restricted shape; payment fields never pass", () => {
