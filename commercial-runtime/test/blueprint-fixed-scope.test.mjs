@@ -45,6 +45,8 @@ test("fixed-scope preparation rejects unknown offer and extra services", () => {
 
 test("fixed-scope preparation fails closed on custom or ambiguous implementations", () => {
   for (const bad of [
+    {workflowCount: undefined},
+    {implementationIncluded: undefined},
     {workflowCount: 0},
     {workflowCount: 2},
     {workflowCount: -1},
@@ -58,4 +60,24 @@ test("fixed-scope preparation fails closed on custom or ambiguous implementation
   }
   assert.throws(() => prepareBlueprintFixedQuotePreview(),
     /BLUEPRINT_OFFER_MISMATCH/);
+});
+
+test("preview requires an explicit restricted shape; payment fields never pass", () => {
+  for (const invalid of [null, undefined, "", 1, [], new Date()]) {
+    assert.throws(() => prepareBlueprintFixedQuotePreview(invalid),
+      /BLUEPRINT_(INPUT_INVALID|OFFER_MISMATCH)/);
+  }
+  for (const injected of [
+    {payment_order_id:"external-order"},
+    {provider_approval_url:"https://www.paypal.com/example"},
+    {priceOverrideMinor:100},
+    {quoteId:"already-approved"},
+    {scopeVersion:"2"},
+    {humanApproval:true},
+  ]) {
+    assert.throws(
+      () => prepareBlueprintFixedQuotePreview({...base(), ...injected}),
+      /BLUEPRINT_UNKNOWN_FIELD/,
+    );
+  }
 });
