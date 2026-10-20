@@ -82,6 +82,16 @@ class BlueprintTests(unittest.TestCase):
                 )
                 self.assertIn(f'"{value}"', allowlist, f'{script_name} must allow {key}={value}')
 
+    def test_fixed_scope_proposal_remains_quote_gated(self):
+        self.assertIn('Paquete base propuesto: US$250 para un solo proceso empresarial', self.html)
+        self.assertIn('Proposed starter package: US$250 for one business workflow', self.html)
+        self.assertIn('El encaje, los plazos y las condiciones se revisan antes de emitir la cotización', self.html)
+        self.assertIn('Solo después de aceptar una cotización', self.html)
+        self.assertIn('Only after a quote is accepted', self.html)
+        self.assertNotIn('paypal.com/ncp/payment/', self.html.lower())
+        self.assertNotIn('https://www.paypal.com/checkoutnow', self.html.lower())
+        self.assertEqual(len([x for x in self.page.links if x.startswith('/solicitar-proyecto.html?')]), 2)
+
     def test_no_misleading_production_claim(self):
         self.assertIn('no un agente entregado en producción', self.html)
         self.assertIn('not a production-ready agent', self.html)
