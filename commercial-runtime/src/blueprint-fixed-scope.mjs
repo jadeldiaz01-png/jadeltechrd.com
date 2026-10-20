@@ -6,12 +6,17 @@ export const BLUEPRINT_FIXED_SCOPE_ID = "BLUEPRINT_ONE_WORKFLOW_250_V1";
 
 // A human-reviewed sub-scope of the existing "from US$250" architecture offer.
 // This candidate is NOT an issued or accepted quote and grants no financial authority.
-export function prepareBlueprintFixedQuotePreview({
-  offerId,
-  serviceIds,
-  workflowCount = 1,
-  implementationIncluded = false,
-} = {}) {
+export function prepareBlueprintFixedQuotePreview(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("BLUEPRINT_INPUT_INVALID");
+  }
+  const allowedFields = new Set([
+    "offerId", "serviceIds", "workflowCount", "implementationIncluded",
+  ]);
+  if (Object.keys(input).some((field) => !allowedFields.has(field))) {
+    throw new Error("BLUEPRINT_UNKNOWN_FIELD");
+  }
+  const { offerId, serviceIds, workflowCount, implementationIncluded } = input;
   const offer = OFFER_CATALOG.automation_blueprint;
   const catalogPrice = SERVICE_PRICING_CATALOG.architecture?.setup;
   if (offerId !== offer.offerId) throw new Error("BLUEPRINT_OFFER_MISMATCH");
