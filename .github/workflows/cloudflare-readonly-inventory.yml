@@ -113,9 +113,9 @@ jobs:
             page=$((page + 1))
             [ "$page" -le 100 ] || { echo 'D1_PAGINATION=FAIL limit' >&2; exit 6; }
           done
-          jq -s 'map(select((.name // "" | ascii_downcase) | contains("jadel")))' "$d1_file" > "$(mktemp)"
           d1_jadel=$(mktemp)
           jq -s 'map(select((.name // "" | ascii_downcase) | contains("jadel")))' "$d1_file" > "$d1_jadel"
+          jq -e 'all(.[]; (.name | test("^[A-Za-z0-9_-]+$")))' "$d1_jadel" >/dev/null || { echo 'D1_NAME_FORMAT=FAIL' >&2; exit 6; }
           d1_count=$(jq 'length' "$d1_jadel")
           echo "JADEL_D1_DATABASES=$d1_count"
           jq -r '.[].name' "$d1_jadel" | sort -u | while IFS= read -r name; do
@@ -169,6 +169,7 @@ jobs:
             fi
             while IFS= read -r binding; do
               binding_name=$(jq -r '.name // "unnamed"' <<<"$binding")
+              case "$binding_name" in *[!A-Za-z0-9_-]*|'') echo 'BINDING_NAME_FORMAT=FAIL' >&2; exit 9 ;; esac
               database_id=$(jq -r '.id // empty' <<<"$binding")
               test -n "$database_id" || { echo "WORKER_D1_BINDING=FAIL worker=$worker missing_id" >&2; exit 9; }
               database_name=$(jq -r --arg id "$database_id" '.[] | select(.uuid == $id) | .name' "$d1_file" | head -n1)
