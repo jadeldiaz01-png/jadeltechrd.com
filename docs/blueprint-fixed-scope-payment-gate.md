@@ -4,7 +4,7 @@
 
 This proposal creates **no** payment link, PayPal order, quote acceptance, invoice, capture, refund or settlement. The homepage continues to advertise **from US$250**; the bilingual Blueprint landing proposes a more tightly bounded, one-workflow US$250 entry package. It is not a customer contract until reviewed and accepted.
 
-The pure helper `prepareBlueprintFixedQuotePreview` is **not wired to a public or admin route**. It is intentionally isolated so it cannot bypass the canonical `project_id → quote_id → payment_order_id → provider_order_id → verified PayPal event → ledger/settlement` chain.
+The pure helper `prepareBlueprintFixedQuotePreview` requires explicit one-workflow count, no implementation, a canonical offer/service pair and a strict input allowlist. Omissions, extra payment or pricing fields and unsupported scopes fail closed. It is **not wired to a public or admin route**. It is intentionally isolated so it cannot bypass the canonical `project_id → quote_id → payment_order_id → provider_order_id → verified PayPal event → ledger/settlement` chain.
 
 ## Proposed deliverables (human confirmation required)
 
