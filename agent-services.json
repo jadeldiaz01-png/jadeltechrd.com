@@ -278,5 +278,32 @@
       "primary_price_component": "setup",
       "checkout_authority": "HUMAN_GATED"
     }
-  ]
+  ],
+  "paypal_quote_eligibility": {
+    "provider": "paypal",
+    "service_ids": [
+      "architecture",
+      "support",
+      "sales",
+      "social",
+      "cineforge",
+      "meta",
+      "analytics",
+      "revenue",
+      "quant",
+      "governance",
+      "multiagent"
+    ],
+    "currency_code": "USD",
+    "payment_method": "INDIVIDUAL_CHECKOUT_AFTER_ACCEPTED_QUOTE",
+    "quote_required": true,
+    "customer_acceptance_required": true,
+    "checkout_is_public_direct": false,
+    "checkout_live_activation": "NOT_VERIFIED_BY_THIS_CATALOG",
+    "payment_capture_requires_separate_human_authorization": true,
+    "provider_webhook_and_human_reconciliation_required": true,
+    "automatic_recurring_billing": false,
+    "monthly_prices": "QUOTE_LINE_ITEMS_NOT_SUBSCRIPTION_PLANS",
+    "scope": "ALL_11_PUBLIC_SERVICES"
+  }
 }
