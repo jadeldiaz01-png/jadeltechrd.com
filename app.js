@@ -195,7 +195,7 @@
         </div>
         <div class="service-actions">
           <button class="mini-action" type="button" data-add-service="${service.id}" aria-pressed="false">Añadir</button>
-          <a class="mini-action service-quote" data-revenue-event="offer_cta_click" data-cta-id="service_quote_${service.id}" href="${governedIntakeUrl([service.id])}&utm_source=service_catalog&utm_medium=homepage&utm_campaign=service_intake">Cotizar</a>
+          <a class="mini-action service-quote" data-revenue-event="offer_cta_click" data-cta-id="service_quote_${service.id}" href="${governedIntakeUrl([service.id])}&utm_source=service_catalog&utm_medium=homepage&utm_campaign=service_intake">Cotizar · PayPal</a>
         </div>
       </div>
     </article>`;
@@ -282,6 +282,7 @@
             <h2>Un estudio de agentes, no una caja negra.</h2>
           </div>
           <p>Cada servicio indica su nivel real de madurez. “Piloto” no se presenta como producción y “Research-only” nunca se vende como operación financiera real.</p>
+          <p>Para los 11 servicios, primero solicita y acepta una cotización. El pago PayPal se gestiona por orden individual solo después de habilitar y verificar el proveedor. No se habilitan suscripciones automáticas.</p>
         </div>
         <div class="filter-row reveal" role="group" aria-label="Filtrar servicios">
           ${categories.map(([id, label], index) => `<button type="button" class="filter-chip${index === 0 ? " is-active" : ""}" data-filter="${id}" aria-pressed="${index === 0}">${label}</button>`).join("")}
