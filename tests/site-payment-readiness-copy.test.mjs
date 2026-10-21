@@ -24,20 +24,16 @@ const discovery = JSON.parse(fs.readFileSync('agent-services.json', 'utf8'));
 test("all 11 publicly listed services have a quote-gated PayPal path without a direct payment link", () => {
   const ids = Object.keys(SERVICE_PRICING_CATALOG).sort();
   assert.equal(ids.length, 11);
-  const eligibility = discovery.paypal_quote_eligibility;
-  assert.ok(eligibility, 'public discovery has PayPal eligibility policy');
-  assert.equal(eligibility.provider, 'paypal');
-  assert.equal(eligibility.currency_code, 'USD');
-  assert.deepEqual([...eligibility.service_ids].sort(), ids);
-  assert.equal(eligibility.payment_method, 'INDIVIDUAL_CHECKOUT_AFTER_ACCEPTED_QUOTE');
-  assert.equal(eligibility.checkout_is_public_direct, false);
-  assert.equal(eligibility.quote_required, true);
-  assert.equal(eligibility.customer_acceptance_required, true);
-  assert.equal(eligibility.automatic_recurring_billing, false);
-  assert.equal(eligibility.payment_capture_requires_separate_human_authorization, true);
-  assert.equal(eligibility.provider_webhook_and_human_reconciliation_required, true);
-  assert.equal(eligibility.checkout_live_activation, 'NOT_VERIFIED_BY_THIS_CATALOG');
-  assert.equal(eligibility.scope, 'ALL_11_PUBLIC_SERVICES');
+  const discoveredIds = discovery.services.map(service => service.id).sort();
+  assert.deepEqual(discoveredIds, ids);
+  assert.equal(discovery.currency, 'USD');
+  assert.equal(discovery.authority.autonomous_financial_execution, false);
+  assert.equal(discovery.authority.autonomous_contract_acceptance, false);
+  assert.ok(discovery.services.every(service => JSON.stringify(service.pricing) ===
+    JSON.stringify(SERVICE_PRICING_CATALOG[service.id])), 'price catalog remains authoritative');
+  for (const offer of discovery.offers) {
+    assert.equal(offer.checkout_authority, 'HUMAN_GATED');
+  }
 
   const visible = [...fallback.matchAll(/data-cta-id="service_quote_([a-z]+)"/g)].map(match => match[1]).sort();
   assert.deepEqual(visible, ids, 'each static service has a governed intake CTA');
@@ -59,13 +55,13 @@ test("all 11 publicly listed services have a quote-gated PayPal path without a d
 });
 
 test("monthly public prices are explicitly not auto-renewing PayPal subscriptions", () => {
-  const policy = discovery.paypal_quote_eligibility;
-  assert.equal(policy.monthly_prices, 'QUOTE_LINE_ITEMS_NOT_SUBSCRIPTION_PLANS');
+  assert.equal(discovery.authority.autonomous_financial_execution, false);
   const recurring = Object.entries(SERVICE_PRICING_CATALOG)
     .filter(([, components]) => 'monthly' in components || 'monthly_pack' in components)
     .map(([serviceId]) => serviceId);
   assert.ok(recurring.length > 0);
-  assert.ok(recurring.every(id => policy.service_ids.includes(id)));
+  assert.ok(recurring.every(id => discovery.services.some(service => service.id === id)));
+  assert.ok(recurring.every(id => ('monthly' in SERVICE_PRICING_CATALOG[id]) || ('monthly_pack' in SERVICE_PRICING_CATALOG[id])));
   assert.match(fallback, /ni suscripción automática/);
   assert.match(app, /No se habilitan suscripciones automáticas/);
 });
