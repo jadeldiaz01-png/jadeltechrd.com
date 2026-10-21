@@ -27,7 +27,7 @@ Los componentes `monthly` y `monthly_pack` siguen siendo partidas de cotización
 - `scripts/validate-agent-commerce-discovery.mjs`: precio/catálogo central y rutas públicas.
 - CI requerido: `security-baseline`, `commercial-runtime`, tests de calidad de landing.
 
-**No** se han configurado secretos ni validado capacidad real del merchant; ninguna solicitud a PayPal se envía desde los tests. No hay integración de SDK JS pública ni nueva ruta de checkout. El checkout es **elegible después de cotización y gates**, no una opción live activada en esta fase.
+**No** se han configurado secretos ni validado capacidad real del merchant; ninguna solicitud a PayPal se envía desde los tests. El archivo de descubrimiento `agent-services.json` permanece intocado porque está protegido por un gate de hash inmutable; no se modifica ni se debilita ese sello. No hay integración de SDK JS pública ni nueva ruta de checkout. El checkout es **elegible después de cotización y gates**, no una opción live activada en esta fase.
 
 ## Gates pendientes y autorizaciones separadas
 
