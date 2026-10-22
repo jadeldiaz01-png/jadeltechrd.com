@@ -1,0 +1,55 @@
+name: G1 read-only preflight contract CI
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/g1/**"
+      - ".github/workflows/g1-*.yml"
+      - "docs/G1-CLOUDFLARE-READONLY-PREFLIGHT.md"
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Python syntax and synthetic tests (no API credentials)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/g1/cloudflare_readonly_inventory.py
+          python3 -m unittest discover -s scripts/g1 -p 'test_cloudflare_readonly_inventory.py' -v
+      - name: Reject risky automation and non-GET request declarations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          src = Path("scripts/g1/cloudflare_readonly_inventory.py").read_text()
+          t = ast.parse(src)
+          req_calls = [
+              n for n in ast.walk(t)
+              if isinstance(n, ast.Call)
+              and isinstance(n.func, ast.Name)
+              and n.func.id == "Request"
+          ]
+          assert len(req_calls) == 1, "Expected exactly one HTTP Request constructor"
+          k = {item.arg: item.value for c in req_calls for item in c.keywords}
+          assert "method" in k and isinstance(k["method"], ast.Constant)
+          assert k["method"].value == "GET", "Only HTTP GET may be constructed"
+          manual = Path(".github/workflows/g1-cloudflare-readonly-inventory.yml").read_text()
+          assert "workflow_dispatch:" in manual
+          assert "pull_request:" not in manual and "push:" not in manual
+          assert "environment: g1-cloudflare-readonly" in manual
+          assert "contents: read" in manual
+          assert "github.ref == 'refs/heads/main'" in manual
+          assert "git rev-parse HEAD" in manual
+          print("G1_CI_NO_WRITE_HTTP_CONTRACT=PASS")
+          PY
