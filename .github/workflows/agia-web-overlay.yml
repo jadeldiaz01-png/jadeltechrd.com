@@ -1,0 +1,28 @@
+name: AGIA web overlay structural audit
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "config/agia-2026-web-overlay.json"
+      - "scripts/validate-agia-2026-web-overlay.mjs"
+      - "tests/agia-web-overlay.test.mjs"
+      - "docs/AGIA-2026-WEB-IMPLEMENTATION-REVIEW.md"
+      - ".github/workflows/agia-web-overlay.yml"
+permissions:
+  contents: read
+concurrency:
+  group: agia-web-overlay-pr
+  cancel-in-progress: true
+jobs:
+  structural-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Checkout immutable pinned action
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate overlay and canonical fail-closed policies
+        run: node scripts/validate-agia-2026-web-overlay.mjs
+      - name: Run negative/positive structural tests
+        run: node --test tests/agia-web-overlay.test.mjs
