@@ -64,7 +64,7 @@ jobs:
           db=$(jq -r --arg n "$D1_NAME" '.result[]|select(.name==$n)|.uuid' <<<"$dbs")
           test -n "$db" && test "$db" != null
 
-          sql="SELECT p.project_id,p.idempotency_key,p.state,p.policy_status,p.service_ids_json,p.offer_id,p.offer_landing_path,p.utm_source,p.utm_medium,p.utm_campaign,p.utm_content,p.notes,p.company,p.name,p.email,p.created_at,p.updated_at,(SELECT COUNT(*) FROM quotes q WHERE q.project_id=p.project_id) AS quote_count,(SELECT q.status FROM quotes q WHERE q.project_id=p.project_id ORDER BY q.created_at DESC LIMIT 1) AS latest_quote_status,(SELECT COUNT(*) FROM lead_lifecycle_events l WHERE l.project_id=p.project_id AND l.stage='qualify_lead') AS qualified_events,(SELECT COUNT(*) FROM lead_lifecycle_events l WHERE l.project_id=p.project_id AND l.stage='close_convert_lead') AS converted_events FROM project_requests p WHERE p.created_at<=? ORDER BY p.created_at ASC LIMIT 50;"
+          sql="SELECT p.project_id,p.idempotency_key,p.state,p.policy_status,p.service_ids_json,p.offer_id,p.offer_landing_path,p.utm_source,p.utm_medium,p.utm_campaign,p.utm_content,p.notes,p.company,p.name,p.email,p.created_at,p.updated_at,(SELECT COUNT(*) FROM quotes q WHERE q.project_id=p.project_id) AS quote_count,(SELECT q.quote_id FROM quotes q WHERE q.project_id=p.project_id ORDER BY q.created_at DESC LIMIT 1) AS latest_quote_id,(SELECT q.status FROM quotes q WHERE q.project_id=p.project_id ORDER BY q.created_at DESC LIMIT 1) AS latest_quote_status,(SELECT q.total_amount_minor FROM quotes q WHERE q.project_id=p.project_id ORDER BY q.created_at DESC LIMIT 1) AS latest_quote_amount_minor,(SELECT q.expires_at FROM quotes q WHERE q.project_id=p.project_id ORDER BY q.created_at DESC LIMIT 1) AS latest_quote_expires_at,(SELECT COUNT(*) FROM lead_lifecycle_events l WHERE l.project_id=p.project_id AND l.stage='qualify_lead') AS qualified_events,(SELECT COUNT(*) FROM lead_lifecycle_events l WHERE l.project_id=p.project_id AND l.stage='close_convert_lead') AS converted_events FROM project_requests p WHERE p.created_at<=? ORDER BY p.created_at ASC LIMIT 50;"
           printf '%s' "$sql" | grep -Eq '^SELECT '
           ! printf '%s' "$sql" | grep -Eiq '\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE|CREATE|UPSERT)\b'
 
@@ -147,7 +147,10 @@ jobs:
             technical_reference=bool(url_re.search(notes))
             notes_len=len(notes)
             quote_count=int(r.get("quote_count") or 0)
+            latest_quote_id=str(r.get("latest_quote_id") or "")
             latest_quote_status=str(r.get("latest_quote_status") or "")
+            latest_quote_amount_minor=int(r.get("latest_quote_amount_minor") or 0)
+            latest_quote_expires_at=str(r.get("latest_quote_expires_at") or "")
             qualified=int(r.get("qualified_events") or 0)
             converted=int(r.get("converted_events") or 0)
             ident=identity_keys[idx]
@@ -225,7 +228,10 @@ jobs:
               "technical_reference":technical_reference,
               "test_marker":test_marker,
               "quote_count":quote_count,
+              "latest_quote_id":latest_quote_id or None,
               "latest_quote_status":latest_quote_status or None,
+              "latest_quote_amount_minor":latest_quote_amount_minor or None,
+              "latest_quote_expires_at":latest_quote_expires_at or None,
               "qualified_events":qualified,
               "converted_events":converted,
               "commercial_signal_score":score,
@@ -254,12 +260,12 @@ jobs:
             f"Snapshot rows: {len(out)}",
             f"Candidate IDs: {len(summary['candidates'])}",
             "",
-            "| Project | State | Policy | Services | Cluster | Intent | Budget | Timeline | Quote | Score | Classification |",
-            "|---|---|---|---:|---|---|---|---|---|---:|---|",
+            "| Project | State | Policy | Services | Cluster | Intent | Quote | Amount USD | Expires | Score | Classification |",
+            "|---|---|---|---:|---|---|---|---:|---|---:|---|",
           ]
           for x in out:
             lines.append(
-              f"| {x['project_id']} | {x['state']} | {x['policy_status']} | {x['service_count']} | {x['contact_cluster']}({x['contact_cluster_size']}) | {x['problem_or_request_intent']} | {x['budget_or_price_intent']} | {x['timeline_intent']} | {x['latest_quote_status'] or '-'} | {x['commercial_signal_score']} | {x['classification']} |"
+              f"| {x['project_id']} | {x['state']} | {x['policy_status']} | {x['service_count']} | {x['contact_cluster']}({x['contact_cluster_size']}) | {x['problem_or_request_intent']} | {x['latest_quote_status'] or '-'} | {(x['latest_quote_amount_minor'] or 0)/100:.2f} | {x['latest_quote_expires_at'] or '-'} | {x['commercial_signal_score']} | {x['classification']} |"
             )
           lines += ["","PII output: NONE","D1 mutation: NONE"]
           Path("evidence/commercial-request-audit.md").write_text("\n".join(lines)+"\n")
