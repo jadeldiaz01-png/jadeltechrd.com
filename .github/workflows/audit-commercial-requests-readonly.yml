@@ -64,7 +64,7 @@ jobs:
           db=$(jq -r --arg n "$D1_NAME" '.result[]|select(.name==$n)|.uuid' <<<"$dbs")
           test -n "$db" && test "$db" != null
 
-          sql="SELECT p.project_id,p.state,p.policy_status,p.service_ids_json,p.offer_id,p.offer_landing_path,p.utm_source,p.utm_medium,p.utm_campaign,p.utm_content,p.notes,p.company,p.name,p.email,p.created_at,p.updated_at,(SELECT COUNT(*) FROM quotes q WHERE q.project_id=p.project_id) AS quote_count,(SELECT q.status FROM quotes q WHERE q.project_id=p.project_id ORDER BY q.created_at DESC LIMIT 1) AS latest_quote_status,(SELECT COUNT(*) FROM lead_lifecycle_events l WHERE l.project_id=p.project_id AND l.stage='qualify_lead') AS qualified_events,(SELECT COUNT(*) FROM lead_lifecycle_events l WHERE l.project_id=p.project_id AND l.stage='close_convert_lead') AS converted_events FROM project_requests p WHERE p.created_at<=? ORDER BY p.created_at ASC LIMIT 50;"
+          sql="SELECT p.project_id,p.idempotency_key,p.state,p.policy_status,p.service_ids_json,p.offer_id,p.offer_landing_path,p.utm_source,p.utm_medium,p.utm_campaign,p.utm_content,p.notes,p.company,p.name,p.email,p.created_at,p.updated_at,(SELECT COUNT(*) FROM quotes q WHERE q.project_id=p.project_id) AS quote_count,(SELECT q.status FROM quotes q WHERE q.project_id=p.project_id ORDER BY q.created_at DESC LIMIT 1) AS latest_quote_status,(SELECT COUNT(*) FROM lead_lifecycle_events l WHERE l.project_id=p.project_id AND l.stage='qualify_lead') AS qualified_events,(SELECT COUNT(*) FROM lead_lifecycle_events l WHERE l.project_id=p.project_id AND l.stage='close_convert_lead') AS converted_events FROM project_requests p WHERE p.created_at<=? ORDER BY p.created_at ASC LIMIT 50;"
           printf '%s' "$sql" | grep -Eq '^SELECT '
           ! printf '%s' "$sql" | grep -Eiq '\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE|CREATE|UPSERT)\b'
 
@@ -95,21 +95,42 @@ jobs:
             "proton.me","protonmail.com","aol.com"
           }
           test_re=re.compile(r"(?i)(?:^|[^a-z0-9])(test(?:ing)?|prueba|sandbox|smoke|synthetic|sint[eé]tic[oa]|dummy|asdf|qwerty|example|ejemplo|fake|fictici[oa]|qa)(?:[^a-z0-9]|$)")
-          out=[]
+          problem_re=re.compile(r"(?i)\\b(necesito|necesitamos|quiero|queremos|problema|error|falla|arreglar|reparar|implementar|integrar|automatizar|desarrollar|crear|help|need|fix|repair|implement|integrate|automate|build|issue)\\b")
+          budget_re=re.compile(r"(?i)(?:\\$|\\busd\\b|presupuesto|budget|precio|price|costo|cost)")
+          timeline_re=re.compile(r"(?i)\\b(urgente|asap|deadline|fecha|semana|semanas|d[ií]a|d[ií]as|week|weeks|day|days|month|mes)\\b")
+          url_re=re.compile(r"(?i)(https?://|www\\.|[a-z0-9-]+\\.(?:com|net|org|io|dev|app|do)\\b)")
+
+          # Assign opaque cluster labels to equal contact identities without exposing identity values.
+          identity_keys=[]
           for r in rows:
+            identity_keys.append((
+              str(r.get("email") or "").strip().lower(),
+              str(r.get("name") or "").strip().lower(),
+              str(r.get("company") or "").strip().lower(),
+            ))
+          cluster_label={}
+          cluster_sizes={}
+          for key in identity_keys:
+            cluster_sizes[key]=cluster_sizes.get(key,0)+1
+            if key not in cluster_label:
+              cluster_label[key]=f"C{len(cluster_label)+1}"
+
+          out=[]
+          for idx,r in enumerate(rows):
             email=str(r.get("email") or "").strip().lower()
             name=str(r.get("name") or "").strip()
             company=str(r.get("company") or "").strip()
             notes=str(r.get("notes") or "").strip()
             offer=str(r.get("offer_id") or "").strip()
+            idem=str(r.get("idempotency_key") or "").strip()
             utm_source=str(r.get("utm_source") or "").strip()
             utm_medium=str(r.get("utm_medium") or "").strip()
             utm_campaign=str(r.get("utm_campaign") or "").strip()
             utm_content=str(r.get("utm_content") or "").strip()
             landing=str(r.get("offer_landing_path") or "").strip()
-            combined=" ".join([email,name,company,notes,offer,utm_source,utm_medium,utm_campaign,utm_content]).lower()
+            combined=" ".join([email,name,company,notes,offer,idem,utm_source,utm_medium,utm_campaign,utm_content]).lower()
 
-            email_valid=bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email))
+            email_valid=bool(re.fullmatch(r"[^@\\s]+@[^@\\s]+\\.[^@\\s]+", email))
             domain=email.rsplit("@",1)[1] if email_valid else ""
             contact_type="PROFESSIONAL_DOMAIN" if domain and domain not in free_domains else ("FREE_EMAIL" if domain else "INVALID_OR_MISSING")
             try:
@@ -118,12 +139,19 @@ jobs:
             except Exception:
               services=[]
             services=[str(x)[:64] for x in services if isinstance(x,str)]
+
             test_marker=bool(test_re.search(combined))
+            problem_marker=bool(problem_re.search(notes))
+            budget_marker=bool(budget_re.search(notes))
+            timeline_marker=bool(timeline_re.search(notes))
+            technical_reference=bool(url_re.search(notes))
             notes_len=len(notes)
             quote_count=int(r.get("quote_count") or 0)
             latest_quote_status=str(r.get("latest_quote_status") or "")
             qualified=int(r.get("qualified_events") or 0)
             converted=int(r.get("converted_events") or 0)
+            ident=identity_keys[idx]
+            cluster_size=cluster_sizes[ident]
 
             score=0
             reasons=[]
@@ -141,6 +169,14 @@ jobs:
               score+=2; reasons.append("SUBSTANTIVE_NOTES")
             elif notes_len>=12:
               score+=1; reasons.append("NOTES_PRESENT")
+            if problem_marker:
+              score+=2; reasons.append("PROBLEM_OR_REQUEST_INTENT")
+            if budget_marker:
+              score+=2; reasons.append("BUDGET_OR_PRICE_INTENT")
+            if timeline_marker:
+              score+=1; reasons.append("TIMELINE_INTENT")
+            if technical_reference:
+              score+=1; reasons.append("TECHNICAL_REFERENCE")
             if utm_source or utm_campaign:
               score+=1; reasons.append("ATTRIBUTION_PRESENT")
             if quote_count:
@@ -151,6 +187,8 @@ jobs:
               score+=4; reasons.append("QUALIFIED_EVENT_EXISTS")
             if converted:
               score+=5; reasons.append("CONVERTED_EVENT_EXISTS")
+            if cluster_size>1:
+              score-=1; reasons.append("REPEATED_CONTACT_IDENTITY")
             if test_marker:
               score-=10; reasons.append("TEST_MARKER")
 
@@ -158,9 +196,9 @@ jobs:
               classification="LIKELY_TEST"
             elif converted or qualified or latest_quote_status=="ACCEPTED":
               classification="STRONG_COMMERCIAL_CANDIDATE"
-            elif score>=6:
+            elif score>=8 and problem_marker:
               classification="POSSIBLE_COMMERCIAL_CANDIDATE"
-            elif score>=3:
+            elif score>=5:
               classification="NEEDS_HUMAN_REVIEW"
             else:
               classification="LOW_SIGNAL"
@@ -176,9 +214,15 @@ jobs:
               "landing_path":landing,
               "attribution_present":bool(utm_source or utm_medium or utm_campaign or utm_content),
               "contact_type":contact_type,
+              "contact_cluster":cluster_label[ident],
+              "contact_cluster_size":cluster_size,
               "company_present":bool(company),
               "notes_present":bool(notes),
               "notes_length_bucket":"40+" if notes_len>=40 else ("12-39" if notes_len>=12 else ("1-11" if notes_len else "0")),
+              "problem_or_request_intent":problem_marker,
+              "budget_or_price_intent":budget_marker,
+              "timeline_intent":timeline_marker,
+              "technical_reference":technical_reference,
               "test_marker":test_marker,
               "quote_count":quote_count,
               "latest_quote_status":latest_quote_status or None,
@@ -210,12 +254,12 @@ jobs:
             f"Snapshot rows: {len(out)}",
             f"Candidate IDs: {len(summary['candidates'])}",
             "",
-            "| Project | State | Policy | Services | Contact | Quote | Qualified | Score | Classification |",
-            "|---|---|---|---:|---|---|---:|---:|---|",
+            "| Project | State | Policy | Services | Cluster | Intent | Budget | Timeline | Quote | Score | Classification |",
+            "|---|---|---|---:|---|---|---|---|---|---:|---|",
           ]
           for x in out:
             lines.append(
-              f"| {x['project_id']} | {x['state']} | {x['policy_status']} | {x['service_count']} | {x['contact_type']} | {x['latest_quote_status'] or '-'} | {x['qualified_events']} | {x['commercial_signal_score']} | {x['classification']} |"
+              f"| {x['project_id']} | {x['state']} | {x['policy_status']} | {x['service_count']} | {x['contact_cluster']}({x['contact_cluster_size']}) | {x['problem_or_request_intent']} | {x['budget_or_price_intent']} | {x['timeline_intent']} | {x['latest_quote_status'] or '-'} | {x['commercial_signal_score']} | {x['classification']} |"
             )
           lines += ["","PII output: NONE","D1 mutation: NONE"]
           Path("evidence/commercial-request-audit.md").write_text("\n".join(lines)+"\n")
