@@ -1,0 +1,235 @@
+name: Audit commercial requests read-only
+
+on:
+  push:
+    branches:
+      - audit/read-only-commercial-requests-20261022
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-commercial-requests-readonly-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASELINE_SHA: 7d1f1dc57394af5c1149d7af01507b70fa29794a
+  SNAPSHOT_CUTOFF: 2026-10-22T21:36:07Z
+  D1_NAME: jadel-commercial-runtime
+
+jobs:
+  audit:
+    environment:
+      name: d1-recovery-drill
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout isolated audit revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify isolated read-only delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/audit/read-only-commercial-requests-20261022"
+          git cat-file -e "$BASELINE_SHA^{commit}"
+          changed=$(git diff --name-only "$BASELINE_SHA" "$GITHUB_SHA")
+          test "$changed" = ".github/workflows/audit-commercial-requests-readonly.yml" || {
+            echo "AUDIT_DELTA_SCOPE=FAIL" >&2
+            printf '%s\n' "$changed" >&2
+            exit 10
+          }
+          test -z "$(git status --porcelain)"
+          echo AUDIT_DELTA_SCOPE=PASS
+
+      - name: Query frozen commercial-request snapshot with SELECT only
+        shell: bash
+        run: |
+          set -euo pipefail
+          token=$(printf '%s' "${CLOUDFLARE_D1_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          test -n "$token"; test -n "$account"
+          echo "::add-mask::$token"
+          auth=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
+
+          dbs=$(curl --fail-with-body -sS "${auth[@]}"             "https://api.cloudflare.com/client/v4/accounts/$account/d1/database?name=${D1_NAME}&per_page=100")
+          test "$(jq -r '.success' <<<"$dbs")" = true
+          test "$(jq -r --arg n "$D1_NAME" '[.result[]|select(.name==$n)]|length' <<<"$dbs")" = 1
+          db=$(jq -r --arg n "$D1_NAME" '.result[]|select(.name==$n)|.uuid' <<<"$dbs")
+          test -n "$db" && test "$db" != null
+
+          sql="SELECT p.project_id,p.state,p.policy_status,p.service_ids_json,p.offer_id,p.offer_landing_path,p.utm_source,p.utm_medium,p.utm_campaign,p.utm_content,p.notes,p.company,p.name,p.email,p.created_at,p.updated_at,(SELECT COUNT(*) FROM quotes q WHERE q.project_id=p.project_id) AS quote_count,(SELECT q.status FROM quotes q WHERE q.project_id=p.project_id ORDER BY q.created_at DESC LIMIT 1) AS latest_quote_status,(SELECT COUNT(*) FROM lead_lifecycle_events l WHERE l.project_id=p.project_id AND l.stage='qualify_lead') AS qualified_events,(SELECT COUNT(*) FROM lead_lifecycle_events l WHERE l.project_id=p.project_id AND l.stage='close_convert_lead') AS converted_events FROM project_requests p WHERE p.created_at<=? ORDER BY p.created_at ASC LIMIT 50;"
+          printf '%s' "$sql" | grep -Eq '^SELECT '
+          ! printf '%s' "$sql" | grep -Eiq '\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE|CREATE|UPSERT)\b'
+
+          resp=$(curl --fail-with-body -sS -X POST "${auth[@]}"             "https://api.cloudflare.com/client/v4/accounts/$account/d1/database/$db/query"             --data "$(jq -nc --arg sql "$sql" --arg cutoff "$SNAPSHOT_CUTOFF" '{sql:$sql,params:[$cutoff]}')")
+          test "$(jq -r '.success' <<<"$resp")" = true
+          jq -c '.result[0].results // []' <<<"$resp" > /tmp/requests-raw.json
+          count=$(jq 'length' /tmp/requests-raw.json)
+          echo "AUDIT_SNAPSHOT_ROWS=$count"
+          test "$count" = 8 || {
+            echo "AUDIT_EXPECTED_EIGHT_ROWS=FAIL actual=$count" >&2
+            exit 20
+          }
+
+      - name: Sanitize and classify without PII output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          python3 - <<'PY'
+          import json, re
+          from pathlib import Path
+          from urllib.parse import urlparse
+
+          rows=json.loads(Path("/tmp/requests-raw.json").read_text())
+          free_domains={
+            "gmail.com","googlemail.com","yahoo.com","yahoo.es","hotmail.com",
+            "outlook.com","live.com","msn.com","icloud.com","me.com",
+            "proton.me","protonmail.com","aol.com"
+          }
+          test_re=re.compile(r"(?i)(?:^|[^a-z0-9])(test(?:ing)?|prueba|sandbox|smoke|synthetic|sint[eé]tic[oa]|dummy|asdf|qwerty|example|ejemplo|fake|fictici[oa]|qa)(?:[^a-z0-9]|$)")
+          out=[]
+          for r in rows:
+            email=str(r.get("email") or "").strip().lower()
+            name=str(r.get("name") or "").strip()
+            company=str(r.get("company") or "").strip()
+            notes=str(r.get("notes") or "").strip()
+            offer=str(r.get("offer_id") or "").strip()
+            utm_source=str(r.get("utm_source") or "").strip()
+            utm_medium=str(r.get("utm_medium") or "").strip()
+            utm_campaign=str(r.get("utm_campaign") or "").strip()
+            utm_content=str(r.get("utm_content") or "").strip()
+            landing=str(r.get("offer_landing_path") or "").strip()
+            combined=" ".join([email,name,company,notes,offer,utm_source,utm_medium,utm_campaign,utm_content]).lower()
+
+            email_valid=bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email))
+            domain=email.rsplit("@",1)[1] if email_valid else ""
+            contact_type="PROFESSIONAL_DOMAIN" if domain and domain not in free_domains else ("FREE_EMAIL" if domain else "INVALID_OR_MISSING")
+            try:
+              services=json.loads(r.get("service_ids_json") or "[]")
+              if not isinstance(services,list): services=[]
+            except Exception:
+              services=[]
+            services=[str(x)[:64] for x in services if isinstance(x,str)]
+            test_marker=bool(test_re.search(combined))
+            notes_len=len(notes)
+            quote_count=int(r.get("quote_count") or 0)
+            latest_quote_status=str(r.get("latest_quote_status") or "")
+            qualified=int(r.get("qualified_events") or 0)
+            converted=int(r.get("converted_events") or 0)
+
+            score=0
+            reasons=[]
+            if services:
+              score+=2; reasons.append("SERVICE_SELECTED")
+            if offer:
+              score+=1; reasons.append("OFFER_ATTRIBUTED")
+            if email_valid:
+              score+=1; reasons.append("VALID_CONTACT_FORMAT")
+            if contact_type=="PROFESSIONAL_DOMAIN":
+              score+=2; reasons.append("PROFESSIONAL_EMAIL_DOMAIN")
+            if company:
+              score+=1; reasons.append("COMPANY_PRESENT")
+            if notes_len>=40:
+              score+=2; reasons.append("SUBSTANTIVE_NOTES")
+            elif notes_len>=12:
+              score+=1; reasons.append("NOTES_PRESENT")
+            if utm_source or utm_campaign:
+              score+=1; reasons.append("ATTRIBUTION_PRESENT")
+            if quote_count:
+              score+=2; reasons.append("QUOTE_EXISTS")
+            if latest_quote_status=="ACCEPTED":
+              score+=3; reasons.append("QUOTE_ACCEPTED")
+            if qualified:
+              score+=4; reasons.append("QUALIFIED_EVENT_EXISTS")
+            if converted:
+              score+=5; reasons.append("CONVERTED_EVENT_EXISTS")
+            if test_marker:
+              score-=10; reasons.append("TEST_MARKER")
+
+            if test_marker:
+              classification="LIKELY_TEST"
+            elif converted or qualified or latest_quote_status=="ACCEPTED":
+              classification="STRONG_COMMERCIAL_CANDIDATE"
+            elif score>=6:
+              classification="POSSIBLE_COMMERCIAL_CANDIDATE"
+            elif score>=3:
+              classification="NEEDS_HUMAN_REVIEW"
+            else:
+              classification="LOW_SIGNAL"
+
+            out.append({
+              "project_id":str(r.get("project_id") or ""),
+              "created_at":str(r.get("created_at") or ""),
+              "state":str(r.get("state") or ""),
+              "policy_status":str(r.get("policy_status") or ""),
+              "service_ids":services,
+              "service_count":len(services),
+              "offer_id":offer,
+              "landing_path":landing,
+              "attribution_present":bool(utm_source or utm_medium or utm_campaign or utm_content),
+              "contact_type":contact_type,
+              "company_present":bool(company),
+              "notes_present":bool(notes),
+              "notes_length_bucket":"40+" if notes_len>=40 else ("12-39" if notes_len>=12 else ("1-11" if notes_len else "0")),
+              "test_marker":test_marker,
+              "quote_count":quote_count,
+              "latest_quote_status":latest_quote_status or None,
+              "qualified_events":qualified,
+              "converted_events":converted,
+              "commercial_signal_score":score,
+              "reason_codes":reasons,
+              "classification":classification
+            })
+
+          summary={
+            "schema":"jadel.commercial_request_audit.v1",
+            "authority":"READ_ONLY",
+            "baseline_sha":"7d1f1dc57394af5c1149d7af01507b70fa29794a",
+            "snapshot_cutoff":"2026-10-22T21:36:07Z",
+            "request_count":len(out),
+            "counts":{},
+            "candidates":[x["project_id"] for x in out if x["classification"] in {"STRONG_COMMERCIAL_CANDIDATE","POSSIBLE_COMMERCIAL_CANDIDATE"}],
+            "rows":out,
+            "pii_output":"NONE"
+          }
+          for x in out:
+            summary["counts"][x["classification"]]=summary["counts"].get(x["classification"],0)+1
+
+          Path("evidence/commercial-request-audit.json").write_text(json.dumps(summary,indent=2,sort_keys=True))
+          lines=[
+            "# Commercial request audit — read only",
+            "",
+            f"Snapshot rows: {len(out)}",
+            f"Candidate IDs: {len(summary['candidates'])}",
+            "",
+            "| Project | State | Policy | Services | Contact | Quote | Qualified | Score | Classification |",
+            "|---|---|---|---:|---|---|---:|---:|---|",
+          ]
+          for x in out:
+            lines.append(
+              f"| {x['project_id']} | {x['state']} | {x['policy_status']} | {x['service_count']} | {x['contact_type']} | {x['latest_quote_status'] or '-'} | {x['qualified_events']} | {x['commercial_signal_score']} | {x['classification']} |"
+            )
+          lines += ["","PII output: NONE","D1 mutation: NONE"]
+          Path("evidence/commercial-request-audit.md").write_text("\n".join(lines)+"\n")
+          PY
+
+          rm -f /tmp/requests-raw.json
+          jq -e '.request_count==8 and .pii_output=="NONE" and .authority=="READ_ONLY"' evidence/commercial-request-audit.json >/dev/null
+          cat evidence/commercial-request-audit.md
+          echo COMMERCIAL_REQUEST_AUDIT=PASS
+
+      - name: Upload sanitized audit evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: commercial-request-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/commercial-request-audit.*
+          if-no-files-found: error
+          retention-days: 14
