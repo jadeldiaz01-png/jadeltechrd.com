@@ -84,11 +84,12 @@ jobs:
           set -euo pipefail
           mkdir -p evidence
           python3 - <<'PY'
-          import json, re
+          import json, re, hashlib
           from pathlib import Path
           from urllib.parse import urlparse
 
           rows=json.loads(Path("/tmp/requests-raw.json").read_text())
+          owner_email_sha256="7408ff8fd6805c1da34b595763512c61045fceb2f6f146689ef97c478e682124"
           free_domains={
             "gmail.com","googlemail.com","yahoo.com","yahoo.es","hotmail.com",
             "outlook.com","live.com","msn.com","icloud.com","me.com",
@@ -139,6 +140,7 @@ jobs:
             combined=" ".join([email,name,company,notes,offer,idem,utm_source,utm_medium,utm_campaign,utm_content]).lower()
 
             email_valid=bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email))
+            owner_email_match=bool(email) and hashlib.sha256(email.encode()).hexdigest()==owner_email_sha256
             domain=email.rsplit("@",1)[1] if email_valid else ""
             contact_type="PROFESSIONAL_DOMAIN" if domain and domain not in free_domains else ("FREE_EMAIL" if domain else "INVALID_OR_MISSING")
             try:
@@ -212,10 +214,14 @@ jobs:
               score+=5; reasons.append("CONVERTED_EVENT_EXISTS")
             if cluster_size>1:
               score-=1; reasons.append("REPEATED_CONTACT_IDENTITY")
+            if owner_email_match:
+              score-=20; reasons.append("OWNER_EMAIL_MATCH")
             if test_marker:
               score-=10; reasons.append("TEST_MARKER")
 
-            if test_marker:
+            if owner_email_match:
+              classification="LIKELY_OWNER_TEST"
+            elif test_marker:
               classification="LIKELY_TEST"
             elif converted or qualified or latest_quote_status=="ACCEPTED":
               classification="STRONG_COMMERCIAL_CANDIDATE"
@@ -237,6 +243,7 @@ jobs:
               "landing_path":landing,
               "attribution_present":bool(utm_source or utm_medium or utm_campaign or utm_content),
               "contact_type":contact_type,
+              "owner_email_match":owner_email_match,
               "contact_cluster":cluster_label[ident],
               "contact_cluster_size":cluster_size,
               "request_fingerprint_cluster":fp_label[fp],
