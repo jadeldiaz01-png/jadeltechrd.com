@@ -95,10 +95,10 @@ jobs:
             "proton.me","protonmail.com","aol.com"
           }
           test_re=re.compile(r"(?i)(?:^|[^a-z0-9])(test(?:ing)?|prueba|sandbox|smoke|synthetic|sint[eé]tic[oa]|dummy|asdf|qwerty|example|ejemplo|fake|fictici[oa]|qa)(?:[^a-z0-9]|$)")
-          problem_re=re.compile(r"(?i)\\b(necesito|necesitamos|quiero|queremos|problema|error|falla|arreglar|reparar|implementar|integrar|automatizar|desarrollar|crear|help|need|fix|repair|implement|integrate|automate|build|issue)\\b")
-          budget_re=re.compile(r"(?i)(?:\\$|\\busd\\b|presupuesto|budget|precio|price|costo|cost)")
-          timeline_re=re.compile(r"(?i)\\b(urgente|asap|deadline|fecha|semana|semanas|d[ií]a|d[ií]as|week|weeks|day|days|month|mes)\\b")
-          url_re=re.compile(r"(?i)(https?://|www\\.|[a-z0-9-]+\\.(?:com|net|org|io|dev|app|do)\\b)")
+          problem_re=re.compile(r"(?i)\b(necesito|necesitamos|quiero|queremos|problema|error|falla|arreglar|reparar|implementar|integrar|automatizar|desarrollar|crear|help|need|fix|repair|implement|integrate|automate|build|issue)\b")
+          budget_re=re.compile(r"(?i)(?:\$|\busd\b|presupuesto|budget|precio|price|costo|cost)")
+          timeline_re=re.compile(r"(?i)\b(urgente|asap|deadline|fecha|semana|semanas|d[ií]a|d[ií]as|week|weeks|day|days|month|mes)\b")
+          url_re=re.compile(r"(?i)(https?://|www\.|[a-z0-9-]+\.(?:com|net|org|io|dev|app|do)\b)")
 
           # Assign opaque cluster labels to equal contact identities without exposing identity values.
           identity_keys=[]
@@ -130,7 +130,7 @@ jobs:
             landing=str(r.get("offer_landing_path") or "").strip()
             combined=" ".join([email,name,company,notes,offer,idem,utm_source,utm_medium,utm_campaign,utm_content]).lower()
 
-            email_valid=bool(re.fullmatch(r"[^@\\s]+@[^@\\s]+\\.[^@\\s]+", email))
+            email_valid=bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email))
             domain=email.rsplit("@",1)[1] if email_valid else ""
             contact_type="PROFESSIONAL_DOMAIN" if domain and domain not in free_domains else ("FREE_EMAIL" if domain else "INVALID_OR_MISSING")
             try:
