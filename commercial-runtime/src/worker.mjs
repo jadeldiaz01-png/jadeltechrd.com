@@ -39,6 +39,7 @@ const PAYPAL_LEDGER_EVENT_STATES = new Map([
   ["PAYMENT.SALE.REFUNDED", "REJECTED"],
   ["PAYMENT.SALE.REVERSED", "REJECTED"],
 ]);
+const PAYPAL_ORDER_APPROVED_EVENT = "CHECKOUT.ORDER.APPROVED";
 const TURNSTILE_ACTION = "project_request";
 const INSERT_REQUEST_SQL = `INSERT INTO project_requests
 (project_id,idempotency_key,request_fingerprint,name,email,company,service_ids_json,offer_id,offer_landing_path,utm_source,utm_medium,utm_campaign,utm_content,notes,locale,state,policy_status,created_at,updated_at)
@@ -378,6 +379,21 @@ function envFlagTrue(env, name) {
   return String(env?.[name] || "").trim().toLowerCase() === "true";
 }
 
+function paypalAutomaticCaptureEnabled(env) {
+  return envFlagTrue(env, "PAYPAL_AUTOMATIC_CAPTURE_ENABLED");
+}
+
+function paypalAutomaticReconciliationEnabled(env) {
+  return envFlagTrue(env, "PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED");
+}
+
+function paypalAutomaticCaptureLimitMinor(env) {
+  const value = String(env?.PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR || "").trim();
+  if (!/^\d{1,10}$/.test(value)) return null;
+  const amount = Number(value);
+  return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
+}
+
 function validatePayPalOrderCreation(env) {
   if (!paypalOrderCreationEnabled(env)) return { enabled: false, environment: null };
   const environment = paypalEnvironment(env);
@@ -482,6 +498,178 @@ async function createPayPalOrder(env, paymentOrderId, quote, fetchImpl = fetch) 
   };
 }
 
+function paypalOrderUnitMatches(order, paymentOrder) {
+  const units = order?.purchase_units;
+  if (!Array.isArray(units) || units.length !== 1) return false;
+  const unit = units[0];
+  let expectedAmount;
+  try { expectedAmount = minorToPayPalAmount(Number(paymentOrder.amount_minor)); }
+  catch { return false; }
+  return unit?.custom_id === paymentOrder.payment_order_id &&
+    unit?.invoice_id === paymentOrder.quote_id &&
+    unit?.amount?.currency_code === paymentOrder.currency_code &&
+    unit?.amount?.value === expectedAmount;
+}
+
+async function fetchPayPalOrder(env, providerOrderId, fetchImpl, accessToken = null) {
+  const token = accessToken || await paypalAccessToken(env, fetchImpl);
+  const response = await fetchImpl(
+    `${paypalApiBase(env)}/v2/checkout/orders/${encodeURIComponent(providerOrderId)}`,
+    { headers:{ authorization:`Bearer ${token}` }, signal:AbortSignal.timeout(8000) },
+  );
+  if (!response.ok) throw new Error("PAYPAL_ORDER_LOOKUP_FAILED");
+  return response.json();
+}
+
+async function captureBuyerApprovedOrder(event, env, fetchImpl = fetch) {
+  const providerOrderId = String(event?.resource?.id || "").trim();
+  if (!providerOrderId || providerOrderId.length > 128) return { captured:false, reason:"ORDER_ID_INVALID" };
+  let authorization;
+  try { authorization = validatePayPalOrderCreation(env); }
+  catch (error) { return { captured:false, reason:String(error?.message || "PAYPAL_ORDER_CREATION_NOT_CONFIGURED") }; }
+  if (!authorization.enabled || !paypalAutomaticCaptureEnabled(env)) {
+    return { captured:false, reason:"AUTOMATIC_CAPTURE_DISABLED" };
+  }
+  if (!envFlagTrue(env, "FINANCIAL_EXECUTION_AUTHORIZED")) {
+    return { captured:false, reason:"FINANCIAL_EXECUTION_NOT_AUTHORIZED" };
+  }
+  const limitMinor = paypalAutomaticCaptureLimitMinor(env);
+  if (limitMinor === null) return { captured:false, reason:"AUTOMATIC_CAPTURE_LIMIT_NOT_CONFIGURED" };
+
+  const paymentOrder = await env.DB.prepare(
+    "SELECT po.payment_order_id,po.quote_id,po.project_id,po.status,po.amount_minor,po.currency_code,po.provider_order_id,q.status AS quote_status,p.state AS project_state,p.policy_status FROM payment_orders po JOIN quotes q ON q.quote_id=po.quote_id JOIN project_requests p ON p.project_id=po.project_id WHERE po.provider='paypal' AND po.provider_order_id=? LIMIT 2"
+  ).bind(providerOrderId).all();
+  const matches = paymentOrder.results || [];
+  if (matches.length !== 1) return { captured:false, reason:"PAYMENT_ORDER_NOT_UNIQUE" };
+  const row = matches[0];
+  if (row.status !== "PENDING" || row.quote_status !== "ACCEPTED" ||
+      row.project_state !== "PAYMENT_PENDING" || row.policy_status !== "ALLOWED" ||
+      row.currency_code !== "USD" || Number(row.amount_minor) <= 0 ||
+      Number(row.amount_minor) > limitMinor) {
+    return { captured:false, reason:"PAYMENT_ORDER_POLICY_REJECTED" };
+  }
+
+  const token = await paypalAccessToken(env, fetchImpl);
+  const before = await fetchPayPalOrder(env, providerOrderId, fetchImpl, token);
+  if (!paypalOrderUnitMatches(before, row)) return { captured:false, reason:"PAYPAL_ORDER_MISMATCH" };
+  if (before.status === "COMPLETED") return { captured:true, alreadyCompleted:true };
+  if (before.status !== "APPROVED") return { captured:false, reason:"PAYPAL_ORDER_NOT_APPROVED" };
+
+  const response = await fetchImpl(
+    `${paypalApiBase(env)}/v2/checkout/orders/${encodeURIComponent(providerOrderId)}/capture`,
+    {
+      method:"POST",
+      headers:{
+        authorization:`Bearer ${token}`,
+        "content-type":"application/json",
+        "paypal-request-id":`jadel-capture-${row.payment_order_id}`,
+      },
+      body:"{}",
+      signal:AbortSignal.timeout(8000),
+    },
+  );
+  let captured;
+  try { captured = await response.json(); } catch {}
+  if (!response.ok) {
+    const latest = await fetchPayPalOrder(env, providerOrderId, fetchImpl);
+    if (latest.status === "COMPLETED" && paypalOrderUnitMatches(latest, row)) {
+      return { captured:true, alreadyCompleted:true };
+    }
+    throw new Error("PAYPAL_CAPTURE_FAILED");
+  }
+  const capture = captured?.purchase_units?.[0]?.payments?.captures?.[0];
+  const expectedAmount = minorToPayPalAmount(Number(row.amount_minor));
+  if (captured?.status !== "COMPLETED" || capture?.status !== "COMPLETED" ||
+      capture?.amount?.currency_code !== row.currency_code || capture?.amount?.value !== expectedAmount) {
+    throw new Error("PAYPAL_CAPTURE_NOT_COMPLETED");
+  }
+  return { captured:true, alreadyCompleted:false };
+}
+
+async function reconcileVerifiedPayPalCapture(event, facts, ledgerId, env, fetchImpl = fetch) {
+  if (!paypalAutomaticReconciliationEnabled(env)) return false;
+  const providerOrderId = String(event?.resource?.supplementary_data?.related_ids?.order_id || "").trim();
+  if (!providerOrderId || !facts.resourceId || facts.resourceStatus !== "COMPLETED") return false;
+  const result = await env.DB.prepare(
+    "SELECT po.payment_order_id,po.quote_id,po.project_id,po.status,po.amount_minor,po.currency_code,po.provider_order_id,q.status AS quote_status,p.state AS project_state,p.policy_status FROM payment_orders po JOIN quotes q ON q.quote_id=po.quote_id JOIN project_requests p ON p.project_id=po.project_id WHERE po.provider='paypal' AND po.provider_order_id=? LIMIT 2"
+  ).bind(providerOrderId).all();
+  const rows = result.results || [];
+  if (rows.length !== 1) return false;
+  const row = rows[0];
+  if (row.status !== "PENDING" || row.quote_status !== "ACCEPTED" ||
+      row.project_state !== "PAYMENT_PENDING" || row.policy_status !== "ALLOWED" ||
+      row.currency_code !== "USD") return false;
+  let amountMinor;
+  try { amountMinor = providerAmountToMinor(facts.grossAmount); }
+  catch { return false; }
+  if (amountMinor !== Number(row.amount_minor) || facts.currencyCode !== row.currency_code) return false;
+
+  const providerOrder = await fetchPayPalOrder(env, providerOrderId, fetchImpl);
+  if (providerOrder.status !== "COMPLETED" || !paypalOrderUnitMatches(providerOrder, row)) return false;
+  const capture = providerOrder.purchase_units?.[0]?.payments?.captures?.find((item) => item?.id === facts.resourceId);
+  if (capture?.status !== "COMPLETED" || capture?.amount?.currency_code !== row.currency_code ||
+      capture?.amount?.value !== minorToPayPalAmount(Number(row.amount_minor))) return false;
+
+  const existing = await env.DB.prepare(
+    "SELECT settlement_id,payment_order_id,ledger_id FROM sales_settlements WHERE payment_order_id=? OR ledger_id=? LIMIT 2"
+  ).bind(row.payment_order_id,ledgerId).all();
+  const settlements = existing.results || [];
+  if (settlements.length) {
+    return settlements.length === 1 && settlements[0].payment_order_id === row.payment_order_id &&
+      settlements[0].ledger_id === ledgerId;
+  }
+
+  const now = new Date().toISOString();
+  const settlementId = crypto.randomUUID();
+  const approvalId = crypto.randomUUID();
+  const evidence = JSON.stringify({
+    source:"verified_paypal_webhook",
+    provider_event_id:facts.providerEventId,
+    provider_order_id:providerOrderId,
+    payment_order_id:row.payment_order_id,
+    quote_id:row.quote_id,
+    capture_id:facts.resourceId,
+  });
+  try {
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO approval_events (approval_id,project_id,approval_type,decision,actor,reason,evidence_json,created_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM payment_orders po JOIN quotes q ON q.quote_id=po.quote_id JOIN project_requests p ON p.project_id=po.project_id JOIN payment_ledger l ON l.project_id=p.project_id WHERE po.payment_order_id=? AND po.quote_id=? AND po.project_id=? AND po.status='PENDING' AND q.status='ACCEPTED' AND p.state='PAYMENT_PENDING' AND p.policy_status='ALLOWED' AND l.ledger_id=? AND l.ledger_state='REQUIRES_HUMAN')"
+      ).bind(
+        approvalId,row.project_id,"automatic_payment_reconciliation","APPROVED","paypal_webhook_policy",
+        "Verified completed capture matched the approved quote and payment order.",evidence,now,
+        row.payment_order_id,row.quote_id,row.project_id,ledgerId,
+      ),
+      env.DB.prepare(
+        "UPDATE payment_ledger SET project_id=?,ledger_state='MATCHED',notes=?,updated_at=? WHERE ledger_id=? AND ledger_state='REQUIRES_HUMAN'"
+      ).bind(row.project_id,"Verified PayPal capture matched exact quote, order, amount and currency.",now,ledgerId),
+      env.DB.prepare(
+        "UPDATE payment_orders SET status='COMPLETED',updated_at=? WHERE payment_order_id=? AND status='PENDING'"
+      ).bind(now,row.payment_order_id),
+      env.DB.prepare(
+        "UPDATE project_requests SET state='PAID',updated_at=? WHERE project_id=? AND state='PAYMENT_PENDING'"
+      ).bind(now,row.project_id),
+      env.DB.prepare(
+        "INSERT INTO sales_settlements (settlement_id,payment_order_id,ledger_id,provider_event_id,amount_minor,currency_code,status,created_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM payment_ledger l JOIN payment_orders po ON po.payment_order_id=? JOIN project_requests p ON p.project_id=po.project_id WHERE l.ledger_id=? AND l.project_id=po.project_id AND l.ledger_state='MATCHED' AND po.status='COMPLETED' AND p.state='PAID')"
+      ).bind(settlementId,row.payment_order_id,ledgerId,facts.providerEventId,amountMinor,row.currency_code,"MATCHED",now,row.payment_order_id,ledgerId),
+    ]);
+    const committed = await env.DB.prepare(
+      "SELECT payment_order_id,ledger_id FROM sales_settlements WHERE payment_order_id=? OR ledger_id=? LIMIT 2"
+    ).bind(row.payment_order_id,ledgerId).all();
+    const settled = committed.results || [];
+    if (settled.length !== 1 || settled[0].payment_order_id !== row.payment_order_id || settled[0].ledger_id !== ledgerId) {
+      throw new Error("PAYMENT_AUTO_RECONCILIATION_NOT_COMMITTED");
+    }
+  } catch {
+    const raced = await env.DB.prepare(
+      "SELECT payment_order_id,ledger_id FROM sales_settlements WHERE payment_order_id=? OR ledger_id=? LIMIT 2"
+    ).bind(row.payment_order_id,ledgerId).all();
+    const settled = raced.results || [];
+    if (settled.length === 1 && settled[0].payment_order_id === row.payment_order_id && settled[0].ledger_id === ledgerId) return true;
+    throw new Error("PAYMENT_AUTO_RECONCILIATION_FAILED");
+  }
+  return true;
+}
+
 async function verifyPayPalWebhook(headers, webhookEvent, env, fetchImpl = fetch) {
   const certUrl = headers.get("paypal-cert-url");
   const required = {
@@ -564,6 +752,29 @@ export async function handlePayPalWebhook(request, env, deps = {}) {
 
   const facts = paymentFacts(event);
   if (!facts.providerEventId || !facts.eventType) return json({ error: "PAYPAL_EVENT_INVALID" }, 400);
+  if (facts.eventType === PAYPAL_ORDER_APPROVED_EVENT) {
+    if (!paypalAutomaticCaptureEnabled(env)) {
+      return json({ received:true, ignored:true, capture_performed:false, reason:"AUTOMATIC_CAPTURE_DISABLED" }, 202);
+    }
+    try {
+      const result = await captureBuyerApprovedOrder(event,env,deps.fetchImpl);
+      if (!result.captured) {
+        console.warn("paypal_autocapture_not_performed", { reason:result.reason || "POLICY_REJECTED" });
+      }
+      return json({
+        received:true,
+        event_type:facts.eventType,
+        capture_performed:Boolean(result.captured),
+        already_completed:Boolean(result.alreadyCompleted),
+        reason:result.reason || undefined,
+      }, 202);
+    } catch (error) {
+      console.error("paypal_autocapture_retryable_failure", {
+        error_code:String(error?.message || "PAYPAL_CAPTURE_FAILED").slice(0, 80),
+      });
+      return json({ error:"PAYPAL_AUTOCAPTURE_UNAVAILABLE" }, 503);
+    }
+  }
   const ledgerState = PAYPAL_LEDGER_EVENT_STATES.get(facts.eventType);
   if (!ledgerState) {
     return json({ received: true, ignored: true, event_type: facts.eventType }, 202);
@@ -586,9 +797,44 @@ export async function handlePayPalWebhook(request, env, deps = {}) {
     const existing = await env.DB.prepare(
       "SELECT provider_event_id FROM payment_events WHERE provider_event_id=? LIMIT 1"
     ).bind(facts.providerEventId).first();
-    if (existing) return json({ received: true, replayed: true }, 200);
+    if (existing) {
+      if (facts.eventType === "PAYMENT.CAPTURE.COMPLETED" && paypalAutomaticReconciliationEnabled(env)) {
+        const prior = await env.DB.prepare(
+          "SELECT ledger_id,ledger_state FROM payment_ledger WHERE provider_event_id=? LIMIT 1"
+        ).bind(facts.providerEventId).first();
+        if (prior?.ledger_state === "MATCHED") return json({ received:true, replayed:true, ledger_state:"MATCHED" }, 200);
+        if (prior?.ledger_id) {
+          try {
+            const reconciled = await reconcileVerifiedPayPalCapture(event,facts,prior.ledger_id,env,deps.fetchImpl);
+            return json({ received:true, replayed:true, ledger_state:reconciled ? "MATCHED" : "REQUIRES_HUMAN" }, 200);
+          } catch (reconcileError) {
+            console.error("paypal_auto_reconciliation_retryable_failure", {
+              error_code:String(reconcileError?.message || "PAYMENT_AUTO_RECONCILIATION_FAILED").slice(0, 80),
+            });
+            return json({ error:"PAYMENT_AUTO_RECONCILIATION_UNAVAILABLE" }, 503);
+          }
+        }
+      }
+      return json({ received: true, replayed: true }, 200);
+    }
     console.error("paypal_webhook_write_failed", { event_id: facts.providerEventId, error: String(error) });
     return json({ error: "PAYMENT_WRITE_FAILED" }, 503);
+  }
+
+  if (facts.eventType === "PAYMENT.CAPTURE.COMPLETED" && paypalAutomaticReconciliationEnabled(env)) {
+    try {
+      const reconciled = await reconcileVerifiedPayPalCapture(event,facts,ledgerId,env,deps.fetchImpl);
+      return json({
+        received:true,
+        provider_event_id:facts.providerEventId,
+        ledger_state:reconciled ? "MATCHED" : ledgerState,
+      }, 202);
+    } catch (error) {
+      console.error("paypal_auto_reconciliation_retryable_failure", {
+        error_code:String(error?.message || "PAYMENT_AUTO_RECONCILIATION_FAILED").slice(0, 80),
+      });
+      return json({ error:"PAYMENT_AUTO_RECONCILIATION_UNAVAILABLE" }, 503);
+    }
   }
 
   return json({ received: true, provider_event_id: facts.providerEventId, ledger_state: ledgerState }, 202);

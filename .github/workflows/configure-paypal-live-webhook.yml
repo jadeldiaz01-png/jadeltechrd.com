@@ -76,8 +76,13 @@ jobs:
           grep -Fq 'PRODUCTION_AUTHORIZED:"false"' "$deploy"
           grep -Fq 'FINANCIAL_EXECUTION_AUTHORIZED:"false"' "$deploy"
           grep -Fq 'MAX_AUTONOMOUS_CAPITAL_USD:"0"' "$deploy"
+          grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_ENABLED:"false"' "$deploy"
+          grep -Fq 'PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:"false"' "$deploy"
+          grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:"0"' "$deploy"
           grep -Fq 'if (!paypalOrderCreationEnabled(env)) return { enabled: false, environment: null };' commercial-runtime/src/worker.mjs
-          ! grep -Fq '/capture' commercial-runtime/src/worker.mjs
+          grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_ENABLED' commercial-runtime/src/worker.mjs
+          grep -Fq 'PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED' commercial-runtime/src/worker.mjs
+          grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR' commercial-runtime/src/worker.mjs
 
           echo PROTECTED_MAIN_SHA_MATCH=PASS
           echo PAYPAL_LIVE_AUTHORITY_FAIL_CLOSED=PASS

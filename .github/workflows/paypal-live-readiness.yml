@@ -67,6 +67,9 @@ jobs:
           grep -Fq 'PAYPAL_ENVIRONMENT:"live"' "$deploy"
           grep -Fq 'PAYPAL_ORDER_CREATION_ENABLED:"false"' "$deploy"
           grep -Fq 'PAYPAL_LIVE_ORDER_CREATION_ENABLED:"false"' "$deploy"
+          grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_ENABLED:"false"' "$deploy"
+          grep -Fq 'PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:"false"' "$deploy"
+          grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:"0"' "$deploy"
           grep -Fq 'PRODUCTION_AUTHORIZED:"false"' "$deploy"
           grep -Fq 'FINANCIAL_EXECUTION_AUTHORIZED:"false"' "$deploy"
           grep -Fq 'MAX_AUTONOMOUS_CAPITAL_USD:"0"' "$deploy"
@@ -99,7 +102,7 @@ jobs:
           test "$(jq -r '.url // empty' <<<"$webhook")" = "https://intake.jadeltechrd.com/api/v1/paypal/webhooks"
           missing=$(jq -r '
             [.event_types[]?.name] as $events |
-            ["PAYMENT.CAPTURE.COMPLETED","PAYMENT.CAPTURE.PENDING","PAYMENT.CAPTURE.DENIED","PAYMENT.CAPTURE.REFUNDED","PAYMENT.CAPTURE.REVERSED"] |
+            ["CHECKOUT.ORDER.APPROVED","PAYMENT.CAPTURE.COMPLETED","PAYMENT.CAPTURE.PENDING","PAYMENT.CAPTURE.DENIED","PAYMENT.CAPTURE.REFUNDED","PAYMENT.CAPTURE.REVERSED"] |
             map(select(. as $required | ($events | index($required)) == null)) | length
           ' <<<"$webhook")
           test "$missing" = 0
