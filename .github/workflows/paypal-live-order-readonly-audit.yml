@@ -83,8 +83,11 @@ jobs:
           assert len(post_lines) == 1  # Cloudflare D1 query transport; SQL is SELECT-only.
           assert 'SELECT po.payment_order_id' in text
           d1_job = text.split("  d1-order:\n", 1)[1].split("\n  paypal-order:\n", 1)[0]
-          assert "CLOUDFLARE_D1_READONLY_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN }}" in d1_job
+          expected_binding = "CLOUDFLARE_D1_READONLY_API_TOKEN_RAW: $" + "{{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN }}" 
+          assert expected_binding in d1_job
           assert "${CLOUDFLARE_D1_READONLY_API_TOKEN_RAW:-}" in d1_job
+          assert "name: d1-live-readonly-audit" in d1_job
+          assert "name: d1-recovery-drill" not in d1_job
           assert "CLOUDFLARE_D1_API_TOKEN_RAW" not in d1_job
           assert "secrets.CLOUDFLARE_D1_API_TOKEN" not in d1_job
           print("CLOUDFLARE_D1_READONLY_CREDENTIAL_BOUND=PASS")
@@ -110,7 +113,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'READ_PAYPAL_ORDER_AND_WORKER_CONFIG' }}
     needs: contract
     environment:
-      name: d1-recovery-drill
+      name: d1-live-readonly-audit
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     outputs:
