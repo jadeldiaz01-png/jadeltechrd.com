@@ -4,15 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       phase:
-        description: Prepare, capture, or recover an already completed sandbox capture and certify settlement
+        description: Prepare supervised/automatic sandbox checkout, certify capture, or recover settlement
         required: true
         type: choice
         options:
           - prepare
+          - prepare_auto
           - capture_certify
+          - auto_capture_certify
           - recover_certify
       paypal_order_id:
-        description: Required for capture_certify or recover_certify; use the sandbox order id from prepare
+        description: Required for capture/recovery phases; use the sandbox order id from prepare
         required: false
         type: string
 
@@ -52,6 +54,9 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Run payment safety and negative contract tests
+        run: node --test commercial-runtime/test/paypal-automatic-payments.test.mjs commercial-runtime/test/paypal-webhook.test.mjs commercial-runtime/test/payment-reconciliation.test.mjs
+
       - name: Resolve, migrate and optionally seed isolated sandbox D1
         id: d1
         shell: bash
@@ -70,8 +75,10 @@ jobs:
       ledger_id: ${{ steps.provider.outputs.ledger_id }}
       settlement_id: ${{ steps.provider.outputs.settlement_id }}
       capture_id: ${{ steps.provider.outputs.capture_id }}
+      webhook_replay_status: ${{ steps.provider.outputs.webhook_replay_status }}
     env:
       PHASE: ${{ inputs.phase }}
+      AUTOMATIC_MODE: ${{ inputs.phase == 'prepare_auto' || inputs.phase == 'auto_capture_certify' }}
       INPUT_PAYPAL_ORDER_ID: ${{ inputs.paypal_order_id }}
       DATABASE_ID: ${{ needs.prepare-sandbox-d1.outputs.database_id }}
       PROJECT_ID: ${{ needs.prepare-sandbox-d1.outputs.project_id }}
@@ -97,7 +104,7 @@ jobs:
         run: bash scripts/paypal-sandbox-provider.sh
 
   certify-sandbox-result:
-    if: ${{ inputs.phase == 'capture_certify' || inputs.phase == 'recover_certify' }}
+    if: ${{ inputs.phase == 'capture_certify' || inputs.phase == 'auto_capture_certify' || inputs.phase == 'recover_certify' }}
     needs:
       - prepare-sandbox-d1
       - paypal-sandbox-phase
@@ -113,6 +120,9 @@ jobs:
       SETTLEMENT_ID: ${{ needs.paypal-sandbox-phase.outputs.settlement_id }}
       PAYPAL_ORDER_ID: ${{ needs.paypal-sandbox-phase.outputs.paypal_order_id }}
       CAPTURE_ID: ${{ needs.paypal-sandbox-phase.outputs.capture_id }}
+      AUTOMATIC_MODE: ${{ inputs.phase == 'auto_capture_certify' }}
+      WEBHOOK_REPLAY_STATUS: ${{ needs.paypal-sandbox-phase.outputs.webhook_replay_status }}
+      MISMATCH_NEGATIVE_TEST_STATUS: PASS
       CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
     steps:
@@ -125,13 +135,13 @@ jobs:
         shell: bash
         run: bash scripts/paypal-sandbox-certify.sh
 
-      - name: Attest real sandbox certification evidence
+      - name: Attest sandbox certification evidence
         id: attest
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
           subject-path: evidence/paypal-real-sandbox-sales-to-cash.json
 
-      - name: Upload real sandbox certification evidence
+      - name: Upload sandbox certification evidence
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: paypal-real-sandbox-sales-to-cash-${{ github.run_id }}-${{ github.run_attempt }}

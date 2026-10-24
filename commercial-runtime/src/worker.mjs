@@ -802,7 +802,10 @@ export async function handlePayPalWebhook(request, env, deps = {}) {
         const prior = await env.DB.prepare(
           "SELECT ledger_id,ledger_state FROM payment_ledger WHERE provider_event_id=? LIMIT 1"
         ).bind(facts.providerEventId).first();
-        if (prior?.ledger_state === "MATCHED") return json({ received:true, replayed:true, ledger_state:"MATCHED" }, 200);
+        if (prior?.ledger_state === "MATCHED") {
+          console.info("paypal_webhook_replay_idempotent", { event_type:facts.eventType, ledger_state:"MATCHED" });
+          return json({ received:true, replayed:true, ledger_state:"MATCHED" }, 200);
+        }
         if (prior?.ledger_id) {
           try {
             const reconciled = await reconcileVerifiedPayPalCapture(event,facts,prior.ledger_id,env,deps.fetchImpl);

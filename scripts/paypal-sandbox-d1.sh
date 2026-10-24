@@ -62,7 +62,7 @@ popd >/dev/null
 echo 'PAYPAL_SANDBOX_D1_MIGRATIONS=PASS'
 
 project_id=""
-if [ "$PHASE" = prepare ]; then
+if [ "$PHASE" = prepare ] || [ "$PHASE" = prepare_auto ]; then
   project_id=$(python3 -c 'import uuid; print(uuid.uuid4())')
   now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   idempotency="paypal-sandbox-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"

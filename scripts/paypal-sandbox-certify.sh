@@ -33,6 +33,22 @@ test "$(jq -r '.event_type' <<<"$row")" = PAYMENT.CAPTURE.COMPLETED
 test "$(jq -r '.verification_status' <<<"$row")" = VERIFIED
 test "$(jq -r '.settlement_status' <<<"$row")" = MATCHED
 
+if [ "$AUTOMATIC_MODE" = true ]; then
+  test "$WEBHOOK_REPLAY_STATUS" = PASS || { echo 'PAYPAL_SANDBOX_REPLAY_EVIDENCE_MISSING=YES' >&2; exit 4; }
+  test "$MISMATCH_NEGATIVE_TEST_STATUS" = PASS || { echo 'PAYPAL_SANDBOX_MISMATCH_TEST_MISSING=YES' >&2; exit 4; }
+  count_payload=$(jq -n --arg capture "$CAPTURE_ID" --arg po "$PAYMENT_ORDER_ID" '{sql:"SELECT (SELECT COUNT(*) FROM payment_events WHERE event_type=? AND resource_id=?) AS event_count,(SELECT COUNT(*) FROM payment_ledger l JOIN payment_events e ON e.provider_event_id=l.provider_event_id WHERE e.event_type=? AND e.resource_id=? AND l.ledger_state=?) AS ledger_count,(SELECT COUNT(*) FROM sales_settlements WHERE payment_order_id=? AND status=?) AS settlement_count",params:["PAYMENT.CAPTURE.COMPLETED",$capture,"PAYMENT.CAPTURE.COMPLETED",$capture,"MATCHED",$po,"MATCHED"]}')
+  counts=$(curl --fail-with-body -sS -X POST \
+    -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+    --data "$count_payload" \
+    "https://api.cloudflare.com/client/v4/accounts/$account_id/d1/database/$DATABASE_ID/query")
+  test "$(jq -r '.success' <<<"$counts")" = true
+  count_row=$(jq -c '.result[0].results[0]' <<<"$counts")
+  test "$(jq -r '.event_count' <<<"$count_row")" = 1
+  test "$(jq -r '.ledger_count' <<<"$count_row")" = 1
+  test "$(jq -r '.settlement_count' <<<"$count_row")" = 1
+  echo 'PAYPAL_SANDBOX_EXACTLY_ONCE_COUNTS=PASS events=1 ledger=1 settlements=1'
+fi
+
 mkdir -p evidence
 hash_value() {
   printf '%s' "$1" | sha256sum | awk '{print $1}'
@@ -55,6 +71,9 @@ jq -n \
   --arg payment_order_sha256 "$payment_order_hash" \
   --arg ledger_sha256 "$ledger_hash" \
   --arg settlement_sha256 "$settlement_hash" \
+  --arg capture_mode "$([ "$AUTOMATIC_MODE" = true ] && printf automatic_sandbox || printf supervised_sandbox)" \
+  --arg replay_status "${WEBHOOK_REPLAY_STATUS:-NOT_RUN}" \
+  --arg mismatch_test_status "${MISMATCH_NEGATIVE_TEST_STATUS:-NOT_RUN}" \
   '{
     schema:"jadel.paypal.real-sandbox.sales-to-cash.v1",
     status:"PASS",
@@ -62,6 +81,14 @@ jq -n \
     workflow_run_id:$run_id,
     observed_at:$observed_at,
     paypal_environment:"sandbox",
+    capture_mode:$capture_mode,
+    exactly_once_checks:(if $capture_mode=="automatic_sandbox" then {
+      webhook_replay:$replay_status,
+      amount_mismatch_negative_contract_test:$mismatch_test_status,
+      payment_events:1,
+      ledger_entries:1,
+      settlements:1
+    } else null end),
     authority:{
       paypal_live_credentials_used:false,
       real_money_movement:false,
@@ -90,4 +117,4 @@ jq -n \
   }' > evidence/paypal-real-sandbox-sales-to-cash.json
 
 sha256sum evidence/paypal-real-sandbox-sales-to-cash.json | tee evidence/paypal-real-sandbox-sales-to-cash.sha256
-echo 'PAYPAL_REAL_SANDBOX_SALES_TO_CASH=PASS'
+echo 'PAYPAL_SANDBOX_SALES_TO_CASH_CERTIFICATION=PASS'
