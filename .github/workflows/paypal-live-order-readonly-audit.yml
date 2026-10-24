@@ -79,7 +79,8 @@ jobs:
           for fragment in forbidden:
               if fragment in text:
                   raise SystemExit("FORBIDDEN_MUTATION_CONTRACT=FAIL")
-          post_lines = [line for line in text.splitlines() if "curl" in line and "-X " + "POST" in line]\n          assert len(post_lines) == 1  # Cloudflare D1 query transport; SQL is SELECT-only.
+          post_lines = [line for line in text.splitlines() if "curl" in line and "-X " + "POST" in line]
+          assert len(post_lines) == 1  # Cloudflare D1 query transport; SQL is SELECT-only.
           assert 'SELECT po.payment_order_id' in text
           print("READONLY_CONTRACT=PASS")
           PY
