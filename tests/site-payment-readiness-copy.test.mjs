@@ -37,11 +37,11 @@ test("all 11 publicly listed services have a quote-gated PayPal path without a d
 
   const visible = [...fallback.matchAll(/data-cta-id="service_quote_([a-z]+)"/g)].map(match => match[1]).sort();
   assert.deepEqual(visible, ids, 'each static service has a governed intake CTA');
-  assert.equal([...fallback.matchAll(/>Solicitar cotización<\/a>/g)].length, 11);
+  assert.equal([...fallback.matchAll(/data-cta-id="service_quote_[^"]+"[^>]*>Solicitar cotización<\/a>/g)].length, 11);
   assert.match(fallback, /Los 11 servicios permiten solicitar una cotización para pagar con PayPal/);
   assert.match(app, /Para los 11 servicios, primero solicita y acepta una cotización/);
   assert.match(app, /governedIntakeUrl\(\[service\.id\]\)/);
-  assert.match(app, /Solicitar cotización/);
+  assert.match(app, /data-cta-id="service_quote_\\$\\{service\\.id\\}"[^>]*>Solicitar cotización<\\/a>/);
 
   for (const id of ids) {
     assert.ok(fallback.includes(`href="/solicitar-proyecto.html?services=${id}&utm_source=service_catalog`), `static intake path for ${id}`);
