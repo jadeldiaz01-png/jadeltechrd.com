@@ -1,0 +1,332 @@
+name: Read-only PayPal LIVE order and Worker configuration audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact protected main SHA
+        required: true
+        type: string
+      paypal_order_id:
+        description: PayPal LIVE order ID to inspect
+        required: true
+        type: string
+      payment_order_id:
+        description: Internal payment order UUID
+        required: true
+        type: string
+      quote_id:
+        description: Quote UUID linked to the payment
+        required: true
+        type: string
+      confirmation:
+        description: Type READ_PAYPAL_ORDER_AND_WORKER_CONFIG
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - .github/workflows/paypal-live-order-readonly-audit.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paypal-live-order-readonly-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  D1_NAME: jadel-commercial-runtime
+  WORKER_NAME: jadel-commercial-runtime
+  PAYPAL_LIVE_API: https://api-m.paypal.com
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Enforce read-only workflow contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path(".github/workflows/paypal-live-order-readonly-audit.yml").read_text()
+          assert "READ_PAYPAL_ORDER_AND_WORKER_CONFIG" in text
+          assert "contents: read" in text
+          assert "quote_id" in text and "payment_order_id" in text and "paypal_order_id" in text
+          assert "https://api-m.paypal.com/v2/checkout/orders/$PAYPAL_ORDER_ID" in text
+          assert "SELECT po.payment_order_id" in text
+          assert "PAYPAL_AUTOMATIC_CAPTURE_ENABLED" in text
+          assert "PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED" in text
+          assert "workers/scripts/$WORKER_NAME/deployments" in text
+          assert "workers/scripts/$WORKER_NAME/versions/$version_id" in text
+          forbidden = [
+              "/" + "capture",
+              "/" + "refund",
+              "/v1/payments/" + "payouts",
+              "wrangler" + " deploy",
+              "INSERT" + " INTO",
+              "UPDATE" + " payment_",
+              "UPDATE" + " quotes",
+              "DELETE" + " FROM",
+              "DROP" + " TABLE",
+              "ALTER" + " TABLE",
+          ]
+          for fragment in forbidden:
+              if fragment in text:
+                  raise SystemExit("FORBIDDEN_MUTATION_CONTRACT=FAIL")
+          post_lines = [line for line in text.splitlines() if "curl" in line and "-X " + "POST" in line]
+          assert len(post_lines) == 1  # Cloudflare D1 query transport; SQL is SELECT-only.
+          assert 'SELECT po.payment_order_id' in text
+          d1_job = text.split("  d1-order:\n", 1)[1].split("\n  paypal-order:\n", 1)[0]
+          expected_binding = "CLOUDFLARE_D1_READONLY_API_TOKEN_RAW: $" + "{{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN }}" 
+          assert expected_binding in d1_job
+          assert "${CLOUDFLARE_D1_READONLY_API_TOKEN_RAW:-}" in d1_job
+          assert "name: d1-live-readonly-audit" in d1_job
+          assert "name: d1-recovery-drill" not in d1_job
+          assert "CLOUDFLARE_D1_API_TOKEN_RAW" not in d1_job
+          assert "secrets.CLOUDFLARE_D1_API_TOKEN" not in d1_job
+          print("CLOUDFLARE_D1_READONLY_CREDENTIAL_BOUND=PASS")
+          expected_sha_checks = [
+              '[[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]',
+              'test "$GITHUB_REF" = refs/heads/main',
+              'test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"',
+              'test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"',
+              'test "$GITHUB_SHA" = "$EXPECTED_SHA"',
+          ]
+          paypal_job = text.split("  paypal-order:\n", 1)[1].split("\n  worker-config:\n", 1)[0]
+          worker_job = text.split("  worker-config:\n", 1)[1]
+          for job_name, job_text in [("paypal-order", paypal_job), ("worker-config", worker_job)]:
+              job_lines = [line.strip() for line in job_text.splitlines()]
+              for check in expected_sha_checks:
+                  assert job_lines.count(check) == 1, f"{job_name}: SHA guard must be a standalone command: {check}"
+              assert not any("&&" in line and ("git rev-parse" in line or "GITHUB_SHA" in line) for line in job_lines), f"{job_name}: SHA guards must not be chained"
+          print("SHA_GUARDS_FAIL_CLOSED=PASS")
+          print("READONLY_CONTRACT=PASS")
+          PY
+
+  d1-order:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'READ_PAYPAL_ORDER_AND_WORKER_CONFIG' }}
+    needs: contract
+    environment:
+      name: d1-live-readonly-audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    outputs:
+      database_id: ${{ steps.audit.outputs.database_id }}
+      amount_minor: ${{ steps.audit.outputs.amount_minor }}
+      currency: ${{ steps.audit.outputs.currency }}
+      payment_status: ${{ steps.audit.outputs.payment_status }}
+      quote_status: ${{ steps.audit.outputs.quote_status }}
+      project_state: ${{ steps.audit.outputs.project_state }}
+      policy_status: ${{ steps.audit.outputs.policy_status }}
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      PAYPAL_ORDER_ID: ${{ inputs.paypal_order_id }}
+      PAYMENT_ORDER_ID: ${{ inputs.payment_order_id }}
+      QUOTE_ID: ${{ inputs.quote_id }}
+      CLOUDFLARE_D1_READONLY_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout exact protected main SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Validate SHA and mask order identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          for value in "$PAYPAL_ORDER_ID" "$PAYMENT_ORDER_ID" "$QUOTE_ID"; do echo "::add-mask::$value"; done
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PAYPAL_ORDER_ID" =~ ^[A-Za-z0-9-]{1,128}$ ]]
+          [[ "$PAYMENT_ORDER_ID" =~ ^[0-9a-fA-F-]{36}$ ]]
+          [[ "$QUOTE_ID" =~ ^[0-9a-fA-F-]{36}$ ]]
+          test "$GITHUB_REF" = refs/heads/main
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          echo 'PROTECTED_MAIN_SHA=PASS'
+      - name: Read exact D1 payment and quote row
+        id: audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          token=$(printf '%s' "${CLOUDFLARE_D1_READONLY_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          test -n "$token" && [[ "$account" =~ ^[0-9a-fA-F]{32}$ ]]
+          echo "::add-mask::$token"
+          auth=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
+
+          status=$(curl -sS -o /tmp/token-verify.json -w '%{http_code}' "${auth[@]}" https://api.cloudflare.com/client/v4/user/tokens/verify)
+          test "$status" = 200 && test "$(jq -r '.result.status // empty' /tmp/token-verify.json)" = active
+          db_status=$(curl -sS -o /tmp/d1-list.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database?name=$D1_NAME&per_page=100")
+          test "$db_status" = 200 && test "$(jq -r '.success' /tmp/d1-list.json)" = true
+          test "$(jq -r --arg n "$D1_NAME" '[.result[] | select(.name==$n)] | length' /tmp/d1-list.json)" = 1
+          db=$(jq -r --arg n "$D1_NAME" '.result[] | select(.name==$n) | .uuid' /tmp/d1-list.json)
+
+          sql="SELECT po.payment_order_id,po.provider_order_id,po.quote_id,po.status AS payment_status,po.amount_minor,po.currency_code,po.project_id,q.status AS quote_status,q.total_amount_minor AS quote_amount_minor,q.currency_code AS quote_currency_code,p.state AS project_state,p.policy_status FROM payment_orders po JOIN quotes q ON q.quote_id=po.quote_id JOIN project_requests p ON p.project_id=po.project_id WHERE po.payment_order_id=? AND po.provider_order_id=? AND po.quote_id=? AND po.provider='paypal' LIMIT 2"
+          payload=$(jq -nc --arg sql "$sql" --arg a "$PAYMENT_ORDER_ID" --arg b "$PAYPAL_ORDER_ID" --arg c "$QUOTE_ID" '{sql:$sql,params:[$a,$b,$c]}')
+          query_status=$(curl -sS -o /tmp/d1-query.json -w '%{http_code}' -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database/$db/query" --data "$payload")
+          test "$query_status" = 200 && test "$(jq -r '.success' /tmp/d1-query.json)" = true
+          test "$(jq '[.result[].results[]?] | length' /tmp/d1-query.json)" = 1
+          row=$(jq -c '.result[].results[0]' /tmp/d1-query.json)
+          test "$(jq -r '.payment_order_id' <<<"$row")" = "$PAYMENT_ORDER_ID"
+          test "$(jq -r '.provider_order_id' <<<"$row")" = "$PAYPAL_ORDER_ID"
+          test "$(jq -r '.quote_id' <<<"$row")" = "$QUOTE_ID"
+          amount=$(jq -r '.amount_minor|tonumber' <<<"$row")
+          quote_amount=$(jq -r '.quote_amount_minor|tonumber' <<<"$row")
+          currency=$(jq -r '.currency_code' <<<"$row")
+          quote_currency=$(jq -r '.quote_currency_code' <<<"$row")
+          [[ "$amount" =~ ^[0-9]+$ ]] && test "$amount" -gt 0 && test "$amount" = "$quote_amount"
+          test "$currency" = "$quote_currency"
+          echo "database_id=$db" >> "$GITHUB_OUTPUT"
+          echo "amount_minor=$amount" >> "$GITHUB_OUTPUT"
+          echo "currency=$currency" >> "$GITHUB_OUTPUT"
+          for field in payment_status quote_status project_state policy_status; do
+            printf '%s=%s\n' "$field" "$(jq -r --arg f "$field" '.[$f]' <<<"$row")" >> "$GITHUB_OUTPUT"
+            printf '%s=%s\n' "$(printf '%s' "$field" | tr '[:lower:]' '[:upper:]')" "$(jq -r --arg f "$field" '.[$f]' <<<"$row")" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo 'D1_EXACT_ORDER_LINKAGE=PASS'
+          echo 'D1_QUOTE_AMOUNT_AND_CURRENCY=PASS'
+          echo 'D1_OUTPUT=NO_PII'
+
+  paypal-order:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'READ_PAYPAL_ORDER_AND_WORKER_CONFIG' }}
+    needs: [contract, d1-order]
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    outputs:
+      order_status: ${{ steps.paypal.outputs.order_status }}
+      amount_match: ${{ steps.paypal.outputs.amount_match }}
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      PAYPAL_ORDER_ID: ${{ inputs.paypal_order_id }}
+      PAYMENT_ORDER_ID: ${{ inputs.payment_order_id }}
+      QUOTE_ID: ${{ inputs.quote_id }}
+      PAYPAL_CLIENT_ID_RAW: ${{ secrets.PAYPAL_CLIENT_ID }}
+      PAYPAL_CLIENT_SECRET_RAW: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      D1_AMOUNT_MINOR: ${{ needs.d1-order.outputs.amount_minor }}
+      D1_CURRENCY: ${{ needs.d1-order.outputs.currency }}
+    steps:
+      - name: Checkout exact protected main SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Read PayPal LIVE order by GET
+        id: paypal
+        shell: bash
+        run: |
+          set -euo pipefail
+          for value in "$PAYPAL_ORDER_ID" "$PAYMENT_ORDER_ID" "$QUOTE_ID"; do echo "::add-mask::$value"; done
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = refs/heads/main
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+
+          client_id=$(printf '%s' "${PAYPAL_CLIENT_ID_RAW:-}" | tr -d '\r\n')
+          client_secret=$(printf '%s' "${PAYPAL_CLIENT_SECRET_RAW:-}" | tr -d '\r\n')
+          test -n "$client_id" && test -n "$client_secret"
+          echo "::add-mask::$client_id"; echo "::add-mask::$client_secret"
+          oauth_status=$(curl -sS -o /tmp/oauth.json -w '%{http_code}' -u "$client_id:$client_secret" -H 'Accept: application/json' -d 'grant_type=client_credentials' "$PAYPAL_LIVE_API/v1/oauth2/token")
+          test "$oauth_status" = 200
+          token=$(jq -r '.access_token // empty' /tmp/oauth.json)
+          test -n "$token"; echo "::add-mask::$token"
+          order_status_code=$(curl -sS -o /tmp/order.json -w '%{http_code}' -H "Authorization: Bearer $token" -H 'Accept: application/json' "$PAYPAL_LIVE_API/v2/checkout/orders/$PAYPAL_ORDER_ID")
+          test "$order_status_code" = 200
+          test "$(jq -r '.id // empty' /tmp/order.json)" = "$PAYPAL_ORDER_ID"
+          test "$(jq -r '.purchase_units | length' /tmp/order.json)" = 1
+          test "$(jq -r '.purchase_units[0].custom_id // empty' /tmp/order.json)" = "$PAYMENT_ORDER_ID"
+          test "$(jq -r '.purchase_units[0].invoice_id // empty' /tmp/order.json)" = "$QUOTE_ID"
+          test "$(jq -r '.purchase_units[0].amount.currency_code // empty' /tmp/order.json)" = "$D1_CURRENCY"
+          expected_amount=$(printf '%d.%02d' "$((D1_AMOUNT_MINOR / 100))" "$((D1_AMOUNT_MINOR % 100))")
+          test "$(jq -r '.purchase_units[0].amount.value // empty' /tmp/order.json)" = "$expected_amount"
+
+          status=$(jq -r '.status // empty' /tmp/order.json)
+          test -n "$status"
+          capture_count=$(jq '[.purchase_units[].payments.captures[]? | select(.status=="COMPLETED")] | length' /tmp/order.json)
+          if [ "$status" = COMPLETED ]; then
+            test "$capture_count" = 1
+            capture=$(jq -c '[.purchase_units[].payments.captures[]? | select(.status=="COMPLETED")][0]' /tmp/order.json)
+            test "$(jq -r '.amount.currency_code' <<<"$capture")" = "$D1_CURRENCY"
+            test "$(jq -r '.amount.value' <<<"$capture")" = "$expected_amount"
+          fi
+          echo "order_status=$status" >> "$GITHUB_OUTPUT"
+          echo 'amount_match=true' >> "$GITHUB_OUTPUT"
+          echo "PAYPAL_ORDER_STATE=$status" >> "$GITHUB_STEP_SUMMARY"
+          echo 'PAYPAL_LINKAGE_AND_AMOUNT_MATCH=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'PAYPAL_OPERATION=GET_ONLY_NO_CAPTURE' >> "$GITHUB_STEP_SUMMARY"
+
+  worker-config:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'READ_PAYPAL_ORDER_AND_WORKER_CONFIG' }}
+    needs: [contract, d1-order]
+    environment:
+      name: g1-cloudflare-readonly
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      EXPECTED_D1_ID: ${{ needs.d1-order.outputs.database_id }}
+    steps:
+      - name: Checkout exact protected main SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Read effective active Worker versions and bindings
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = refs/heads/main
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+
+          token=$(printf '%s' "${CLOUDFLARE_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          test -n "$token" && [[ "$account" =~ ^[0-9a-fA-F]{32}$ ]] && test -n "$EXPECTED_D1_ID"
+          echo "::add-mask::$token"
+          auth=(-H "Authorization: Bearer $token" -H 'Accept: application/json')
+          verify_code=$(curl -sS -o /tmp/cf-token.json -w '%{http_code}' "${auth[@]}" https://api.cloudflare.com/client/v4/user/tokens/verify)
+          test "$verify_code" = 200 && test "$(jq -r '.result.status // empty' /tmp/cf-token.json)" = active
+          deploy_code=$(curl -sS -o /tmp/deployments.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/workers/scripts/$WORKER_NAME/deployments?per_page=1")
+          test "$deploy_code" = 200 && test "$(jq -r '.success' /tmp/deployments.json)" = true
+          test "$(jq '[.result.deployments[]?] | length' /tmp/deployments.json)" = 1
+          test "$(jq '[.result.deployments[0].versions[]?] | length' /tmp/deployments.json)" -ge 1
+          total=$(jq '[.result.deployments[0].versions[]?.percentage] | add' /tmp/deployments.json)
+          test "$total" = 100
+          version_ids=$(jq -r '.result.deployments[0].versions[].version_id' /tmp/deployments.json)
+
+          while IFS= read -r version_id; do
+            [[ "$version_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+            code=$(curl -sS -o /tmp/version.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/workers/scripts/$WORKER_NAME/versions/$version_id")
+            test "$code" = 200 && test "$(jq -r '.success' /tmp/version.json)" = true
+            bindings=$(jq -c '.result.resources.bindings // []' /tmp/version.json)
+            test "$(jq --arg id "$EXPECTED_D1_ID" '[.[] | select(.name=="DB" and .type=="d1" and .id==$id)] | length' <<<"$bindings")" = 1
+            for flag in PAYPAL_AUTOMATIC_CAPTURE_ENABLED PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED FINANCIAL_EXECUTION_AUTHORIZED; do
+              value=$(jq -r --arg n "$flag" '[.[] | select(.name==$n and .type=="plain_text")][0].text // "__UNSET__"' <<<"$bindings")
+              test "$value" = false || { echo "LIVE_CONTROL_NOT_EXPLICITLY_FALSE flag=$flag value=$value" >&2; exit 30; }
+            done
+          done <<<"$version_ids"
+          echo 'WORKER_ACTIVE_DEPLOYMENT=100_PERCENT_VERIFIED'
+          echo 'WORKER_D1_BINDING_MATCH=PASS'
+          echo 'CAPTURE_RECONCILIATION_AND_FINANCIAL_AUTHORIZATION=EXPLICIT_FALSE'
+          echo 'WORKER_BINDING_VALUES=REDACTED'
+          echo 'WORKER_CONFIGURATION_OPERATION=GET_ONLY'
