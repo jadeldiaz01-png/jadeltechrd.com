@@ -93,6 +93,9 @@ jobs:
           assert "name: d1-recovery-drill" not in d1_job
           assert "CLOUDFLARE_D1_API_TOKEN_RAW" not in d1_job
           assert "secrets.CLOUDFLARE_D1_API_TOKEN" not in d1_job
+          assert "https://api.cloudflare.com/client/v4/accounts/$account/tokens/verify" in d1_job, "ACCOUNT_TOKEN_VERIFY_REQUIRED"
+          assert "/user/tokens/verify" not in d1_job, "USER_TOKEN_VERIFY_FORBIDDEN"
+          print("D1_ACCOUNT_TOKEN_VERIFY_CONTRACT=PASS")
           print("CLOUDFLARE_D1_READONLY_CREDENTIAL_BOUND=PASS")
           assert "PAYPAL_ORDER_ID: " + "$" + "{{ inputs.paypal_order_id }}" not in text, "PAYPAL_ORDER_ID_MUST_NOT_BE_JOB_ENV"
           assert "PAYMENT_ORDER_ID: " + "$" + "{{ inputs.payment_order_id }}" not in text, "PAYMENT_ORDER_ID_MUST_NOT_BE_JOB_ENV"
@@ -185,8 +188,8 @@ jobs:
           echo "::add-mask::$token"
           auth=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
 
-          if ! status=$(curl -sS -o /tmp/token-verify.json -w '%{http_code}' "${auth[@]}" https://api.cloudflare.com/client/v4/user/tokens/verify); then stage=TOKEN_VERIFY_TRANSPORT; false; fi
-          if [ "$status" != 200 ]; then stage=TOKEN_VERIFY_HTTP; false; fi
+          if ! status=$(curl -sS -o /tmp/token-verify.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/tokens/verify"); then stage=TOKEN_VERIFY_TRANSPORT; false; fi
+          if [ "$status" != 200 ]; then echo "TOKEN_VERIFY_HTTP_STATUS=$status" >&2; stage=TOKEN_VERIFY_HTTP; false; fi
           if [ "$(jq -r '.result.status // empty' /tmp/token-verify.json)" != active ]; then stage=TOKEN_INACTIVE; false; fi
 
           stage=D1_DATABASE_LIST
