@@ -26,6 +26,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/paypal-live-order-readonly-audit.yml
+      - .github/workflows/paypal-live-capture.yml
 
 permissions:
   contents: read
@@ -53,8 +54,10 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import re
           from pathlib import Path
           text = Path(".github/workflows/paypal-live-order-readonly-audit.yml").read_text()
+          capture = Path(".github/workflows/paypal-live-capture.yml").read_text()
           assert "READ_PAYPAL_ORDER_AND_WORKER_CONFIG" in text
           assert "contents: read" in text
           assert "quote_id" in text and "payment_order_id" in text and "paypal_order_id" in text
@@ -91,6 +94,21 @@ jobs:
           assert "CLOUDFLARE_D1_API_TOKEN_RAW" not in d1_job
           assert "secrets.CLOUDFLARE_D1_API_TOKEN" not in d1_job
           print("CLOUDFLARE_D1_READONLY_CREDENTIAL_BOUND=PASS")
+          assert "PAYPAL_ORDER_ID: " + "$" + "{{ inputs.paypal_order_id }}" not in text, "PAYPAL_ORDER_ID_MUST_NOT_BE_JOB_ENV"
+          assert "PAYMENT_ORDER_ID: " + "$" + "{{ inputs.payment_order_id }}" not in text, "PAYMENT_ORDER_ID_MUST_NOT_BE_JOB_ENV"
+          assert "QUOTE_ID: " + "$" + "{{ inputs.quote_id }}" not in text, "QUOTE_ID_MUST_NOT_BE_JOB_ENV"
+          assert "jq -c '.inputs // {}' \"$GITHUB_EVENT_PATH\"" in text
+          assert "printf '::add-mask::%s\\n' \"$value\"" in text
+          for job_name in ["d1-preflight", "verify-webhook"]:
+              capture_job = capture.split(f"  {job_name}:\n", 1)[1]
+              capture_job = re.split(r"\n  [a-z][a-z0-9-]*:\n", capture_job, maxsplit=1)[0]
+              assert "name: d1-live-readonly-audit" in capture_job, job_name
+              expected_capture_binding = "CLOUDFLARE_D1_READONLY_API_TOKEN_RAW: $" + "{{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN }}"
+              assert expected_capture_binding in capture_job, job_name
+              assert "d1-recovery-drill" not in capture_job, job_name
+              assert "CLOUDFLARE_D1_API_TOKEN_RAW" not in capture_job, job_name
+              assert "secrets.CLOUDFLARE_D1_API_TOKEN" not in capture_job, job_name
+          print("LIVE_CAPTURE_USES_PRODUCTION_READONLY_D1=PASS")
           expected_sha_checks = [
               '[[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]',
               'test "$GITHUB_REF" = refs/heads/main',
@@ -126,9 +144,6 @@ jobs:
       policy_status: ${{ steps.audit.outputs.policy_status }}
     env:
       EXPECTED_SHA: ${{ inputs.expected_sha }}
-      PAYPAL_ORDER_ID: ${{ inputs.paypal_order_id }}
-      PAYMENT_ORDER_ID: ${{ inputs.payment_order_id }}
-      QUOTE_ID: ${{ inputs.quote_id }}
       CLOUDFLARE_D1_READONLY_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
     steps:
@@ -142,11 +157,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for value in "$PAYPAL_ORDER_ID" "$PAYMENT_ORDER_ID" "$QUOTE_ID"; do echo "::add-mask::$value"; done
           [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$PAYPAL_ORDER_ID" =~ ^[A-Za-z0-9-]{1,128}$ ]]
-          [[ "$PAYMENT_ORDER_ID" =~ ^[0-9a-fA-F-]{36}$ ]]
-          [[ "$QUOTE_ID" =~ ^[0-9a-fA-F-]{36}$ ]]
           test "$GITHUB_REF" = refs/heads/main
           git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
@@ -158,34 +169,51 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          event_inputs=$(jq -c '.inputs // {}' "$GITHUB_EVENT_PATH")
+          PAYPAL_ORDER_ID=$(jq -r '.paypal_order_id // empty' <<<"$event_inputs")
+          PAYMENT_ORDER_ID=$(jq -r '.payment_order_id // empty' <<<"$event_inputs")
+          QUOTE_ID=$(jq -r '.quote_id // empty' <<<"$event_inputs")
+          for value in "$PAYPAL_ORDER_ID" "$PAYMENT_ORDER_ID" "$QUOTE_ID"; do printf '::add-mask::%s\n' "$value"; done
+          [[ "$PAYPAL_ORDER_ID" =~ ^[A-Za-z0-9-]{1,128}$ ]]
+          [[ "$PAYMENT_ORDER_ID" =~ ^[0-9a-fA-F-]{36}$ ]]
+          [[ "$QUOTE_ID" =~ ^[0-9a-fA-F-]{36}$ ]]
+          stage=TOKEN_VERIFY
+          trap 'rc=$?; printf "D1_AUDIT_FAILURE_STAGE=%s\n" "$stage" | tee -a "$GITHUB_STEP_SUMMARY" >&2; exit "$rc"' ERR
           token=$(printf '%s' "${CLOUDFLARE_D1_READONLY_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
           account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
           test -n "$token" && [[ "$account" =~ ^[0-9a-fA-F]{32}$ ]]
           echo "::add-mask::$token"
           auth=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
 
-          status=$(curl -sS -o /tmp/token-verify.json -w '%{http_code}' "${auth[@]}" https://api.cloudflare.com/client/v4/user/tokens/verify)
-          test "$status" = 200 && test "$(jq -r '.result.status // empty' /tmp/token-verify.json)" = active
-          db_status=$(curl -sS -o /tmp/d1-list.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database?name=$D1_NAME&per_page=100")
-          test "$db_status" = 200 && test "$(jq -r '.success' /tmp/d1-list.json)" = true
-          test "$(jq -r --arg n "$D1_NAME" '[.result[] | select(.name==$n)] | length' /tmp/d1-list.json)" = 1
+          if ! status=$(curl -sS -o /tmp/token-verify.json -w '%{http_code}' "${auth[@]}" https://api.cloudflare.com/client/v4/user/tokens/verify); then stage=TOKEN_VERIFY_TRANSPORT; false; fi
+          if [ "$status" != 200 ]; then stage=TOKEN_VERIFY_HTTP; false; fi
+          if [ "$(jq -r '.result.status // empty' /tmp/token-verify.json)" != active ]; then stage=TOKEN_INACTIVE; false; fi
+
+          stage=D1_DATABASE_LIST
+          if ! db_status=$(curl -sS -o /tmp/d1-list.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database?name=$D1_NAME&per_page=100"); then stage=D1_DATABASE_LIST_TRANSPORT; false; fi
+          if [ "$db_status" != 200 ] || [ "$(jq -r '.success // false' /tmp/d1-list.json)" != true ]; then stage=D1_DATABASE_LIST_RESPONSE; false; fi
+          if [ "$(jq -r --arg n "$D1_NAME" '[.result[] | select(.name==$n)] | length' /tmp/d1-list.json)" != 1 ]; then stage=D1_DATABASE_NOT_UNIQUE; false; fi
           db=$(jq -r --arg n "$D1_NAME" '.result[] | select(.name==$n) | .uuid' /tmp/d1-list.json)
 
+          stage=D1_QUERY
           sql="SELECT po.payment_order_id,po.provider_order_id,po.quote_id,po.status AS payment_status,po.amount_minor,po.currency_code,po.project_id,q.status AS quote_status,q.total_amount_minor AS quote_amount_minor,q.currency_code AS quote_currency_code,p.state AS project_state,p.policy_status FROM payment_orders po JOIN quotes q ON q.quote_id=po.quote_id JOIN project_requests p ON p.project_id=po.project_id WHERE po.payment_order_id=? AND po.provider_order_id=? AND po.quote_id=? AND po.provider='paypal' LIMIT 2"
           payload=$(jq -nc --arg sql "$sql" --arg a "$PAYMENT_ORDER_ID" --arg b "$PAYPAL_ORDER_ID" --arg c "$QUOTE_ID" '{sql:$sql,params:[$a,$b,$c]}')
-          query_status=$(curl -sS -o /tmp/d1-query.json -w '%{http_code}' -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database/$db/query" --data "$payload")
-          test "$query_status" = 200 && test "$(jq -r '.success' /tmp/d1-query.json)" = true
-          test "$(jq '[.result[].results[]?] | length' /tmp/d1-query.json)" = 1
+          if ! query_status=$(curl -sS -o /tmp/d1-query.json -w '%{http_code}' -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database/$db/query" --data "$payload"); then stage=D1_QUERY_TRANSPORT; false; fi
+          if [ "$query_status" != 200 ] || [ "$(jq -r '.success // false' /tmp/d1-query.json)" != true ]; then stage=D1_QUERY_RESPONSE; false; fi
+          if [ "$(jq '[.result[].results[]?] | length' /tmp/d1-query.json)" != 1 ]; then stage=D1_ORDER_ROW_COUNT; false; fi
           row=$(jq -c '.result[].results[0]' /tmp/d1-query.json)
+          stage=D1_ORDER_LINKAGE
           test "$(jq -r '.payment_order_id' <<<"$row")" = "$PAYMENT_ORDER_ID"
           test "$(jq -r '.provider_order_id' <<<"$row")" = "$PAYPAL_ORDER_ID"
           test "$(jq -r '.quote_id' <<<"$row")" = "$QUOTE_ID"
+          stage=D1_AMOUNT_CURRENCY
           amount=$(jq -r '.amount_minor|tonumber' <<<"$row")
           quote_amount=$(jq -r '.quote_amount_minor|tonumber' <<<"$row")
           currency=$(jq -r '.currency_code' <<<"$row")
           quote_currency=$(jq -r '.quote_currency_code' <<<"$row")
           [[ "$amount" =~ ^[0-9]+$ ]] && test "$amount" -gt 0 && test "$amount" = "$quote_amount"
           test "$currency" = "$quote_currency"
+          trap - ERR
           echo "database_id=$db" >> "$GITHUB_OUTPUT"
           echo "amount_minor=$amount" >> "$GITHUB_OUTPUT"
           echo "currency=$currency" >> "$GITHUB_OUTPUT"
@@ -209,9 +237,6 @@ jobs:
       amount_match: ${{ steps.paypal.outputs.amount_match }}
     env:
       EXPECTED_SHA: ${{ inputs.expected_sha }}
-      PAYPAL_ORDER_ID: ${{ inputs.paypal_order_id }}
-      PAYMENT_ORDER_ID: ${{ inputs.payment_order_id }}
-      QUOTE_ID: ${{ inputs.quote_id }}
       PAYPAL_CLIENT_ID_RAW: ${{ secrets.PAYPAL_CLIENT_ID }}
       PAYPAL_CLIENT_SECRET_RAW: ${{ secrets.PAYPAL_CLIENT_SECRET }}
       D1_AMOUNT_MINOR: ${{ needs.d1-order.outputs.amount_minor }}
@@ -228,7 +253,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for value in "$PAYPAL_ORDER_ID" "$PAYMENT_ORDER_ID" "$QUOTE_ID"; do echo "::add-mask::$value"; done
+          event_inputs=$(jq -c '.inputs // {}' "$GITHUB_EVENT_PATH")
+          PAYPAL_ORDER_ID=$(jq -r '.paypal_order_id // empty' <<<"$event_inputs")
+          PAYMENT_ORDER_ID=$(jq -r '.payment_order_id // empty' <<<"$event_inputs")
+          QUOTE_ID=$(jq -r '.quote_id // empty' <<<"$event_inputs")
+          for value in "$PAYPAL_ORDER_ID" "$PAYMENT_ORDER_ID" "$QUOTE_ID"; do printf '::add-mask::%s\n' "$value"; done
+          [[ "$PAYPAL_ORDER_ID" =~ ^[A-Za-z0-9-]{1,128}$ ]]
+          [[ "$PAYMENT_ORDER_ID" =~ ^[0-9a-fA-F-]{36}$ ]]
+          [[ "$QUOTE_ID" =~ ^[0-9a-fA-F-]{36}$ ]]
           [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$GITHUB_REF" = refs/heads/main
           git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
