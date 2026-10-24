@@ -83,7 +83,7 @@ jobs:
               if fragment in text:
                   raise SystemExit("FORBIDDEN_MUTATION_CONTRACT=FAIL")
           post_lines = [line for line in text.splitlines() if "curl" in line and "-X " + "POST" in line]
-          assert len(post_lines) == 1  # Cloudflare D1 query transport; SQL is SELECT-only.
+          assert len(post_lines) == 2  # Both Cloudflare D1 query transports carry SELECT-only SQL.
           assert 'SELECT po.payment_order_id' in text
           d1_job = text.split("  d1-order:\n", 1)[1].split("\n  paypal-order:\n", 1)[0]
           expected_binding = "CLOUDFLARE_D1_READONLY_API_TOKEN_RAW: $" + "{{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN }}" 
@@ -203,7 +203,19 @@ jobs:
           payload=$(jq -nc --arg sql "$sql" --arg a "$PAYMENT_ORDER_ID" --arg b "$PAYPAL_ORDER_ID" --arg c "$QUOTE_ID" '{sql:$sql,params:[$a,$b,$c]}')
           if ! query_status=$(curl -sS -o /tmp/d1-query.json -w '%{http_code}' -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database/$db/query" --data "$payload"); then stage=D1_QUERY_TRANSPORT; false; fi
           if [ "$query_status" != 200 ] || [ "$(jq -r '.success // false' /tmp/d1-query.json)" != true ]; then stage=D1_QUERY_RESPONSE; false; fi
-          if [ "$(jq '[.result[].results[]?] | length' /tmp/d1-query.json)" != 1 ]; then stage=D1_ORDER_ROW_COUNT; false; fi
+          row_count=$(jq '[.result[].results[]?] | length' /tmp/d1-query.json)
+          if [ "$row_count" != 1 ]; then
+            stage=D1_DIAGNOSTIC_QUERY
+            diagnostic_sql="SELECT (SELECT COUNT(*) FROM payment_orders WHERE payment_order_id=? AND provider='paypal') AS payment_id_matches, (SELECT COUNT(*) FROM payment_orders WHERE provider_order_id=? AND provider='paypal') AS paypal_order_id_matches, (SELECT COUNT(*) FROM payment_orders WHERE payment_order_id=? AND provider_order_id=? AND quote_id=? AND provider='paypal') AS exact_payment_matches, (SELECT COUNT(*) FROM quotes WHERE quote_id=?) AS quote_matches, (SELECT COUNT(*) FROM payment_orders po JOIN quotes q ON q.quote_id=po.quote_id WHERE po.payment_order_id=? AND po.provider='paypal' AND q.quote_id=?) AS payment_quote_matches, (SELECT COUNT(*) FROM payment_orders po JOIN project_requests p ON p.project_id=po.project_id WHERE po.payment_order_id=? AND po.provider='paypal') AS payment_project_matches, (SELECT COUNT(*) FROM payment_orders po JOIN quotes q ON q.quote_id=po.quote_id JOIN project_requests p ON p.project_id=po.project_id WHERE po.payment_order_id=? AND po.provider_order_id=? AND po.quote_id=? AND po.provider='paypal') AS full_link_matches"
+            diagnostic_payload=$(jq -nc --arg sql "$diagnostic_sql" --arg a "$PAYMENT_ORDER_ID" --arg b "$PAYPAL_ORDER_ID" --arg c "$QUOTE_ID" '{sql:$sql,params:[$a,$b,$a,$b,$c,$c,$a,$c,$a,$a,$b,$c]}')
+            if ! diagnostic_status=$(curl -sS -o /tmp/d1-diagnostic.json -w '%{http_code}' -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database/$db/query" --data "$diagnostic_payload"); then stage=D1_DIAGNOSTIC_TRANSPORT; false; fi
+            if [ "$diagnostic_status" != 200 ] || [ "$(jq -r '.success // false' /tmp/d1-diagnostic.json)" != true ]; then stage=D1_DIAGNOSTIC_RESPONSE; false; fi
+            jq -e '.success == true and ([.result[].results[]?] | length) == 1 and all(.result[]; (.meta.rows_written | type) == "number" and .meta.rows_written == 0) and (.result[0].results[0] | has("payment_id_matches") and has("paypal_order_id_matches") and has("exact_payment_matches") and has("quote_matches") and has("payment_quote_matches") and has("payment_project_matches") and has("full_link_matches") and ([.payment_id_matches,.paypal_order_id_matches,.exact_payment_matches,.quote_matches,.payment_quote_matches,.payment_project_matches,.full_link_matches] | all(.[]; type == "number")))' /tmp/d1-diagnostic.json >/dev/null
+            diagnostic=$(jq -c '.result[0].results[0] | {payment_id_matches,paypal_order_id_matches,exact_payment_matches,quote_matches,payment_quote_matches,payment_project_matches,full_link_matches}' /tmp/d1-diagnostic.json)
+            echo "D1_LINKAGE_COUNTS=$diagnostic" | tee -a "$GITHUB_STEP_SUMMARY"
+            stage=D1_ORDER_ROW_COUNT
+            false
+          fi
           row=$(jq -c '.result[].results[0]' /tmp/d1-query.json)
           stage=D1_ORDER_LINKAGE
           test "$(jq -r '.payment_order_id' <<<"$row")" = "$PAYMENT_ORDER_ID"
