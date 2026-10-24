@@ -58,12 +58,12 @@ jobs:
           assert "READ_PAYPAL_ORDER_AND_WORKER_CONFIG" in text
           assert "contents: read" in text
           assert "quote_id" in text and "payment_order_id" in text and "paypal_order_id" in text
-          assert "https://api-m.paypal.com/v2/checkout/orders/\$PAYPAL_ORDER_ID" in text
+          assert "https://api-m.paypal.com/v2/checkout/orders/$PAYPAL_ORDER_ID" in text
           assert "SELECT po.payment_order_id" in text
           assert "PAYPAL_AUTOMATIC_CAPTURE_ENABLED" in text
           assert "PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED" in text
-          assert "workers/scripts/\$WORKER_NAME/deployments" in text
-          assert "workers/scripts/\$WORKER_NAME/versions/\$version_id" in text
+          assert "workers/scripts/$WORKER_NAME/deployments" in text
+          assert "workers/scripts/$WORKER_NAME/versions/$version_id" in text
           forbidden = [
               "/" + "capture",
               "/" + "refund",
