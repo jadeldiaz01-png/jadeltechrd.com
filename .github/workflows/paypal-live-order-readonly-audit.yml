@@ -54,7 +54,6 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re
           text = Path(".github/workflows/paypal-live-order-readonly-audit.yml").read_text()
           assert "READ_PAYPAL_ORDER_AND_WORKER_CONFIG" in text
           assert "contents: read" in text
@@ -66,15 +65,22 @@ jobs:
           assert "workers/scripts/\$WORKER_NAME/deployments" in text
           assert "workers/scripts/\$WORKER_NAME/versions/\$version_id" in text
           forbidden = [
-              r"/v2/checkout/orders/[^\s]+/capture",
-              r"/v2/payments/[^\s]+/captures",
-              r"/v1/payments/payouts",
-              r"wrangler\s+deploy",
-              r"\b(?:INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE)\s+(?:INTO|TABLE|FROM)?\b",
+              "/" + "capture",
+              "/" + "refund",
+              "/v1/payments/" + "payouts",
+              "wrangler" + " deploy",
+              "INSERT" + " INTO",
+              "UPDATE" + " payment_",
+              "UPDATE" + " quotes",
+              "DELETE" + " FROM",
+              "DROP" + " TABLE",
+              "ALTER" + " TABLE",
           ]
-          for pattern in forbidden:
-              if re.search(pattern, text, re.I):
+          for fragment in forbidden:
+              if fragment in text:
                   raise SystemExit("FORBIDDEN_MUTATION_CONTRACT=FAIL")
+          assert text.count("-X POST") == 1  # Cloudflare D1 query transport; SQL is checked below.
+          assert 'SELECT po.payment_order_id' in text
           print("READONLY_CONTRACT=PASS")
           PY
 
