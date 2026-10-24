@@ -82,6 +82,12 @@ jobs:
           post_lines = [line for line in text.splitlines() if "curl" in line and "-X " + "POST" in line]
           assert len(post_lines) == 1  # Cloudflare D1 query transport; SQL is SELECT-only.
           assert 'SELECT po.payment_order_id' in text
+          d1_job = text.split("  d1-order:\n", 1)[1].split("\n  paypal-order:\n", 1)[0]
+          assert "CLOUDFLARE_D1_READONLY_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN }}" in d1_job
+          assert "${CLOUDFLARE_D1_READONLY_API_TOKEN_RAW:-}" in d1_job
+          assert "CLOUDFLARE_D1_API_TOKEN_RAW" not in d1_job
+          assert "secrets.CLOUDFLARE_D1_API_TOKEN" not in d1_job
+          print("CLOUDFLARE_D1_READONLY_CREDENTIAL_BOUND=PASS")
           expected_sha_checks = [
               '[[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]',
               'test "$GITHUB_REF" = refs/heads/main',
@@ -120,7 +126,7 @@ jobs:
       PAYPAL_ORDER_ID: ${{ inputs.paypal_order_id }}
       PAYMENT_ORDER_ID: ${{ inputs.payment_order_id }}
       QUOTE_ID: ${{ inputs.quote_id }}
-      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_D1_READONLY_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - name: Checkout exact protected main SHA
@@ -149,7 +155,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          token=$(printf '%s' "${CLOUDFLARE_D1_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          token=$(printf '%s' "${CLOUDFLARE_D1_READONLY_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
           account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
           test -n "$token" && [[ "$account" =~ ^[0-9a-fA-F]{32}$ ]]
           echo "::add-mask::$token"
