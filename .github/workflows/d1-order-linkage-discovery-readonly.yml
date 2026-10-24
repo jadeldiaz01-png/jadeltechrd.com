@@ -1,0 +1,161 @@
+name: Discover one linked PayPal LIVE order (D1 read-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact protected main SHA
+        required: true
+        type: string
+      confirmation:
+        description: Type DISCOVER_ONE_LINKED_PAYPAL_ORDER
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - .github/workflows/d1-order-linkage-discovery-readonly.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: d1-order-linkage-discovery-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  D1_NAME: jadel-commercial-runtime
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Enforce D1-only read-only contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path(".github/workflows/d1-order-linkage-discovery-readonly.yml").read_text()
+          required = [
+              "name: d1-live-readonly-audit",
+              "CLOUDFLARE_D1_READONLY_API_TOKEN",
+              "accounts/$account/tokens/verify",
+              "SELECT po.payment_order_id",
+              "FROM payment_orders po",
+              "JOIN quotes q",
+              "JOIN project_requests p",
+              "D1_LINKAGE_DISCOVERY=PASS",
+              "rows_written",
+              "retention-days: 1",
+          ]
+          for fragment in required:
+              assert fragment in text, f"MISSING_READONLY_CONTROL={fragment}"
+          forbidden = [
+              "/v2/checkout/orders/",
+              "/capture",
+              "/refund",
+              "/v1/payments/payouts",
+              "wrangler deploy",
+              "INSERT INTO",
+              "UPDATE ",
+              "DELETE FROM",
+              "REPLACE INTO",
+              "DROP TABLE",
+              "ALTER TABLE",
+              "secrets.PAYPAL_",
+          ]
+          for fragment in forbidden:
+              assert fragment not in text, f"FORBIDDEN_OPERATION={fragment}"
+          assert text.count("-X POST") == 1, "Only one D1 query transport POST is permitted"
+          print("D1_ORDER_DISCOVERY_READONLY_CONTRACT=PASS")
+          PY
+
+  discover:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'DISCOVER_ONE_LINKED_PAYPAL_ORDER' }}
+    needs: contract
+    environment:
+      name: d1-live-readonly-audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      CLOUDFLARE_D1_READONLY_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout exact protected main SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify SHA, find one eligible linked order, and redact identifiers
+        id: lookup
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = refs/heads/main
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+
+          token=$(printf '%s' "${CLOUDFLARE_D1_READONLY_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          test -n "$token" && [[ "$account" =~ ^[0-9a-fA-F]{32}$ ]]
+          echo "::add-mask::$token"
+          echo "::add-mask::$account"
+          auth=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
+
+          verify_code=$(curl -sS -o /tmp/token-verify.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/tokens/verify")
+          test "$verify_code" = 200
+          test "$(jq -r '.result.status // empty' /tmp/token-verify.json)" = active
+
+          list_code=$(curl -sS -o /tmp/d1-list.json -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database?name=$D1_NAME&per_page=100")
+          test "$list_code" = 200
+          jq -e '.success == true' /tmp/d1-list.json >/dev/null
+          test "$(jq -r --arg n "$D1_NAME" '[.result[] | select(.name==$n)] | length' /tmp/d1-list.json)" = 1
+          db=$(jq -r --arg n "$D1_NAME" '.result[] | select(.name==$n) | .uuid' /tmp/d1-list.json)
+          [[ "$db" =~ ^[0-9a-fA-F-]{36}$ ]]
+          echo "::add-mask::$db"
+
+          sql="SELECT po.payment_order_id,po.provider_order_id,po.quote_id FROM payment_orders po JOIN quotes q ON q.quote_id=po.quote_id JOIN project_requests p ON p.project_id=po.project_id WHERE po.status='PENDING' AND q.status='ACCEPTED' AND p.state='PAYMENT_PENDING' AND p.policy_status='ALLOWED' AND po.provider='paypal' AND po.provider_order_id IS NOT NULL AND po.provider_order_id<>'' AND po.currency_code='USD' AND po.amount_minor=q.total_amount_minor AND po.currency_code=q.currency_code AND CAST(po.amount_minor AS INTEGER)>0 ORDER BY po.created_at DESC LIMIT 1"
+          payload=$(jq -nc --arg sql "$sql" '{sql:$sql}')
+          query_code=$(curl -sS -o /tmp/d1-candidate.json -w '%{http_code}' -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database/$db/query" --data "$payload")
+          test "$query_code" = 200
+          jq -e '.success == true and ([.result[].results[]?] | length <= 1) and all(.result[]; (.meta.rows_written | type) == "number" and .meta.rows_written == 0)' /tmp/d1-candidate.json >/dev/null
+          count=$(jq '[.result[].results[]?] | length' /tmp/d1-candidate.json)
+          if [ "$count" = 0 ]; then
+            echo 'D1_LINKED_ELIGIBLE_ORDER=NONE' >> "$GITHUB_STEP_SUMMARY"
+            echo 'found=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          row=$(jq -c '.result[0].results[0]' /tmp/d1-candidate.json)
+          payment_id=$(jq -r '.payment_order_id // empty' <<<"$row")
+          paypal_id=$(jq -r '.provider_order_id // empty' <<<"$row")
+          quote_id=$(jq -r '.quote_id // empty' <<<"$row")
+          [[ "$payment_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+          [[ "$paypal_id" =~ ^[A-Za-z0-9-]{1,128}$ ]]
+          [[ "$quote_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+          for value in "$payment_id" "$paypal_id" "$quote_id"; do printf '::add-mask::%s\n' "$value"; done
+          jq -n --arg payment_order_id "$payment_id" --arg paypal_order_id "$paypal_id" --arg quote_id "$quote_id" '{payment_order_id:$payment_order_id,paypal_order_id:$paypal_order_id,quote_id:$quote_id}' > candidate.json
+          echo 'D1_LINKED_ELIGIBLE_ORDER=FOUND' >> "$GITHUB_STEP_SUMMARY"
+          echo 'D1_LINKAGE_DISCOVERY=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'D1_ROWS_WRITTEN=0' >> "$GITHUB_STEP_SUMMARY"
+          echo 'ORDER_IDENTIFIERS=REDACTED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'found=true' >> "$GITHUB_OUTPUT"
+      - name: Store short-lived private candidate receipt
+        if: steps.lookup.outputs.found == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: d1-linked-order-candidate-${{ github.run_id }}
+          path: candidate.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
