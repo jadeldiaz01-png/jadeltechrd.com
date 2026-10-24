@@ -41,7 +41,7 @@ test("all 11 publicly listed services have a quote-gated PayPal path without a d
   assert.match(fallback, /Los 11 servicios permiten solicitar una cotización para pagar con PayPal/);
   assert.match(app, /Para los 11 servicios, primero solicita y acepta una cotización/);
   assert.match(app, /governedIntakeUrl\(\[service\.id\]\)/);
-  assert.match(app, /data-cta-id="service_quote_\\$\\{service\\.id\\}"[^>]*>Solicitar cotización<\\/a>/);
+  assert.ok(new RegExp('data-cta-id="service_quote_\\$\\{service\\.id\\}"[^>]*>Solicitar cotización</a>').test(app));
 
   for (const id of ids) {
     assert.ok(fallback.includes(`href="/solicitar-proyecto.html?services=${id}&utm_source=service_catalog`), `static intake path for ${id}`);
