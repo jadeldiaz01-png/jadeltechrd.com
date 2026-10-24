@@ -195,7 +195,7 @@
         </div>
         <div class="service-actions">
           <button class="mini-action" type="button" data-add-service="${service.id}" aria-pressed="false">Añadir</button>
-          <a class="mini-action service-quote" data-revenue-event="offer_cta_click" data-cta-id="service_quote_${service.id}" href="${governedIntakeUrl([service.id])}&utm_source=service_catalog&utm_medium=homepage&utm_campaign=service_intake">Cotizar · PayPal</a>
+          <a class="mini-action service-quote" data-revenue-event="offer_cta_click" data-cta-id="service_quote_${service.id}" href="${governedIntakeUrl([service.id])}&utm_source=service_catalog&utm_medium=homepage&utm_campaign=service_intake">Solicitar cotización</a>
         </div>
       </div>
     </article>`;
@@ -330,7 +330,7 @@
             <div class="estimate-row"><span>Soporte mensual</span><strong id="estimate-monthly">US$0</strong></div>
             <div class="estimate-note">Rango recomendado final: ±25% según integraciones, volumen y controles requeridos.</div>
             <button class="button primary full" type="button" id="copy-brief" disabled>Copiar brief de proyecto</button>
-            <a class="button secondary full is-disabled" href="#pagos" id="request-payment" aria-disabled="true">Solicitar alcance y pago</a>
+            <a class="button secondary full is-disabled" href="#pagos" id="request-payment" aria-disabled="true">Solicitar cotización</a>
             <span class="copy-feedback" id="copy-feedback" role="status"></span>
           </aside>
         </div>
