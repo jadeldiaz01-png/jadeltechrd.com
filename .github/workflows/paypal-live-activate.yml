@@ -121,6 +121,9 @@ jobs:
           grep -Fq 'PAYPAL_LIVE_ORDER_CREATION_DISABLED' commercial-runtime/src/worker.mjs
           grep -Fq 'PAYPAL_PRODUCTION_NOT_AUTHORIZED' commercial-runtime/src/worker.mjs
           grep -Fq 'PAYPAL_AUTONOMOUS_CAPITAL_NOT_ALLOWED' commercial-runtime/src/worker.mjs
+          grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_ENABLED' commercial-runtime/src/worker.mjs
+          grep -Fq 'PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED' commercial-runtime/src/worker.mjs
+          grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR' commercial-runtime/src/worker.mjs
           ! grep -Fq '/v2/checkout/orders/$paypal_order_id/capture' commercial-runtime/src/worker.mjs
           echo PAYPAL_LIVE_ACTIVATION_SOURCE_GATE=PASS
 
@@ -188,6 +191,9 @@ jobs:
               PAYPAL_ENVIRONMENT:"live",
               PAYPAL_ORDER_CREATION_ENABLED:"true",
               PAYPAL_LIVE_ORDER_CREATION_ENABLED:"true",
+              PAYPAL_AUTOMATIC_CAPTURE_ENABLED:"false",
+              PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:"false",
+              PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:"0",
               PRODUCTION_AUTHORIZED:"true",
               FINANCIAL_EXECUTION_AUTHORIZED:"false",
               MAX_AUTONOMOUS_CAPITAL_USD:"0"
@@ -197,7 +203,7 @@ jobs:
             workflows:[{name:"jadel-project-lifecycle",binding:"PROJECT_WORKFLOW",class_name:"ProjectLifecycleWorkflow"}],
             triggers:{crons:["*/2 * * * *"]}
           }' > commercial-runtime/wrangler.paypal-live-activate.jsonc
-          jq -e '.vars.PAYPAL_ENVIRONMENT=="live" and .vars.PAYPAL_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_LIVE_ORDER_CREATION_ENABLED=="true" and .vars.PRODUCTION_AUTHORIZED=="true" and .vars.FINANCIAL_EXECUTION_AUTHORIZED=="false" and .vars.MAX_AUTONOMOUS_CAPITAL_USD=="0"' commercial-runtime/wrangler.paypal-live-activate.jsonc >/dev/null
+          jq -e '.vars.PAYPAL_ENVIRONMENT=="live" and .vars.PAYPAL_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_LIVE_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_CAPTURE_ENABLED=="false" and .vars.PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED=="false" and .vars.PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR=="0" and .vars.PRODUCTION_AUTHORIZED=="true" and .vars.FINANCIAL_EXECUTION_AUTHORIZED=="false" and .vars.MAX_AUTONOMOUS_CAPITAL_USD=="0"' commercial-runtime/wrangler.paypal-live-activate.jsonc >/dev/null
           echo PAYPAL_LIVE_ACTIVATION_CONFIG=PASS
 
       - name: Install pinned Wrangler
