@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-token=$(printf '%s' "$CLOUDFLARE_D1_API_TOKEN_RAW" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+token=$(printf '%s' "$CLOUDFLARE_D1_READONLY_API_TOKEN_RAW" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
 account_id=$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID_RAW" | tr -d '\r\n[:space:]')
-test -n "$token" || { echo 'CLOUDFLARE_D1_TOKEN_PRESENT=NO' >&2; exit 2; }
+test -n "$token" || { echo 'CLOUDFLARE_D1_READONLY_TOKEN_PRESENT=NO' >&2; exit 2; }
 test -n "$account_id" || { echo 'CLOUDFLARE_ACCOUNT_ID_PRESENT=NO' >&2; exit 2; }
 for value in "$token" "$account_id"; do echo "::add-mask::$value"; done
 
-for required in "$DATABASE_ID" "$PROJECT_ID" "$PAYMENT_ORDER_ID" "$LEDGER_ID" "$SETTLEMENT_ID" "$PAYPAL_ORDER_ID" "$CAPTURE_ID"; do
+for required in "$DATABASE_ID" "$PROJECT_ID" "$PAYMENT_ORDER_ID" "$LEDGER_ID" "$PAYPAL_ORDER_ID" "$CAPTURE_ID"; do
   test -n "$required" || { echo 'PAYPAL_SANDBOX_CERTIFICATION_INPUT_MISSING=YES' >&2; exit 3; }
 done
 
@@ -15,8 +15,8 @@ payload=$(jq -n \
   --arg project "$PROJECT_ID" \
   --arg po "$PAYMENT_ORDER_ID" \
   --arg ledger "$LEDGER_ID" \
-  --arg settlement "$SETTLEMENT_ID" \
-  '{sql:"SELECT p.state AS project_state,po.status AS payment_order_status,l.ledger_state,e.event_type,e.verification_status,s.status AS settlement_status FROM project_requests p JOIN payment_orders po ON po.project_id=p.project_id JOIN sales_settlements s ON s.payment_order_id=po.payment_order_id JOIN payment_ledger l ON l.ledger_id=s.ledger_id JOIN payment_events e ON e.provider_event_id=l.provider_event_id WHERE p.project_id=? AND po.payment_order_id=? AND l.ledger_id=? AND s.settlement_id=? LIMIT 1",params:[$project,$po,$ledger,$settlement]}')
+  --arg capture "$CAPTURE_ID" \
+  '{sql:"SELECT s.settlement_id,p.state AS project_state,po.status AS payment_order_status,l.ledger_state,e.event_type,e.verification_status,s.status AS settlement_status FROM project_requests p JOIN payment_orders po ON po.project_id=p.project_id JOIN payment_ledger l ON l.project_id=p.project_id JOIN payment_events e ON e.provider_event_id=l.provider_event_id JOIN sales_settlements s ON s.payment_order_id=po.payment_order_id AND s.ledger_id=l.ledger_id WHERE p.project_id=? AND po.payment_order_id=? AND l.ledger_id=? AND e.resource_id=? AND e.event_type=?",params:[$project,$po,$ledger,$capture,"PAYMENT.CAPTURE.COMPLETED"]}')
 
 result=$(curl --fail-with-body -sS -X POST \
   -H "Authorization: Bearer $token" \
@@ -24,8 +24,12 @@ result=$(curl --fail-with-body -sS -X POST \
   --data "$payload" \
   "https://api.cloudflare.com/client/v4/accounts/$account_id/d1/database/$DATABASE_ID/query")
 test "$(jq -r '.success' <<<"$result")" = true
+row_count=$(jq -r '.result[0].results | length' <<<"$result")
+test "$row_count" = 1 || { echo "PAYPAL_SANDBOX_SETTLEMENT_JOIN_COUNT=$row_count" >&2; exit 5; }
 row=$(jq -c '.result[0].results[0]' <<<"$result")
 test "$row" != null
+SETTLEMENT_ID=$(jq -r '.settlement_id' <<<"$row")
+test -n "$SETTLEMENT_ID" && test "$SETTLEMENT_ID" != null
 test "$(jq -r '.project_state' <<<"$row")" = PAID
 test "$(jq -r '.payment_order_status' <<<"$row")" = COMPLETED
 test "$(jq -r '.ledger_state' <<<"$row")" = MATCHED

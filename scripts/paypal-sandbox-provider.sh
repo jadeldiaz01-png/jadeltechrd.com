@@ -412,15 +412,8 @@ if [ "$PHASE" = auto_capture_certify ]; then
 fi
 
 if [ "$PHASE" = auto_capture_certify ]; then
-  settlement_result=$(curl --fail-with-body -sS -X POST \
-    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' \
-    --data "$(jq -n --arg po "$payment_order_id" --arg capture "$capture_id" '{sql:"SELECT s.settlement_id FROM sales_settlements s JOIN payment_ledger l ON l.ledger_id=s.ledger_id JOIN payment_events e ON e.provider_event_id=l.provider_event_id WHERE s.payment_order_id=? AND e.resource_id=? AND e.event_type=? AND l.ledger_state=? AND s.status=?",params:[$po,$capture,"PAYMENT.CAPTURE.COMPLETED","MATCHED","MATCHED"]}')" \
-    "https://api.cloudflare.com/client/v4/accounts/$account_id/d1/database/$DATABASE_ID/query")
-  settlement_count=$(jq -r '.result[0].results | length' <<<"$settlement_result")
-  test "$settlement_count" = 1 || { echo "PAYPAL_SANDBOX_SETTLEMENT_COUNT=$settlement_count" >&2; exit 43; }
-  settlement_id=$(jq -r '.result[0].results[0].settlement_id' <<<"$settlement_result")
-  test -n "$settlement_id" && test "$settlement_id" != null
-  echo 'PAYPAL_SANDBOX_AUTOMATIC_RECONCILIATION=PASS settlements=1'
+  settlement_id=""
+  echo 'PAYPAL_SANDBOX_SETTLEMENT_READONLY_CERTIFICATION=DEFERRED'
 else
 settle_payload=$(jq -n \
   --arg project "$project_id" \
