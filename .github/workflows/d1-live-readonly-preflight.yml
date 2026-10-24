@@ -59,6 +59,8 @@ jobs:
                             "CREATE TABLE", "/capture", "/refund", "wrangler deploy", "git push"]:
               assert forbidden not in probe, f"FORBIDDEN_MUTATION={forbidden}"
           assert "CLOUDFLARE_D1_API_TOKEN_RAW" not in probe
+          assert "meta.rows_written // 0" not in probe
+          assert '(.meta.rows_written | type) == "number" and .meta.rows_written == 0' in probe
           print("D1_LIVE_READONLY_CONTRACT=PASS")
           PY
 
@@ -111,7 +113,7 @@ jobs:
           query_payload='{"sql":"SELECT 1 AS readonly_probe"}'
           query_code=$(curl -sS -o /tmp/d1-query.json -w '%{http_code}' -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database/$db_id/query" --data "$query_payload")
           test "$query_code" = 200
-          jq -e '.success == true and ([.result[].results[]? | select(.readonly_probe == 1)] | length) == 1 and ([.result[].meta.rows_written // 0] | add) == 0' /tmp/d1-query.json >/dev/null
+          jq -e '.success == true and ([.result[].results[]? | select(.readonly_probe == 1)] | length) == 1 and all(.result[]; (.meta.rows_written | type) == "number" and .meta.rows_written == 0)' /tmp/d1-query.json >/dev/null
 
           echo 'D1_LIVE_READONLY_AUTHENTICATED=PASS'
           echo 'D1_LIVE_DB_NAME_MATCH=PASS'
