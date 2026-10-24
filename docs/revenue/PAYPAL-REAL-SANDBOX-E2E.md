@@ -12,6 +12,8 @@ Create these secrets without pasting their values into repository files, issues,
 
 The workflow reuses the existing protected Cloudflare credentials from the `d1-recovery-drill` and `jadeltechrd` environments.
 
+The `d1-recovery-drill` environment must also define `CLOUDFLARE_D1_READONLY_API_TOKEN`, scoped to read/query access for the isolated Sandbox D1 only. It is separate from `CLOUDFLARE_D1_API_TOKEN`, which the preparation phase uses for database creation, migrations, and synthetic seeding. The certification phase performs SQL `SELECT` queries only with the read-only token; it fails closed if that secret is absent.
+
 It creates or reuses only the isolated resources:
 
 - D1: `jadel-commercial-paypal-sandbox`
@@ -48,6 +50,12 @@ Certification passes only when authoritative sandbox D1 state is:
 - webhook event: `PAYMENT.CAPTURE.COMPLETED`
 - webhook verification: `VERIFIED`
 - settlement: `MATCHED`
+
+## Automatic-capture certification
+
+Dispatch `phase=prepare_auto`, approve that order with a Sandbox Personal buyer, then dispatch `phase=auto_capture_certify` with the same `paypal_order_id`. If the order is already `COMPLETED`, this phase only observes its capture, replays the existing webhook event, and verifies settlement state; it must not call the PayPal capture endpoint again.
+
+For automatic certification, the provider phase does not query D1 with its Worker deployment token. The isolated certification job uses `CLOUDFLARE_D1_READONLY_API_TOKEN` to discover the settlement linked to the exact payment order, ledger row, and capture, and requires exactly one matching settlement.
 
 The evidence artifact hashes provider and internal identifiers instead of publishing their raw values.
 
