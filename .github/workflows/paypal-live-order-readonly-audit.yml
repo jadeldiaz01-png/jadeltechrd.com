@@ -82,6 +82,21 @@ jobs:
           post_lines = [line for line in text.splitlines() if "curl" in line and "-X " + "POST" in line]
           assert len(post_lines) == 1  # Cloudflare D1 query transport; SQL is SELECT-only.
           assert 'SELECT po.payment_order_id' in text
+          expected_sha_checks = [
+              '[[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]',
+              'test "$GITHUB_REF" = refs/heads/main',
+              'test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"',
+              'test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"',
+              'test "$GITHUB_SHA" = "$EXPECTED_SHA"',
+          ]
+          paypal_job = text.split("  paypal-order:\\n", 1)[1].split("\\n  worker-config:\\n", 1)[0]
+          worker_job = text.split("  worker-config:\\n", 1)[1]
+          for job_name, job_text in [("paypal-order", paypal_job), ("worker-config", worker_job)]:
+              job_lines = [line.strip() for line in job_text.splitlines()]
+              for check in expected_sha_checks:
+                  assert job_lines.count(check) == 1, f"{job_name}: SHA guard must be a standalone command: {check}"
+              assert not any("&&" in line and ("git rev-parse" in line or "GITHUB_SHA" in line) for line in job_lines), f"{job_name}: SHA guards must not be chained"
+          print("SHA_GUARDS_FAIL_CLOSED=PASS")
           print("READONLY_CONTRACT=PASS")
           PY
 
@@ -205,9 +220,12 @@ jobs:
         run: |
           set -euo pipefail
           for value in "$PAYPAL_ORDER_ID" "$PAYMENT_ORDER_ID" "$QUOTE_ID"; do echo "::add-mask::$value"; done
-          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] && test "$GITHUB_REF" = refs/heads/main
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = refs/heads/main
           git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
-          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA" && test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA" && test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
 
           client_id=$(printf '%s' "${PAYPAL_CLIENT_ID_RAW:-}" | tr -d '\r\n')
           client_secret=$(printf '%s' "${PAYPAL_CLIENT_SECRET_RAW:-}" | tr -d '\r\n')
@@ -265,9 +283,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] && test "$GITHUB_REF" = refs/heads/main
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = refs/heads/main
           git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
-          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA" && test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA" && test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
 
           token=$(printf '%s' "${CLOUDFLARE_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
           account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
