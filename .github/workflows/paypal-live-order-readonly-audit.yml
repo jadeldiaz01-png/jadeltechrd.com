@@ -98,7 +98,7 @@ jobs:
           assert "PAYMENT_ORDER_ID: " + "$" + "{{ inputs.payment_order_id }}" not in text, "PAYMENT_ORDER_ID_MUST_NOT_BE_JOB_ENV"
           assert "QUOTE_ID: " + "$" + "{{ inputs.quote_id }}" not in text, "QUOTE_ID_MUST_NOT_BE_JOB_ENV"
           assert "jq -c '.inputs // {}' \"$GITHUB_EVENT_PATH\"" in text
-          assert "printf '::add-mask::%s\n' \"$value\"" in text
+          assert "printf '::add-mask::%s\\n' \"$value\"" in text
           for job_name in ["d1-preflight", "verify-webhook"]:
               capture_job = capture.split(f"  {job_name}:\n", 1)[1]
               capture_job = re.split(r"\n  [a-z][a-z0-9-]*:\n", capture_job, maxsplit=1)[0]
