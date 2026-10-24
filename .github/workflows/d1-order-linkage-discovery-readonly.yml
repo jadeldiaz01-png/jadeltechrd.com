@@ -56,22 +56,23 @@ jobs:
           for fragment in required:
               assert fragment in text, f"MISSING_READONLY_CONTROL={fragment}"
           forbidden = [
-              "/v2/checkout/orders/",
-              "/capture",
-              "/refund",
-              "/v1/payments/payouts",
-              "wrangler deploy",
-              "INSERT INTO",
-              "UPDATE ",
-              "DELETE FROM",
-              "REPLACE INTO",
-              "DROP TABLE",
-              "ALTER TABLE",
-              "secrets.PAYPAL_",
+              "/v2/checkout/" + "orders/",
+              "/" + "capture",
+              "/" + "refund",
+              "/v1/payments/" + "payouts",
+              "wrangler" + " deploy",
+              "INSERT" + " INTO",
+              "UPDATE" + " ",
+              "DELETE" + " FROM",
+              "REPLACE" + " INTO",
+              "DROP" + " TABLE",
+              "ALTER" + " TABLE",
+              "secrets." + "PAYPAL_",
           ]
           for fragment in forbidden:
               assert fragment not in text, f"FORBIDDEN_OPERATION={fragment}"
-          assert text.count("-X POST") == 1, "Only one D1 query transport POST is permitted"
+          post_lines = [line for line in text.splitlines() if "curl " in line and "-X " + "POST" in line]
+          assert len(post_lines) == 1, "Only one D1 query transport POST is permitted"
           print("D1_ORDER_DISCOVERY_READONLY_CONTRACT=PASS")
           PY
 
