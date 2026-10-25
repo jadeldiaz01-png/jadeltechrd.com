@@ -26,3 +26,9 @@ test('readiness workflow remains non-financial and validates the same webhook co
   assert.match(workflow, /PAYMENT\.CAPTURE\.COMPLETED/);
   assert.match(workflow, /No order created and no money captured/);
 });
+
+test('missing PayPal webhook subscriptions are reported by allowlisted event name', () => {
+  assert.match(workflow, /PAYPAL_READINESS missing_events=/);
+  assert.match(workflow, /required_events_missing_/);
+  assert.doesNotMatch(workflow, /cat\s+.*response_file|cat\s+\/tmp\//);
+});
