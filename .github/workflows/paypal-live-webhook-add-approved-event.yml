@@ -1,0 +1,264 @@
+name: Add approved-order event to existing PayPal LIVE webhook
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact protected main SHA approved for the one-event PayPal LIVE webhook update
+        required: true
+        type: string
+      confirmation:
+        description: Type ADD_CHECKOUT_ORDER_APPROVED_TO_PAYPAL_LIVE_WEBHOOK
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jadel-paypal-live-webhook-add-approved-event
+  cancel-in-progress: false
+
+env:
+  API_HOST: intake.jadeltechrd.com
+  PAYPAL_LIVE_API: https://api-m.paypal.com
+  PAYPAL_WEBHOOK_URL: https://intake.jadeltechrd.com/api/v1/paypal/webhooks
+  REQUIRED_EVENT: CHECKOUT.ORDER.APPROVED
+  WORKER_NAME: jadel-commercial-runtime
+
+jobs:
+  worker-config:
+    if: ${{ inputs.confirmation == 'ADD_CHECKOUT_ORDER_APPROVED_TO_PAYPAL_LIVE_WEBHOOK' }}
+    environment:
+      name: g1-cloudflare-readonly
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout exact protected main SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify exact main and fail-closed source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          deploy=.github/workflows/deploy-commercial-runtime.yml
+          grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_ENABLED:"false"' "$deploy"
+          grep -Fq 'PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:"false"' "$deploy"
+          grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:"0"' "$deploy"
+          echo PAYPAL_WEBHOOK_CHANGE_EXACT_SHA=PASS
+          echo PAYPAL_CAPTURE_SOURCE_GUARD=PASS
+
+      - name: Verify effective active Worker flags are fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          token=$(printf '%s' "${CLOUDFLARE_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          test -n "$token" || { echo WORKER_CONFIG_TOKEN_PRESENT=NO >&2; exit 2; }
+          [[ "$account" =~ ^[0-9a-fA-F]{32}$ ]] || { echo WORKER_CONFIG_ACCOUNT_ID=INVALID >&2; exit 2; }
+          echo "::add-mask::$token"
+          auth=(-H "Authorization: Bearer $token" -H 'Accept: application/json')
+
+          code=$(curl -sS -o "$RUNNER_TEMP/token-verify.json" -w '%{http_code}' "${auth[@]}" https://api.cloudflare.com/client/v4/user/tokens/verify)
+          test "$code" = 200 && test "$(jq -r '.result.status // empty' "$RUNNER_TEMP/token-verify.json")" = active || {
+            echo "WORKER_CONFIG_TOKEN_VERIFY=FAIL HTTP_STATUS=$code" >&2
+            exit 3
+          }
+
+          code=$(curl -sS -o "$RUNNER_TEMP/deployments.json" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/workers/scripts/$WORKER_NAME/deployments?per_page=1")
+          test "$code" = 200 && test "$(jq -r '.success' "$RUNNER_TEMP/deployments.json")" = true || {
+            echo "WORKER_DEPLOYMENTS_READ=FAIL HTTP_STATUS=$code" >&2
+            exit 4
+          }
+          test "$(jq '[.result.deployments[]?] | length' "$RUNNER_TEMP/deployments.json")" = 1 || {
+            echo WORKER_ACTIVE_DEPLOYMENT=AMBIGUOUS >&2
+            exit 5
+          }
+          test "$(jq '[.result.deployments[0].versions[]?] | length' "$RUNNER_TEMP/deployments.json")" -ge 1
+          test "$(jq '[.result.deployments[0].versions[]?.percentage] | add' "$RUNNER_TEMP/deployments.json")" = 100 || {
+            echo WORKER_ACTIVE_TRAFFIC=NOT_100_PERCENT >&2
+            exit 5
+          }
+
+          version_ids=$(jq -r '.result.deployments[0].versions[].version_id' "$RUNNER_TEMP/deployments.json")
+          while IFS= read -r version_id; do
+            [[ "$version_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+            code=$(curl -sS -o "$RUNNER_TEMP/version.json" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/workers/scripts/$WORKER_NAME/versions/$version_id")
+            test "$code" = 200 && test "$(jq -r '.success' "$RUNNER_TEMP/version.json")" = true || {
+              echo "WORKER_VERSION_READ=FAIL HTTP_STATUS=$code" >&2
+              exit 6
+            }
+            bindings=$(jq -c '.result.resources.bindings // []' "$RUNNER_TEMP/version.json")
+            environment=$(jq -r '[.[] | select(.name=="PAYPAL_ENVIRONMENT" and .type=="plain_text")][0].text // "__UNSET__"' <<<"$bindings")
+            test "$environment" = live || {
+              echo WORKER_PAYPAL_ENVIRONMENT=NOT_LIVE >&2
+              exit 7
+            }
+            for secret_name in PAYPAL_CLIENT_ID PAYPAL_CLIENT_SECRET PAYPAL_WEBHOOK_ID; do
+              jq -e --arg name "$secret_name" '[.[] | select(.name==$name and .type=="secret_text")] | length == 1' <<<"$bindings" >/dev/null || {
+                echo "WORKER_REQUIRED_SECRET_BINDING=FAIL name=$secret_name" >&2
+                exit 7
+              }
+            done
+            for flag in PAYPAL_AUTOMATIC_CAPTURE_ENABLED PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED; do
+              value=$(jq -r --arg name "$flag" '[.[] | select(.name==$name and .type=="plain_text")][0].text // "__UNSET__"' <<<"$bindings")
+              test "$value" = false || {
+                echo "WORKER_LIVE_GUARD=FAIL flag=$flag" >&2
+                exit 7
+              }
+            done
+            capture_max=$(jq -r '[.[] | select(.name=="PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR" and .type=="plain_text")][0].text // "__UNSET__"' <<<"$bindings")
+            test "$capture_max" = 0 || {
+              echo WORKER_LIVE_CAPTURE_LIMIT=FAIL >&2
+              exit 7
+            }
+          done <<<"$version_ids"
+          echo WORKER_ACTIVE_VERSIONS=100_PERCENT
+          echo WORKER_AUTOMATIC_CAPTURE_AND_RECONCILIATION=EXPLICIT_FALSE
+          echo WORKER_AUTOMATIC_CAPTURE_MAX_MINOR=ZERO
+
+  add-event:
+    needs: worker-config
+    if: ${{ inputs.confirmation == 'ADD_CHECKOUT_ORDER_APPROVED_TO_PAYPAL_LIVE_WEBHOOK' }}
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      PAYPAL_CLIENT_ID_RAW: ${{ secrets.PAYPAL_CLIENT_ID }}
+      PAYPAL_CLIENT_SECRET_RAW: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      PAYPAL_WEBHOOK_ID_RAW: ${{ secrets.PAYPAL_WEBHOOK_ID }}
+    steps:
+      - name: Checkout exact protected main SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Add only the approved event to the existing webhook
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail() {
+            printf 'PAYPAL_WEBHOOK_UPDATE phase=%s result=FAIL HTTP_STATUS=%s ERROR=%s\n' "$1" "$2" "$3" >&2
+            exit 1
+          }
+          paypal_error_code() {
+            local value
+            value=$(jq -r '(.name // .error // "api_error") | tostring' "$1" 2>/dev/null || printf 'api_error')
+            value=$(printf '%s' "$value" | LC_ALL=C tr -cd 'A-Za-z0-9_.-' | cut -c1-48)
+            printf '%s' "${value:-api_error}"
+          }
+          normalize() { printf '%s' "$1" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'; }
+
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+
+          client_id=$(normalize "${PAYPAL_CLIENT_ID_RAW:-}")
+          client_secret=$(normalize "${PAYPAL_CLIENT_SECRET_RAW:-}")
+          webhook_id=$(normalize "${PAYPAL_WEBHOOK_ID_RAW:-}")
+          test -n "$client_id" || fail secrets 0 PAYPAL_CLIENT_ID_missing
+          test -n "$client_secret" || fail secrets 0 PAYPAL_CLIENT_SECRET_missing
+          test -n "$webhook_id" || fail secrets 0 PAYPAL_WEBHOOK_ID_missing
+          echo 'PAYPAL_SECRET_CHECK result=PRESENT'
+          echo "::add-mask::$client_id"
+          echo "::add-mask::$client_secret"
+          echo "::add-mask::$webhook_id"
+
+          response_file="$RUNNER_TEMP/paypal-response.json"
+          if ! http_status=$(curl -sS -o "$response_file" -w '%{http_code}' -u "$client_id:$client_secret" \
+            -H 'Accept: application/json' -H 'Accept-Language: en_US' \
+            -d 'grant_type=client_credentials' "$PAYPAL_LIVE_API/v1/oauth2/token"); then
+            fail oauth none transport_error
+          fi
+          if [[ ! "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+            fail oauth "$http_status" "$(paypal_error_code "$response_file")"
+          fi
+          token=$(jq -r '.access_token // empty' "$response_file" 2>/dev/null || true)
+          test -n "$token" || fail oauth "$http_status" access_token_missing
+          echo "::add-mask::$token"
+          echo "PAYPAL_WEBHOOK_UPDATE phase=oauth result=PASS HTTP_STATUS=$http_status"
+
+          if ! http_status=$(curl -sS -o "$response_file" -w '%{http_code}' -H "Authorization: Bearer $token" \
+            "$PAYPAL_LIVE_API/v1/notifications/webhooks/$webhook_id"); then
+            fail webhook_get none transport_error
+          fi
+          if [[ ! "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+            fail webhook_get "$http_status" "$(paypal_error_code "$response_file")"
+          fi
+          webhook_url=$(jq -r '.url // empty' "$response_file" 2>/dev/null || true)
+          test "$webhook_url" = "$PAYPAL_WEBHOOK_URL" || fail webhook_get "$http_status" webhook_url_mismatch
+          original_names=$(jq -ce '
+            if (.event_types | type) != "array" then error("invalid") else
+              [.event_types[].name | select(type == "string" and length > 0)]
+            end
+          ' "$response_file" 2>/dev/null || true)
+          test -n "$original_names" || fail webhook_get "$http_status" event_types_invalid
+          original_count=$(jq 'length' <<<"$original_names")
+          event_count=$(jq '.event_types | length' "$response_file")
+          test "$original_count" = "$event_count" || fail webhook_get "$http_status" event_name_invalid
+          echo "PAYPAL_WEBHOOK_UPDATE phase=webhook_get result=PASS HTTP_STATUS=$http_status"
+
+          already_present=$(jq -r --arg event "$REQUIRED_EVENT" 'any(.[]; . == $event)' <<<"$original_names")
+          if test "$already_present" != true; then
+            updated_event_types=$(jq -c '
+              .event_types | map(
+                {name: .name} +
+                (if has("description") then {description} else {} end) +
+                (if has("status") then {status} else {} end) +
+                (if has("resource_versions") then {resource_versions} else {} end)
+              ) + [{name: env.REQUIRED_EVENT}]
+            ' "$response_file")
+            patch_payload=$(jq -cn --argjson event_types "$updated_event_types" '[{op:"replace",path:"/event_types",value:$event_types}]')
+            if ! http_status=$(curl -sS -o "$response_file" -w '%{http_code}' -X PATCH \
+              -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+              --data "$patch_payload" "$PAYPAL_LIVE_API/v1/notifications/webhooks/$webhook_id"); then
+              fail webhook_patch none transport_error
+            fi
+            if [[ ! "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+              fail webhook_patch "$http_status" "$(paypal_error_code "$response_file")"
+            fi
+            echo "PAYPAL_WEBHOOK_UPDATE phase=webhook_patch result=PASS HTTP_STATUS=$http_status event=$REQUIRED_EVENT"
+          else
+            echo "PAYPAL_WEBHOOK_UPDATE phase=webhook_patch result=NOOP_ALREADY_PRESENT event=$REQUIRED_EVENT"
+          fi
+
+          if ! http_status=$(curl -sS -o "$response_file" -w '%{http_code}' -H "Authorization: Bearer $token" \
+            "$PAYPAL_LIVE_API/v1/notifications/webhooks/$webhook_id"); then
+            fail webhook_verify none transport_error
+          fi
+          if [[ ! "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+            fail webhook_verify "$http_status" "$(paypal_error_code "$response_file")"
+          fi
+          jq -e --arg url "$PAYPAL_WEBHOOK_URL" --arg target "$REQUIRED_EVENT" --argjson original "$original_names" \
+            '.url == $url and ([.event_types[]?.name] as $after | ($after | index($target) != null) and all($original[]; . as $name | ($after | index($name) != null)) and (($after | length) == ($original | length) + (if ($original | index($target)) == null then 1 else 0 end)))' \
+            "$response_file" >/dev/null || fail webhook_verify "$http_status" post_update_contract_mismatch
+          echo "PAYPAL_LIVE_WEBHOOK_EVENT_VERIFY=PASS HTTP_STATUS=$http_status event=$REQUIRED_EVENT"
+          {
+            echo '## PayPal LIVE webhook event update'
+            echo
+            echo '- Existing webhook URL and event subscriptions preserved.'
+            echo '- CHECKOUT.ORDER.APPROVED is present.'
+            echo '- Active Worker capture/reconciliation guards verified explicitly false before update.'
+            echo '- No order created; no capture, refund, payout, or deployment performed.'
+          } >> "$GITHUB_STEP_SUMMARY"
