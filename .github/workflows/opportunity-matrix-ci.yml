@@ -1,0 +1,26 @@
+name: opportunity-matrix-ci
+on:
+  pull_request:
+    paths:
+      - 'matriz-oportunidades.*'
+      - 'tests/opportunity-matrix.test.mjs'
+      - 'index.html'
+      - 'sitemap.xml'
+      - '.github/workflows/pages.yml'
+      - '.github/workflows/opportunity-matrix-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'matriz-oportunidades.*'
+      - 'tests/opportunity-matrix.test.mjs'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: node --test tests/opportunity-matrix.test.mjs

@@ -94,6 +94,9 @@ jobs:
             agent-services.json
             approval-console.html
             approval-console.js
+            matriz-oportunidades.html
+            matriz-oportunidades.css
+            matriz-oportunidades.json
           )
           for asset in "${public_assets[@]}"; do
             test -f "$asset"

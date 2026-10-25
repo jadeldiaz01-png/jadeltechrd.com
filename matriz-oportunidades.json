@@ -1,0 +1,83 @@
+{
+  "schema_version": "1.0.0",
+  "as_of": "2026-10-24",
+  "mode": "PREPARE_ONLY",
+  "governance": {
+    "max_unapproved_spend_usd": 0,
+    "live_payments": false,
+    "autonomous_outreach": false,
+    "affiliate_link_verified": false
+  },
+  "opportunities": [
+    {
+      "id": "cineforge",
+      "model": "servicios",
+      "platform": "Jadel Tech RD",
+      "offer": "CineForge · video comercial",
+      "state": "Oferta publicada",
+      "gate": "Presupuesto y aceptación del cliente",
+      "source": "https://jadeltechrd.com/",
+      "action": "/solicitar-proyecto.html?services=cineforge"
+    },
+    {
+      "id": "upwork",
+      "model": "servicios",
+      "platform": "Upwork",
+      "offer": "Producción y edición audiovisual",
+      "state": "Candidatura pendiente",
+      "gate": "Verificar Connects, portafolio y requisitos del puesto",
+      "source": "https://www.upwork.com/",
+      "action": "https://www.upwork.com/"
+    },
+    {
+      "id": "make",
+      "model": "servicios",
+      "platform": "Make Community",
+      "offer": "Servicios de automatización y contenido",
+      "state": "Normas por verificar",
+      "gate": "Revisar Hire a Pro y aprobación de publicación",
+      "source": "https://community.make.com/",
+      "action": "https://community.make.com/"
+    },
+    {
+      "id": "freelancer",
+      "model": "servicios",
+      "platform": "Freelancer.com",
+      "offer": "Proyectos audiovisuales",
+      "state": "Cuenta por verificar",
+      "gate": "Comprobar acceso y coste de propuesta",
+      "source": "https://www.freelancer.com/",
+      "action": "https://www.freelancer.com/"
+    },
+    {
+      "id": "systeme",
+      "model": "afiliacion",
+      "platform": "systeme.io",
+      "offer": "Programa de software de marketing",
+      "state": "Enlace personal pendiente",
+      "gate": "Registrar afiliado y validar enlace, términos y divulgación",
+      "source": "https://systeme.io/es/affiliate-agreement",
+      "action": "https://systeme.io/es/affiliate-program"
+    },
+    {
+      "id": "partnerstack",
+      "model": "afiliacion",
+      "platform": "PartnerStack",
+      "offer": "Afiliación de software B2B",
+      "state": "Aprobación pendiente",
+      "gate": "Certificar programa, país y cuenta",
+      "source": "https://partnerstack.com/",
+      "action": "https://partnerstack.com/"
+    },
+    {
+      "id": "tiktok",
+      "model": "afiliacion",
+      "platform": "TikTok Shop EE. UU.",
+      "offer": "Comisiones de creador",
+      "state": "No elegible según política estadounidense",
+      "gate": "No suplantar residencia ni eludir verificación",
+      "source": "https://seller-us.tiktok.com/university/essay?content_id=2786070166210347&default_language=en",
+      "action": "https://seller-us.tiktok.com/university/essay?content_id=2786070166210347&default_language=en"
+    }
+  ]
+}
