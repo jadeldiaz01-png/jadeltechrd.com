@@ -131,13 +131,17 @@ jobs:
           webhook_url=$(jq -r '.url // empty' "$response_file" 2>/dev/null || true)
           test "$webhook_url" = "https://intake.jadeltechrd.com/api/v1/paypal/webhooks" || \
             fail webhook_lookup "$http_status" webhook_url_mismatch
-          missing=$(jq -r '
+          missing_events=$(jq -r '
             [.event_types[]?.name] as $events |
             ["CHECKOUT.ORDER.APPROVED","PAYMENT.CAPTURE.COMPLETED","PAYMENT.CAPTURE.PENDING","PAYMENT.CAPTURE.DENIED","PAYMENT.CAPTURE.REFUNDED","PAYMENT.CAPTURE.REVERSED"] |
-            map(select(. as $required | ($events | index($required)) == null)) | length
+            map(select(. as $required | ($events | index($required)) == null)) | join(",")
           ' "$response_file" 2>/dev/null || printf 'invalid')
-          [[ "$missing" =~ ^[0-9]+$ ]] || fail webhook_lookup "$http_status" invalid_webhook_response
-          test "$missing" = 0 || fail webhook_lookup "$http_status" "required_events_missing_$missing"
+          test "$missing_events" != invalid || fail webhook_lookup "$http_status" invalid_webhook_response
+          if test -n "$missing_events"; then
+            missing_count=$(awk -F, '{print NF}' <<<"$missing_events")
+            printf 'PAYPAL_READINESS missing_events=%s\n' "$missing_events" >&2
+            fail webhook_lookup "$http_status" "required_events_missing_$missing_count"
+          fi
           echo "PAYPAL_READINESS phase=webhook_lookup result=PASS HTTP_STATUS=$http_status"
 
       - name: Verify production Worker health and live verification path
