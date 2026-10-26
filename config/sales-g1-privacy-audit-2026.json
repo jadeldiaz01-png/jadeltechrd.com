@@ -1,0 +1,251 @@
+{
+  "schema_version": "2026-10-08.g1.audit.v1",
+  "audit_id": "SALES-G1-PRIVACY-READONLY",
+  "service": "sales",
+  "reviewed_main_sha": "b66c547c9df44421679021b4d74c328d1cb84ae5",
+  "review_type": "SOURCE_CODE_OBSERVATION_NO_PERSONAL_DATA_ACCESS",
+  "overall_decision": "BLOCKED",
+  "certification_status": "NOT_CERTIFIED",
+  "production_authorized": false,
+  "marketing_or_outbound_enabled": false,
+  "crm_or_email_connector_authorized": false,
+  "subject_data_access_performed": false,
+  "external_provider_actions_performed": false,
+  "financial_execution_enabled": false,
+  "allowed_mode": "DOCUMENT_ONLY_READ_ONLY",
+  "audited_corpus": {
+    "repository": "jadeldiaz01-png/jadeltechrd.com",
+    "commit_sha": "b66c547c9df44421679021b4d74c328d1cb84ae5",
+    "files": [
+      {
+        "id": "public_intake_form",
+        "path": "solicitar-proyecto.html",
+        "blob_sha": "436fb899f411f2c67a9152243fc9650aeeb75f7b",
+        "observation": "PRIVACY_NOTICE_CHECKBOX_PRESENT"
+      },
+      {
+        "id": "browser_payload",
+        "path": "project-request.js",
+        "blob_sha": "cc666e42ef3cec905efdbac6e1c1ae5e1def5c33",
+        "observation": "NO_CONSENT_EVIDENCE_IN_JSON_PAYLOAD"
+      },
+      {
+        "id": "server_validation",
+        "path": "commercial-runtime/src/validation.mjs",
+        "blob_sha": "37b63fecebd2f5e09f7651b90063f701b580aa58",
+        "observation": "NO_PURPOSE_OR_CONSENT_PROOF_FIELD"
+      },
+      {
+        "id": "server_persistence",
+        "path": "commercial-runtime/src/worker.mjs",
+        "blob_sha": "6e5e501b17601a654c5e3a003cdaae41af3b8e71",
+        "observation": "REQUEST_PERSISTED_WITHOUT_CONSENT_RECEIPT"
+      },
+      {
+        "id": "intake_schema",
+        "path": "commercial-runtime/migrations/0001_init.sql",
+        "blob_sha": "9db8b4e1169c236af868998843368a5fe0bfaa8b",
+        "observation": "PII_STORED_WITHOUT_DEDICATED_CONSENT_AUDIT_COLUMN"
+      },
+      {
+        "id": "lead_schema",
+        "path": "commercial-runtime/migrations/0004_revenue_intelligence.sql",
+        "blob_sha": "cea3dd7f63a78454230061e937010b59bf963514",
+        "observation": "LEAD_SOURCE_ENUM_NOT_LAWFUL_COLLECTION_PROOF"
+      },
+      {
+        "id": "retention_schema",
+        "path": "commercial-runtime/migrations/0007_offer_attribution.sql",
+        "blob_sha": "4be100d3764e94fafb8d325c33a3dd1f08824069",
+        "observation": "ATTRIBUTION_COLUMNS_ONLY_NO_RETENTION"
+      },
+      {
+        "id": "privacy_notice",
+        "path": "index.html",
+        "blob_sha": "abd83fbf3fb46710af91c15459223954a2fcbdfa",
+        "observation": "PRIVACY_NOTICE_STATIC_DELETION_ROUTE_DYNAMIC"
+      },
+      {
+        "id": "privacy_deletion_renderer",
+        "path": "app.js",
+        "blob_sha": "f3243c64b50bae5713e62e2da6ff926ca20cd201",
+        "observation": "PUBLIC_DELETION_ARTICLE_GENERATED_BY_APP_JS"
+      },
+      {
+        "id": "analytics_consent",
+        "path": "analytics-consent.js",
+        "blob_sha": "c3902f0dca45d969458bce916185060885808233",
+        "observation": "SEPARATE_ANALYTICS_CONSENT_NOT_MARKETING"
+      },
+      {
+        "id": "sales_policy",
+        "path": "config/sales-lead-intelligence-production-readiness-2026.json",
+        "blob_sha": "cd07982b25537a6f156b607ce730433aeecb34db",
+        "observation": "G1_PREEXISTING_BLOCKED"
+      }
+    ]
+  },
+  "purpose_separation": {
+    "inbound_request_response": "PUBLIC_FORM_DECLARES_REQUEST_RESPONSE_PURPOSE",
+    "marketing_prospecting": "NOT_AUTHORIZED_BY_FORM_CHECKBOX",
+    "analytics": "SEPARATE_CONSENT_DOES_NOT_AUTHORIZE_OUTREACH",
+    "operational_privacy_evidence": "NO_SERVER_SIDE_CONSENT_RECEIPT_IN_INSPECTED_FLOW"
+  },
+  "findings": [
+    {
+      "id": "G1-P1-CONSENT-RECEIPT",
+      "severity": "HIGH",
+      "state": "CONFIRMED_CODE_GAP",
+      "description": "The required browser checkbox gates submit, but its state and notice-version evidence are not submitted, validated, or persisted in the examined commercial intake path.",
+      "required": [
+        "privacy_notice_version_hash",
+        "server_validated_purpose_evidence",
+        "atomic_consent_event_at_submission",
+        "negative_replay_without_proof",
+        "privacy_response_vs_marketing_separation"
+      ]
+    },
+    {
+      "id": "G1-P1-SUPPRESSION",
+      "severity": "HIGH",
+      "state": "EVIDENCE_MISSING",
+      "description": "No independent persistent suppression/objection enforcement at scoring and pre-send was established by the reviewed sales flows; do not contact leads.",
+      "required": [
+        "tenant_scoped_suppression_store",
+        "idempotent_objection_intake",
+        "suppression_checks_at_decision_and_send",
+        "hard_stop_on_unknown_or_revoked",
+        "provider_revocation_reconciliation"
+      ]
+    },
+    {
+      "id": "G1-P1-DSAR",
+      "severity": "HIGH",
+      "state": "EVIDENCE_MISSING",
+      "description": "A public deletion instruction exists, but authenticated intake-to-record deletion/correction workflow and restoration-safe purge evidence were not demonstrated.",
+      "required": [
+        "identity_verification",
+        "request_tracking",
+        "legal_hold_exceptions",
+        "cascade_to_derived_data",
+        "backup_tombstones",
+        "verified_dsar_e2e"
+      ]
+    },
+    {
+      "id": "G1-P1-RETENTION",
+      "severity": "HIGH",
+      "state": "EVIDENCE_MISSING",
+      "description": "Generic public notice lacks an approved per-purpose duration and working purge/backup schedule for lead data.",
+      "required": [
+        "lawyer_reviewed_retention_schedule",
+        "per_purpose_expiry",
+        "job_disabled_until_authorized",
+        "purge_dry_run",
+        "restore_without_resurrection",
+        "retention_e2e"
+      ]
+    },
+    {
+      "id": "G1-P1-PROVENANCE",
+      "severity": "HIGH",
+      "state": "EVIDENCE_MISSING",
+      "description": "The lead source field enumerates human/crm/verified_import, but does not itself prove licensed origin, third-party rights, time, jurisdiction or permitted outreach.",
+      "required": [
+        "per_lead_source_license_or_first_party_receipt",
+        "lawful_basis_and_jurisdiction",
+        "source_observed_at",
+        "notice_id_and_version",
+        "provider_terms_proof",
+        "lineage_and_change_history"
+      ]
+    },
+    {
+      "id": "G1-P1-LEGAL",
+      "severity": "HIGH",
+      "state": "PENDING_HUMAN_LEGAL_REVIEW",
+      "description": "Jurisdiction and channel-specific legal applicability requires human legal review; no jurisdiction-specific marketing authorization is inferred.",
+      "required": [
+        "RD_172_13_scope_and_exemptions",
+        "RD_310_14_sender_and_opt_out_duties",
+        "EU_GDPR_ePrivacy_if_applicable",
+        "US_CAN_SPAM_if_applicable",
+        "controller_processor_roles",
+        "cross_border_processing_mapping"
+      ]
+    }
+  ],
+  "legal_references": [
+    {
+      "id": "RD-172-13",
+      "jurisdiction": "DO",
+      "source_url": "https://sb.gob.do/media/4i1ploou/ley17213.pdf",
+      "focus": "personal-data principles, individual rights, consent and lawful exemptions",
+      "verified_in_public_primary_source": true,
+      "implementation_certified": false
+    },
+    {
+      "id": "RD-310-14",
+      "jurisdiction": "DO",
+      "source_url": "https://justicia.gob.do/wp-content/uploads/2025/10/ley-310-14-2.pdf",
+      "focus": "unsolicited commercial email, consent/prior-relationship exceptions, opt-out and message duties",
+      "verified_in_public_primary_source": true,
+      "implementation_certified": false
+    },
+    {
+      "id": "EU-GDPR-ART21",
+      "jurisdiction": "EU_EEA_CONDITIONAL",
+      "source_url": "https://commission.europa.eu/law/law-topic/data-protection/information-business-and-organisations/dealing-requests-individuals_en",
+      "focus": "direct-marketing objections and cessation of processing",
+      "verified_in_public_primary_source": true,
+      "implementation_certified": false
+    },
+    {
+      "id": "US-CAN-SPAM",
+      "jurisdiction": "US_CONDITIONAL",
+      "source_url": "https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business",
+      "focus": "commercial-email content, identity, opt-out and B2B duties",
+      "verified_in_public_primary_source": true,
+      "implementation_certified": false
+    }
+  ],
+  "data_retentions": {
+    "approved_schedule_exists": false,
+    "duration_days": null,
+    "retention_job_certified": false,
+    "legal_hold_policy_certified": false
+  },
+  "marketing_policy": {
+    "default_deny": true,
+    "form_consent_is_marketing_opt_in": false,
+    "analytics_consent_is_marketing_opt_in": false,
+    "provider_scope_selected": false,
+    "real_outreach_certified": false
+  },
+  "privacy_promotion_requirements": [
+    "independently_reviewed_legal_matrix",
+    "server_side_purpose_and_consent_receipt_e2e",
+    "real_persisted_source_and_lineage_evidence",
+    "dsar_and_suppression_end_to_end_tests",
+    "retention_and_backup_purge_drill",
+    "per_tenant_authz_and_dpia_if_applicable",
+    "approved_production_runtime_monitoring",
+    "separate_human_privacy_gate_authorization"
+  ],
+  "evidence_not_collected": [
+    "actual_personal_data_or_database_rows",
+    "authenticated_provider_opt_out_receipts",
+    "live_response_time_or_dsar_case",
+    "confirmed_retention_schedule",
+    "customer_or_platform_legal_authorization",
+    "real_CRM_campaign_or_email_delivery"
+  ],
+  "review_caveats": [
+    "Claims of no server-side consent receipt are limited to the pinned commercial intake flow, not unknown unreviewed systems.",
+    "Code presence is not deployment evidence; this is a source-code audit and does not certify runtime compliance.",
+    "RD-172-13 contains scope exemptions including certain corporate professional contact details; evaluate each dataset with counsel.",
+    "CAN-SPAM is not a universal opt-in law. Dominican Ley 310-14 and any applicable EU ePrivacy rules must be assessed separately.",
+    "Unknown lawful basis, purpose, revocation, destination jurisdiction or platform permission is DENY for outbound.",
+    "No fixed retention interval should be invented or adopted without applicable legal, contractual and user decisions."
+  ]
+}
