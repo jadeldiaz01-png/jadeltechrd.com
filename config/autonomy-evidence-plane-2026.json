@@ -1,0 +1,52 @@
+{
+  "schema_version":"2026.1",
+  "manifest_id":"jadeltechrd-autonomy-evidence-plane",
+  "state":"IMPLEMENTED_NOT_PRODUCTION_AUTHORIZED",
+  "principles":{"fail_closed":true,"least_privilege":true,"critical_action_from_probabilistic_output":false,"holdout_closed_by_default":true},
+  "planes":{
+    "experience":{"components":["GitHub Pages","Cloudflare edge","consent-aware GA4"],"pii_to_analytics":false},
+    "commercial":{"system_of_record":"Cloudflare D1","facts":["lead lifecycle","payment state","conversion outcomes"]},
+    "intelligence":{"modes":["deterministic","ML","deep-learning-candidate","LLM-advisory","multimodal-advisory"],"training_on_raw_pii":false},
+    "agentic":{"execution":"durable-workflow-candidate","policy":"OPA/Rego default-deny","secrets":"OpenBao/workload identity","external_side_effects":"HUMAN_APPROVAL_REQUIRED"},
+    "evidence":{"provenance":["exact source revision","input lineage","model revision","policy decision","artifact digest","timestamp"],"supply_chain":["SBOM","GitHub artifact attestation","Sigstore keyless where applicable"]},
+    "observability":{"standard":"OpenTelemetry","signals":["traces","metrics","logs"],"redact":["PII","secrets","auth headers","payment credentials"]},
+    "finops":{"guards":["per-run budget","monthly model ceiling","rate limit","token/tool-call ceiling","zero unapproved ad spend"]}
+  },
+  "autonomy":{
+    "L0":{"name":"OBSERVE","auto":true},
+    "L1":{"name":"ANALYZE_RECOMMEND","auto":true},
+    "L2":{"name":"DRAFT_INTERNAL","auto":true},
+    "L3":{"name":"REVERSIBLE_INTERNAL_ACTION","auto":"POLICY_AND_BUDGET_GATED"},
+    "L4":{"name":"EXTERNAL_SIDE_EFFECT","auto":false,"human_approval":true},
+    "L5":{"name":"FINANCIAL_CAPITAL_OR_TRADING","auto":false,"human_approval":true}
+  },
+  "mandatory_gates":[
+    "IDENTITY","AUTHORIZATION","POLICY","DATA_LINEAGE","PRIVACY","SECURITY","SUPPLY_CHAIN",
+    "EVALS","OBSERVABILITY","SLO","DR","IDEMPOTENCY","RECONCILIATION","REVERSIBILITY","FINOPS","HUMAN_APPROVAL_WHEN_REQUIRED"
+  ],
+  "ai_eval_suites":{
+    "agent":["direct_prompt_injection","indirect_prompt_injection","tool_poisoning","memory_poisoning","secret_exfiltration","pii_leakage","excessive_agency","loop_budget","stale_evidence","conflicting_sources"],
+    "ml":["point_in_time_lineage","temporal_split","leakage","baseline_delta","calibration","segment_stability","drift","missingness","reproducibility"],
+    "multimodal":["rights_provenance","visual_prompt_injection","unsafe_content","metadata_spoofing","human_publication_review"]
+  },
+  "revenue_objectives":{
+    "primary":["valid_leads","qualified_leads","converted_customers","realized_revenue"],
+    "diagnostic":["landing_to_cta_rate","cta_to_intake_rate","intake_to_valid_lead_rate","lead_to_qualified_rate","qualified_to_conversion_rate"],
+    "forbidden_claims":["guaranteed_revenue","guaranteed_profit","model_output_equals_authorization"]
+  },
+  "trading_boundary":{
+    "repository_separation_required":true,
+    "holdout":"CLOSED_BY_DEFAULT",
+    "edge_verified":false,
+    "gbm_authorized":false,
+    "paper_authorized":false,
+    "testnet_authorized":false,
+    "live_authorized":false,
+    "rule":"Only exact lineage-bound adjudicator artifacts may change these states."
+  },
+  "production_promotion":{
+    "authorized":false,
+    "requires":["all mandatory gates PASS and fresh","artifact provenance verified","adversarial eval PASS","SLO/error-budget evidence","restore drill evidence","human approval"],
+    "no_skipped_gate_counts_as_pass":true
+  }
+}
