@@ -1,6 +1,7 @@
 const API_ORIGIN = "https://intake.jadeltechrd.com";
 const CONFIG_URL = `${API_ORIGIN}/api/v1/public-config`;
 const REQUEST_URL = `${API_ORIGIN}/api/v1/project-requests`;
+const CONFIG_TIMEOUT_MS = 8000;
 const IDEMPOTENCY_SESSION_KEY = "jadel-project-request-idempotency-v1";
 const ALLOWED_SERVICES = new Set([
   "architecture","support","sales","social","cineforge","meta","analytics","revenue","quant","governance","multiagent"
@@ -88,7 +89,7 @@ function preselectFromQuery() {
   }
 }
 
-async function waitForTurnstile(timeoutMs = 8000) {
+async function waitForTurnstile(timeoutMs = CONFIG_TIMEOUT_MS) {
   const started = Date.now();
   while (!window.turnstile) {
     if (Date.now() - started > timeoutMs) throw new Error("TURNSTILE_CLIENT_TIMEOUT");
@@ -103,14 +104,22 @@ async function bootstrapTurnstile() {
   if (retryRuntime) retryRuntime.hidden = true;
   turnstileStatus.textContent = "Preparando verificación segura…";
   setStatus("");
-  const response = await fetch(CONFIG_URL, {
-    method: "GET",
-    headers: { "accept": "application/json" },
-    cache: "no-store",
-    credentials: "omit",
-  });
-  if (!response.ok) throw new Error("PUBLIC_CONFIG_UNAVAILABLE");
-  const config = await response.json();
+  const controller = new AbortController();
+  const configTimeout = setTimeout(() => controller.abort(), CONFIG_TIMEOUT_MS);
+  let config;
+  try {
+    const response = await fetch(CONFIG_URL, {
+      method: "GET",
+      headers: { "accept": "application/json" },
+      cache: "no-store",
+      credentials: "omit",
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error("PUBLIC_CONFIG_UNAVAILABLE");
+    config = await response.json();
+  } finally {
+    clearTimeout(configTimeout);
+  }
   if (!config.turnstile_sitekey || config.turnstile_action !== "project_request") throw new Error("PUBLIC_CONFIG_INVALID");
   turnstileAction = config.turnstile_action;
   await waitForTurnstile();
@@ -141,10 +150,11 @@ async function bootstrapTurnstile() {
 
 function explainRuntimeBlock(error) {
   bootstrapping = false;
-  const code = String(error?.message || "RUNTIME_UNAVAILABLE");
+  const code = error?.name === "AbortError" ? "PUBLIC_CONFIG_TIMEOUT" : String(error?.message || "RUNTIME_UNAVAILABLE");
   const messages = {
     PUBLIC_CONFIG_UNAVAILABLE: "El runtime no entregó configuración pública. El formulario queda bloqueado sin enviar datos.",
     PUBLIC_CONFIG_INVALID: "La configuración pública del runtime no pasó contrato. El formulario queda bloqueado.",
+    PUBLIC_CONFIG_TIMEOUT: "El runtime no respondió a tiempo. Reintenta la verificación; no se enviaron datos.",
     TURNSTILE_CLIENT_TIMEOUT: "Cloudflare Turnstile no cargó a tiempo. Revisa bloqueadores de scripts o reintenta.",
   };
   turnstileToken = "";
