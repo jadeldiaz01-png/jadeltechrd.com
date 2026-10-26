@@ -29,11 +29,14 @@ for (const offer of cfg.offers) {
 }
 const analytics = fs.readFileSync("revenue-funnel.js", "utf8");
 const ga4Loader = fs.readFileSync("ga4-loader.js", "utf8");
+const projectRequest = fs.readFileSync("project-request.js", "utf8");
+if (!projectRequest.includes('track("generate_lead", { lead_source: "project_request" })')) fail("project request lead attribution contract");
 for (const source of [analytics, ga4Loader]) {
   if (!source.includes("allowedAttributionValues")) fail("fixed attribution allowlist missing");
   if (!source.includes('utm_source: new Set(["website"')) fail("source values must be enumerated");
   if (/params\.get\(["']utm_term["']\)/.test(source)) fail("free-text utm_term must not be collected");
   if (!source.includes("prohibitedKeyPattern") && !source.includes("const forbidden =")) fail("analytics PII key guard missing");
+  if (!source.includes('lead_source: new Set(["website", "project_request"])')) fail("project request source attribution must be allowlisted");
 }
 
 const homepage = fs.readFileSync("index.html", "utf8");
