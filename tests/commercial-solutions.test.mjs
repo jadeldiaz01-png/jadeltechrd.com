@@ -29,6 +29,10 @@ test("all sales links use existing governed service identifiers", () => {
     const u = new URL(link, "https://jadeltechrd.com");
     assert.equal(u.pathname, "/solicitar-proyecto.html");
     const selected = u.searchParams.get("services");
+    if (selected === null) {
+      assert.equal(u.search, "", "an unscoped CTA must be the plain, governed intake");
+      continue;
+    }
     assert.ok(["architecture", "support"].includes(selected), "unknown service " + selected);
     assert.ok(intake.includes('"' + selected + '"'), "not available in intake allowlist");
   }
