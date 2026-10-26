@@ -1,0 +1,32 @@
+name: commercial-solutions-ci
+
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'app.js'
+      - 'soluciones-negocios.html'
+      - 'sitemap.xml'
+      - 'project-request.js'
+      - 'tests/commercial-solutions.test.mjs'
+      - '.github/workflows/pages.yml'
+      - '.github/workflows/commercial-solutions-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'soluciones-negocios.html'
+      - 'tests/commercial-solutions.test.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate commercial landing and governed deployment
+        run: node --test tests/commercial-solutions.test.mjs
