@@ -20,9 +20,9 @@ The public-domain SLO gate is measured independently from the full commercial-in
 
 ### Measurement model
 
-The external synthetic runs every 10 minutes at minutes 7, 17, 27, 37, 47 and 57 UTC. The measured SLI is always the first attempt. Transport retries may be used only for diagnostics and may never replace a failed measured sample.
+The authorized GitHub Actions schedule runs every 10 minutes at minutes 7, 17, 27, 37, 47 and 57 UTC; the external VPS watchdog dispatches at minutes 2, 12, 22, 32, 42 and 52 UTC. Both feed the same canonical ten-minute slots. The measured SLI is always the first attempt. Transport retries may be used only for diagnostics and may never replace a failed measured sample.
 
-Only scheduled runs count toward certification. Manual and push-triggered smoke probes are operational diagnostics and cannot increase the coverage numerator.
+Only authorized event/provider pairs count toward certification: GitHub Actions schedule with provider github_actions, or workflow_dispatch with provider external_watchdog. Manual diagnostics, push-triggered smoke probes and unsupported provider/event combinations cannot increase coverage. Two authorized probes in one ten-minute slot yield one slot; a failed observation cannot be hidden by a successful duplicate.
 
 Thirty complete UTC days contain 4,320 expected ten-minute slots. Certification requires at least 95% observed coverage and no blind interval longer than 30 minutes. Missing monitor observations are treated as missing evidence and never as successful service responses.
 
@@ -39,7 +39,7 @@ The commercial-intake health SLO above is intentionally distinct from the higher
 
 Error-budget consumption is calculated from observed eligible scheduled samples. Missing samples are handled by the independent evidence-coverage gate.
 
-The 30-day certifier evaluates 1h, 6h and 24h burn windows using thresholds 14.4x, 6x and 3x. A window with insufficient measurement coverage is UNKNOWN and prevents certification.
+The 30-day certifier evaluates paired long/short burn windows: 1h+10m at 14.4x, 6h+30m at 6x, 24h+2h at 3x, and 72h+6h at 1x. Both windows for the same rule must exceed its threshold to produce an active burn alert. A window with insufficient measurement coverage is UNKNOWN and prevents certification.
 
 A failed first-attempt availability or semantic probe creates or updates the operational GitHub Issue alert. Burn-rate alerts are evaluated independently by the certifier.
 
@@ -65,3 +65,7 @@ GitHub Actions scheduled jobs can be delayed or dropped under load, so scheduler
 HTTP synthetic duration maps to the OpenTelemetry `http.client.request.duration` semantic convention. Artifacts retain milliseconds for operational readability while the semantic convention's canonical unit is seconds.
 
 Cloudflare D1 analytics can complement service diagnosis with query volume, query latency and storage metrics, but those backend analytics are not substituted for the independent public synthetic used by this public-domain gate.
+
+### Verified recovery evidence — October 2026
+
+For read-only diagnostic commands, actual GitHub run IDs, provenance, the last measured >30-minute gap and a *conditional* earliest candidate of 2026-11-05, see [SLO certification recovery — 2026-10-15](operations/SLO-CERTIFICATION-RECOVERY-2026-10-15.md). This record is not an SLO PASS, a license to backfill samples, or an authorization to deploy.
