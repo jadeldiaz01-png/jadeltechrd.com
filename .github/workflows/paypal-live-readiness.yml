@@ -81,43 +81,92 @@ jobs:
         run: |
           set -euo pipefail
           normalize() { printf '%s' "$1" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'; }
+          fail() {
+            printf 'PAYPAL_READINESS phase=%s result=FAIL HTTP_STATUS=%s ERROR=%s\n' "$1" "$2" "$3" >&2
+            exit 1
+          }
+          paypal_error_code() {
+            local value
+            value=$(jq -r '(.name // .error // "api_error") | tostring' "$1" 2>/dev/null || printf 'api_error')
+            value=$(printf '%s' "$value" | LC_ALL=C tr -cd 'A-Za-z0-9_.-' | cut -c1-48)
+            printf '%s' "${value:-api_error}"
+          }
           client_id=$(normalize "${PAYPAL_CLIENT_ID_RAW:-}")
           client_secret=$(normalize "${PAYPAL_CLIENT_SECRET_RAW:-}")
           webhook_id=$(normalize "${PAYPAL_WEBHOOK_ID_RAW:-}")
-          test -n "$client_id" || { echo PAYPAL_CLIENT_ID_PRESENT=NO >&2; exit 2; }
-          test -n "$client_secret" || { echo PAYPAL_CLIENT_SECRET_PRESENT=NO >&2; exit 2; }
-          test -n "$webhook_id" || { echo PAYPAL_WEBHOOK_ID_PRESENT=NO >&2; exit 2; }
+          test -n "$client_id" || fail secrets 0 PAYPAL_CLIENT_ID_missing
+          test -n "$client_secret" || fail secrets 0 PAYPAL_CLIENT_SECRET_missing
+          test -n "$webhook_id" || fail secrets 0 PAYPAL_WEBHOOK_ID_missing
+          echo 'PAYPAL_READINESS secret=PAYPAL_CLIENT_ID result=PRESENT'
+          echo 'PAYPAL_READINESS secret=PAYPAL_CLIENT_SECRET result=PRESENT'
+          echo 'PAYPAL_READINESS secret=PAYPAL_WEBHOOK_ID result=PRESENT'
           echo "::add-mask::$client_id"
           echo "::add-mask::$client_secret"
           echo "::add-mask::$webhook_id"
 
-          token=$(curl --fail-with-body -sS -u "$client_id:$client_secret" \
+          response_file=$(mktemp)
+          trap 'rm -f "$response_file"' EXIT
+          if ! http_status=$(curl -sS -o "$response_file" -w '%{http_code}' \
+            -u "$client_id:$client_secret" \
             -H 'Accept: application/json' -H 'Accept-Language: en_US' \
-            -d 'grant_type=client_credentials' "$PAYPAL_LIVE_API/v1/oauth2/token" | jq -r '.access_token // empty')
-          test -n "$token"
+            -d 'grant_type=client_credentials' "$PAYPAL_LIVE_API/v1/oauth2/token"); then
+            fail oauth none transport_error
+          fi
+          if [[ ! "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+            fail oauth "$http_status" "$(paypal_error_code "$response_file")"
+          fi
+          token=$(jq -r '.access_token // empty' "$response_file" 2>/dev/null || true)
+          test -n "$token" || fail oauth "$http_status" access_token_missing
           echo "::add-mask::$token"
+          echo "PAYPAL_READINESS phase=oauth result=PASS HTTP_STATUS=$http_status"
 
-          webhook=$(curl --fail-with-body -sS -H "Authorization: Bearer $token" \
-            "$PAYPAL_LIVE_API/v1/notifications/webhooks/$webhook_id")
-          test "$(jq -r '.url // empty' <<<"$webhook")" = "https://intake.jadeltechrd.com/api/v1/paypal/webhooks"
-          missing=$(jq -r '
+          if ! http_status=$(curl -sS -o "$response_file" -w '%{http_code}' \
+            -H "Authorization: Bearer $token" \
+            "$PAYPAL_LIVE_API/v1/notifications/webhooks/$webhook_id"); then
+            fail webhook_lookup none transport_error
+          fi
+          if [[ ! "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+            fail webhook_lookup "$http_status" "$(paypal_error_code "$response_file")"
+          fi
+          webhook_url=$(jq -r '.url // empty' "$response_file" 2>/dev/null || true)
+          test "$webhook_url" = "https://intake.jadeltechrd.com/api/v1/paypal/webhooks" || \
+            fail webhook_lookup "$http_status" webhook_url_mismatch
+          missing_events=$(jq -r '
             [.event_types[]?.name] as $events |
             ["CHECKOUT.ORDER.APPROVED","PAYMENT.CAPTURE.COMPLETED","PAYMENT.CAPTURE.PENDING","PAYMENT.CAPTURE.DENIED","PAYMENT.CAPTURE.REFUNDED","PAYMENT.CAPTURE.REVERSED"] |
-            map(select(. as $required | ($events | index($required)) == null)) | length
-          ' <<<"$webhook")
-          test "$missing" = 0
-          echo PAYPAL_LIVE_OAUTH=PASS
-          echo PAYPAL_LIVE_WEBHOOK_CONFIG=PASS
+            map(select(. as $required | ($events | index($required)) == null)) | join(",")
+          ' "$response_file" 2>/dev/null || printf 'invalid')
+          test "$missing_events" != invalid || fail webhook_lookup "$http_status" invalid_webhook_response
+          if test -n "$missing_events"; then
+            missing_count=$(awk -F, '{print NF}' <<<"$missing_events")
+            printf 'PAYPAL_READINESS missing_events=%s\n' "$missing_events" >&2
+            fail webhook_lookup "$http_status" "required_events_missing_$missing_count"
+          fi
+          echo "PAYPAL_READINESS phase=webhook_lookup result=PASS HTTP_STATUS=$http_status"
 
       - name: Verify production Worker health and live verification path
         shell: bash
         run: |
           set -euo pipefail
-          health=$(curl --fail-with-body -sS "https://${API_HOST}/health")
-          test "$(jq -r '.status // empty' <<<"$health")" = ok
-          test "$(jq -r '.service // empty' <<<"$health")" = jadel-commercial-runtime
+          fail() {
+            printf 'PAYPAL_READINESS phase=%s result=FAIL HTTP_STATUS=%s ERROR=%s\n' "$1" "$2" "$3" >&2
+            exit 1
+          }
+          response_file=$(mktemp)
+          trap 'rm -f "$response_file"' EXIT
+          if ! http_status=$(curl -sS -o "$response_file" -w '%{http_code}' "https://${API_HOST}/health"); then
+            fail worker_health none transport_error
+          fi
+          if [[ ! "$http_status" =~ ^2[0-9][0-9]$ ]]; then
+            fail worker_health "$http_status" http_error
+          fi
+          health_status=$(jq -r '.status // empty' "$response_file" 2>/dev/null || true)
+          health_service=$(jq -r '.service // empty' "$response_file" 2>/dev/null || true)
+          test "$health_status" = ok && test "$health_service" = jadel-commercial-runtime || \
+            fail worker_health "$http_status" health_contract_mismatch
+          echo "PAYPAL_READINESS phase=worker_health result=PASS HTTP_STATUS=$http_status"
 
-          code=$(curl -sS -o /tmp/paypal-readiness.json -w '%{http_code}' \
+          if ! http_status=$(curl -sS -o "$response_file" -w '%{http_code}' \
             -X POST \
             -H 'content-type: application/json' \
             -H 'paypal-auth-algo: SHA256withRSA' \
@@ -126,14 +175,14 @@ jobs:
             -H 'paypal-transmission-sig: deliberately-invalid' \
             -H 'paypal-transmission-time: 2026-01-01T00:00:00Z' \
             --data '{"id":"JADel-live-readiness","event_type":"PAYMENT.CAPTURE.COMPLETED","resource":{"id":"READINESS","status":"COMPLETED","amount":{"value":"0.01","currency_code":"USD"}}}' \
-            "https://${API_HOST}/api/v1/paypal/webhooks")
-          test "$code" = 403 || {
-            echo "PAYPAL_LIVE_RUNTIME_VERIFY_PATH=FAIL_HTTP_$code" >&2
-            cat /tmp/paypal-readiness.json >&2
-            exit 20
-          }
-          test "$(jq -r '.error // empty' /tmp/paypal-readiness.json)" = PAYPAL_WEBHOOK_REJECTED
-          echo PAYPAL_LIVE_RUNTIME_VERIFY_PATH=PASS
+            "https://${API_HOST}/api/v1/paypal/webhooks"); then
+            fail webhook_rejection none transport_error
+          fi
+          test "$http_status" = 403 || fail webhook_rejection "$http_status" expected_http_403
+          webhook_error=$(jq -r '.error // empty' "$response_file" 2>/dev/null || true)
+          test "$webhook_error" = PAYPAL_WEBHOOK_REJECTED || \
+            fail webhook_rejection "$http_status" unexpected_error_contract
+          echo "PAYPAL_READINESS phase=webhook_rejection result=PASS HTTP_STATUS=$http_status"
           echo PAYPAL_LIVE_READINESS=PASS
 
       - name: Summarize
