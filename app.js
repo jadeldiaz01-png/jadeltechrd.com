@@ -205,10 +205,10 @@
       <section class="hero-v2" id="inicio">
         <div class="hero-copy reveal">
           <div class="eyebrow"><span class="live-dot"></span> Automatización e IA aplicada para operaciones reales</div>
-          <h1>Convierte trabajo repetitivo en <span>sistemas de IA que puedes controlar.</span></h1>
-          <p class="lead">Diseñamos e integramos agentes y automatizaciones para soporte, ventas, datos y operaciones, con alcance claro, supervisión humana y controles verificables desde el inicio.</p>
+          <h1>Web, automatización e IA <span>para resolver problemas reales de tu negocio.</span></h1>
+          <p class="lead">Diseñamos soluciones que unen presencia digital, consultas y procesos supervisados. Empezamos con un alcance claro y medimos resultados sin prometer ventas.</p>
           <div class="actions">
-            <a class="button primary" href="/solicitar-proyecto.html">Cuéntanos qué quieres automatizar <span aria-hidden="true">↗</span></a>
+            <a class="button primary" href="/soluciones-negocios.html">Ver soluciones para negocios <span aria-hidden="true">↗</span></a>
             <a class="button secondary" href="#servicios">Ver soluciones y precios</a>
           </div>
           <div class="hero-trust" aria-label="Principios de operación">
@@ -243,6 +243,32 @@
         <div><strong>02</strong><span>estado de madurez visible por cada servicio</span></div>
         <div><strong>03</strong><span>aprobación humana para acciones sensibles</span></div>
         <div><strong>04</strong><span>evidencia y observabilidad incorporadas al diseño</span></div>
+      </section>
+
+      
+      <section class="section-block conversion-path-section" aria-labelledby="business-solutions-title">
+        <div class="section-heading reveal">
+          <div><div class="eyebrow">Para emprendedores y pequeñas empresas</div>
+          <h2 id="business-solutions-title">Tu negocio necesita clientes atendidos, no más complejidad.</h2></div>
+          <p>Explora soluciones con alcance definido. Sin ventas garantizadas, integraciones no autorizadas ni cobros inmediatos.</p>
+        </div>
+        <div class="conversion-path-grid reveal">
+          <a class="conversion-path-card" href="/soluciones-negocios.html#soluciones">
+            <span>Web y consultas</span><strong>Presenta tu negocio y organiza solicitudes.</strong>
+            <p>Diseño web a medida, recorrido de contacto y medición consensuada.</p>
+            <small>Evaluación y cotización previas</small>
+          </a>
+          <a class="conversion-path-card" href="/soluciones-negocios.html#soluciones">
+            <span>Automatización</span><strong>Revisa un proceso o flujo que falla.</strong>
+            <p>Problemas acotados de integraciones, webhooks y automatizaciones.</p>
+            <small>Precio según diagnóstico y alcance</small>
+          </a>
+          <a class="conversion-path-card" href="/whatsapp-ia-empresas-rd.html">
+            <span>Atención supervisada</span><strong>Organiza las consultas y su seguimiento.</strong>
+            <p>La API oficial depende de elegibilidad y acceso del cliente.</p>
+            <small>Servicio sujeto a validación</small>
+          </a>
+        </div>
       </section>
 
       <section class="section-block conversion-path-section" aria-labelledby="conversion-path-title">
@@ -502,6 +528,7 @@
   if (headerNav) {
     headerNav.innerHTML = `
       <a href="/" data-nav="home">Inicio</a>
+      <a href="/soluciones-negocios.html">Para negocios</a>
       <a href="/#servicios" data-home-nav>Soluciones</a>
       <a href="/#metodo" data-home-nav>Método</a>
       <a href="/#precios" data-home-nav>Precios</a>
@@ -518,6 +545,7 @@
       <a href="/#servicios">Servicios</a>
       <a href="/#precios">Precios</a>
       <a href="/#pagos">Pagos</a>
+      <a href="/matriz-oportunidades.html">Matriz de oportunidades</a>
       <a href="/?view=privacy">Privacidad</a>
       <a href="/?view=terms">Condiciones</a>
       <a href="${DATA_DELETION_URL}">Eliminación de datos</a>`;
