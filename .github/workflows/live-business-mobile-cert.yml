@@ -1,0 +1,49 @@
+name: Live business landing mobile certification
+on:
+  pull_request:
+    paths:
+      - 'tests/live-business-visual.cjs'
+      - '.github/workflows/live-business-mobile-cert.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify-business-mobile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      PUPPETEER_VERSION: 25.9.0
+      AXE_VERSION: 4.10.3
+      EVIDENCE_DIR: ${{ runner.temp }}/business-live-evidence
+    steps:
+      - name: Checkout unprivileged test-only revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned Chrome and accessibility audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/business-visual"
+          npm install --prefix "$RUNNER_TEMP/business-visual" --ignore-scripts --no-audit --no-fund --save-exact "puppeteer@25.9.0" "axe-core@4.10.3"
+          cd "$RUNNER_TEMP/business-visual"
+          npx puppeteer browsers install chrome
+          test "$(node -p "require('puppeteer/package.json').version")" = "25.9.0"
+          test "$(node -p "require('axe-core/package.json').version")" = "4.10.3"
+      - name: Test actual public landing, mobile accessibility and intake links
+        shell: bash
+        env:
+          NODE_PATH: ${{ runner.temp }}/business-visual/node_modules
+        run: |
+          set -euo pipefail
+          node tests/live-business-visual.cjs
+      - name: Archive evidence even when tests fail
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: live-business-mobile-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/business-live-evidence/
+          retention-days: 30
+          if-no-files-found: warn
