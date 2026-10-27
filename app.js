@@ -545,6 +545,7 @@
       <a href="/#servicios">Servicios</a>
       <a href="/#precios">Precios</a>
       <a href="/#pagos">Pagos</a>
+      <a href="/matriz-oportunidades.html">Matriz de oportunidades</a>
       <a href="/?view=privacy">Privacidad</a>
       <a href="/?view=terms">Condiciones</a>
       <a href="${DATA_DELETION_URL}">Eliminación de datos</a>`;
