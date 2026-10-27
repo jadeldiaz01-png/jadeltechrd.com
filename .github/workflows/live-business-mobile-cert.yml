@@ -16,7 +16,7 @@ jobs:
     env:
       PUPPETEER_VERSION: 25.9.0
       AXE_VERSION: 4.10.3
-      EVIDENCE_DIR: ${{ runner.temp }}/business-live-evidence
+      EVIDENCE_DIR: visual-evidence
     steps:
       - name: Checkout unprivileged test-only revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -34,16 +34,15 @@ jobs:
           test "$(node -p "require('axe-core/package.json').version")" = "4.10.3"
       - name: Test actual public landing, mobile accessibility and intake links
         shell: bash
-        env:
-          NODE_PATH: ${{ runner.temp }}/business-visual/node_modules
         run: |
           set -euo pipefail
+          export NODE_PATH="$RUNNER_TEMP/business-visual/node_modules"
           node tests/live-business-visual.cjs
       - name: Archive evidence even when tests fail
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: live-business-mobile-evidence-${{ github.sha }}
-          path: ${{ runner.temp }}/business-live-evidence/
+          path: visual-evidence/
           retention-days: 30
           if-no-files-found: warn
