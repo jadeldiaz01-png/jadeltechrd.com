@@ -11,6 +11,8 @@ test('LIVE webhook update is exact-SHA gated and requires the worker capture gua
   assert.match(workflow, /test "\$GITHUB_SHA" = "\$EXPECTED_SHA"/);
   assert.match(workflow, /name: d1-live-readonly-audit/);
   assert.match(workflow, /secrets\.CLOUDFLARE_D1_READONLY_API_TOKEN/);
+  assert.match(workflow, /accounts\/\$account\/tokens\/verify/);
+  assert.doesNotMatch(workflow, /user\/tokens\/verify/);
   assert.match(workflow, /name: jadeltechrd/);
   assert.match(workflow, /needs: worker-config/);
   assert.match(workflow, /WORKER_PAYPAL_ENVIRONMENT=NOT_LIVE/);

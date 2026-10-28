@@ -73,7 +73,7 @@ jobs:
           echo "::add-mask::$token"
           auth=(-H "Authorization: Bearer $token" -H 'Accept: application/json')
 
-          code=$(curl -sS -o "$RUNNER_TEMP/token-verify.json" -w '%{http_code}' "${auth[@]}" https://api.cloudflare.com/client/v4/user/tokens/verify)
+          code=$(curl -sS -o "$RUNNER_TEMP/token-verify.json" -w '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/tokens/verify")
           test "$code" = 200 && test "$(jq -r '.result.status // empty' "$RUNNER_TEMP/token-verify.json")" = active || {
             echo "WORKER_CONFIG_TOKEN_VERIFY=FAIL HTTP_STATUS=$code" >&2
             exit 3
