@@ -15,7 +15,7 @@ for (const [name, source] of surfaces) {
     assert.match(source, /firma inválida rechazada|invalid-signature probe rejected/i);
     assert.match(source, /class="event-wait">(?:PENDIENTE|PENDING)<\/span><b>(?:Evidence ledger|Payment evidence)<\/b>/i);
     assert.match(source, /primera conciliación positiva con captura real pendiente|first positive reconciliation with a real capture pending/i);
-    assert.match(source, /US\$250/);
+    assert.match(source, /US\$14,800/);
     assert.match(source, /console-state[^>]*>\s*SUPERVISADO\s*</i);
     assert.equal([...source.matchAll(/class="console-state"/g)].length, 1);
     assert.match(source, /no se marca PAID sin coincidencia exacta|only marks PAID after validating signature and exact match/i);
@@ -67,6 +67,6 @@ test("monthly public prices require explicit PayPal subscription approval", () =
   assert.ok(recurring.length > 0);
   assert.ok(recurring.every(id => discovery.services.some(service => service.id === id)));
   assert.ok(recurring.every(id => ('monthly' in SERVICE_PRICING_CATALOG[id]) || ('monthly_pack' in SERVICE_PRICING_CATALOG[id])));
-  assert.match(fallback, /suscripción automática/i);
-  assert.match(app, /suscripción automática/i);
+  assert.match(fallback, /aprobación expresa de la suscripción en PayPal/i);
+  assert.match(app, /suscripción separada que el comprador debe aprobar en PayPal/i);
 });
