@@ -3,6 +3,7 @@ import { buildRuntimeRevenueView } from "./revenue-intelligence.mjs";
 import { loadApprovedOpportunityFeed } from "./revenue-agent-bridge.mjs";
 import { buildRevenueRuntimeAuthorization } from "./revenue-agent-authorization.mjs";
 import { buildCatalogPrimaryQuoteItems, resolveCatalogPrice } from "./service-pricing.mjs";
+import { createPayPalMonthlySubscription } from "./paypal-subscriptions.mjs";
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_WEBHOOK_BYTES = 64 * 1024;
@@ -1819,6 +1820,9 @@ export default {
     }
     if (url.pathname === "/api/v1/admin/quotes/accept") {
       return withAdminCors(await handleAdminQuoteAcceptance(request, env), origin, env);
+    }
+    if (url.pathname === "/api/v1/admin/subscriptions") {
+      return withAdminCors(await handleAdminSubscriptionCreate(request, env), origin, env);
     }
     if (url.pathname === "/api/v1/admin/payment-orders") {
       return withAdminCors(await handleAdminPaymentOrderCreate(request, env), origin, env);
