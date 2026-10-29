@@ -176,7 +176,7 @@ function render(data) {
         <h3>Cotizaciones activas</h3>
         ${quotes.length ? quotes.map((quote) => `
           <article>
-            <strong>${htmlEscape(quote.name)} · ${formatMinor(quote.total_amount_minor, quote.currency_code)}</strong>
+            <strong>${htmlEscape(quote.name)} · inicial ${formatMinor(quote.upfront_amount_minor, quote.currency_code)}${Number(quote.recurring_amount_minor) > 0 ? ` · ${formatMinor(quote.recurring_amount_minor, quote.currency_code)} / mes` : ""}</strong>
             <span>${htmlEscape(quote.status)} · versión ${htmlEscape(quote.version)}</span>
             <small>Proyecto: ${htmlEscape(quote.project_id)} · Quote: ${htmlEscape(quote.quote_id)}</small>
             ${quote.status === "ISSUED" ? `
