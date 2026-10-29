@@ -327,7 +327,7 @@
       },
       {
         "path": "commercial-runtime/src/service-pricing.mjs",
-        "blob_sha": "0b71664a7a3a425db5af3f28b0aa0f90e607942c",
+        "blob_sha": "9cf210109f55fc6cd10249518dd5427deb68d60f",
         "fact": "Sales quote setup minimum 150000 cents; monthly exact 29900 cents",
         "id": "sales_price_catalog"
       }
