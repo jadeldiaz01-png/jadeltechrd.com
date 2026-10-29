@@ -1,0 +1,123 @@
+name: Audit PayPal LIVE Worker capture flags (read-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact current protected main SHA
+        type: string
+        required: true
+      confirmation:
+        description: Type AUDIT_PAYPAL_LIVE_WORKER_FLAGS_ONLY
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jadel-paypal-live-worker-flags-readonly
+  cancel-in-progress: false
+
+jobs:
+  audit-worker:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'AUDIT_PAYPAL_LIVE_WORKER_FLAGS_ONLY' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment:
+      name: d1-live-readonly-audit
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      WORKER_NAME: jadel-commercial-runtime
+      CLOUDFLARE_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN || secrets.CLOUDFLARE_TOKEN || secrets.CF_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout exact protected main SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Read active Worker bindings and classify capture guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo INVALID_SHA >&2; exit 2; }
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          git fetch --no-tags https://github.com/${GITHUB_REPOSITORY}.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+
+          token=$(printf '%s' "${CLOUDFLARE_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          test -n "$token" || { echo WORKER_AUDIT_CREDENTIAL=MISSING >&2; exit 3; }
+          [[ "$account" =~ ^[0-9a-fA-F]{32}$ ]] || { echo WORKER_AUDIT_ACCOUNT=INVALID >&2; exit 3; }
+          echo "::add-mask::$token"
+          auth=(-H "Authorization: Bearer $token" -H 'Accept: application/json')
+          api="https://api.cloudflare.com/client/v4/accounts/$account/workers/scripts/$WORKER_NAME"
+
+          status=$(curl --silent --show-error --output "$RUNNER_TEMP/token.json" --write-out '%{http_code}' "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/tokens/verify")
+          test "$status" = 200 && test "$(jq -r '.result.status // empty' "$RUNNER_TEMP/token.json")" = active || {
+            echo "WORKER_AUDIT_TOKEN_VERIFY=FAIL HTTP_STATUS=$status" >&2; exit 3;
+          }
+
+          status=$(curl --silent --show-error --output "$RUNNER_TEMP/deployments.json" --write-out '%{http_code}' "${auth[@]}" "$api/deployments?per_page=1")
+          test "$status" = 200 && test "$(jq -r '.success // false' "$RUNNER_TEMP/deployments.json")" = true || {
+            echo "WORKER_AUDIT_DEPLOYMENTS=FAIL HTTP_STATUS=$status" >&2; exit 4;
+          }
+          jq -e '(.result.deployments | length) == 1 and (.result.deployments[0].versions | length) >= 1 and ([.result.deployments[0].versions[].percentage] | add) == 100' "$RUNNER_TEMP/deployments.json" >/dev/null || {
+            echo WORKER_AUDIT_TRAFFIC=AMBIGUOUS >&2; exit 5;
+          }
+          before=$(jq -r '.result.deployments[0].id' "$RUNNER_TEMP/deployments.json")
+          failed=0
+          index=0
+          while IFS= read -r version_id; do
+            index=$((index + 1))
+            [[ "$version_id" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo WORKER_AUDIT_VERSION_ID=INVALID >&2; exit 6; }
+            status=$(curl --silent --show-error --output "$RUNNER_TEMP/version.json" --write-out '%{http_code}' "${auth[@]}" "$api/versions/$version_id")
+            test "$status" = 200 && test "$(jq -r '.success // false' "$RUNNER_TEMP/version.json")" = true || {
+              echo "WORKER_AUDIT_VERSION_READ=FAIL HTTP_STATUS=$status" >&2; exit 6;
+            }
+            jq -e '(.result.resources.bindings | type) == "array"' "$RUNNER_TEMP/version.json" >/dev/null || {
+              echo WORKER_AUDIT_BINDINGS=INVALID >&2; exit 6;
+            }
+            bindings=$(jq -c '.result.resources.bindings' "$RUNNER_TEMP/version.json")
+            echo "WORKER_VERSION_INDEX=$index" | tee -a "$GITHUB_STEP_SUMMARY"
+            for entry in \
+              PAYPAL_AUTOMATIC_CAPTURE_ENABLED:false \
+              PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:false \
+              FINANCIAL_EXECUTION_AUTHORIZED:false \
+              PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:0; do
+              flag=${entry%%:*}
+              expected=${entry#*:}
+              count=$(jq -r --arg n "$flag" '[.[] | select(.name==$n)] | length' <<<"$bindings")
+              reason=PASS
+              if [ "$count" = 0 ]; then
+                reason=ABSENT
+              elif [ "$count" != 1 ]; then
+                reason=DUPLICATE
+              else
+                type=$(jq -r --arg n "$flag" '[.[] | select(.name==$n)][0].type // empty' <<<"$bindings")
+                if [ "$type" != plain_text ]; then
+                  reason=WRONG_TYPE
+                else
+                  value=$(jq -r --arg n "$flag" '[.[] | select(.name==$n)][0].text // "__UNSET__"' <<<"$bindings")
+                  if [ "$value" != "$expected" ]; then
+                    if [ "$value" = true ]; then reason=ENABLED; else reason=OTHER_VALUE; fi
+                  fi
+                fi
+              fi
+              echo "WORKER_GUARD flag=$flag result=$reason" | tee -a "$GITHUB_STEP_SUMMARY"
+              if [ "$reason" != PASS ]; then failed=1; fi
+            done
+          done < <(jq -r '.result.deployments[0].versions[].version_id' "$RUNNER_TEMP/deployments.json")
+
+          status=$(curl --silent --show-error --output "$RUNNER_TEMP/deployments-after.json" --write-out '%{http_code}' "${auth[@]}" "$api/deployments?per_page=1")
+          test "$status" = 200 && test "$(jq -r '.result.deployments[0].id // empty' "$RUNNER_TEMP/deployments-after.json")" = "$before" || {
+            echo WORKER_AUDIT_DEPLOYMENT_CHANGED=FAIL >&2; exit 8;
+          }
+          if [ "$failed" -ne 0 ]; then echo WORKER_CAPTURE_GUARD_AUDIT=FAIL >&2; exit 7; fi
+          echo WORKER_CAPTURE_GUARD_AUDIT=PASS
+          echo WORKER_CONFIGURATION_OPERATION=GET_ONLY
