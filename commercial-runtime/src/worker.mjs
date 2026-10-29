@@ -928,7 +928,7 @@ export async function handleAdminApprovals(request, env) {
       "SELECT project_id,name,email,company,service_ids_json,offer_id,offer_landing_path,utm_source,utm_medium,utm_campaign,utm_content,state,policy_status,created_at,updated_at FROM project_requests WHERE policy_status='ALLOWED' AND state='POLICY_ALLOWED' ORDER BY updated_at DESC LIMIT 50"
     ).all();
     const quotes = await env.DB.prepare(
-      "SELECT q.quote_id,q.project_id,q.version,q.status,q.currency_code,q.total_amount_minor,q.expires_at,q.created_at,p.name,p.email,COALESCE((SELECT SUM(qi.line_amount_minor) FROM quote_items qi WHERE qi.quote_id=q.quote_id AND qi.price_component IN ('monthly','monthly_pack')),0) AS recurring_amount_minor FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.status IN ('ISSUED','ACCEPTED') ORDER BY q.created_at DESC LIMIT 50"
+      "SELECT q.quote_id,q.project_id,q.version,q.status,q.currency_code,q.total_amount_minor,q.expires_at,q.created_at,p.name,p.email,p.state AS project_state,COALESCE((SELECT SUM(qi.line_amount_minor) FROM quote_items qi WHERE qi.quote_id=q.quote_id AND qi.price_component IN ('monthly','monthly_pack')),0) AS recurring_amount_minor FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.status IN ('ISSUED','ACCEPTED') ORDER BY q.created_at DESC LIMIT 50"
     ).all();
     const payments = await env.DB.prepare(
       "SELECT l.ledger_id,l.provider_event_id,l.ledger_state,l.amount_usd,l.currency_code,l.created_at,e.resource_id,e.event_type,e.resource_status FROM payment_ledger l JOIN payment_events e ON e.provider_event_id=l.provider_event_id WHERE l.ledger_state IN ('RECEIVED','RECONCILING','REQUIRES_HUMAN') ORDER BY l.created_at DESC LIMIT 50"
@@ -1423,9 +1423,8 @@ export async function handleAdminSubscriptionCreate(request, env, deps = {}) {
     "SELECT q.quote_id,q.project_id,q.status,q.currency_code,p.state AS project_state,p.policy_status FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.quote_id=? LIMIT 1"
   ).bind(quoteId).first();
   if (!quote) return json({ error: "QUOTE_NOT_FOUND" }, 404);
-  if (quote.status !== "ACCEPTED" || quote.policy_status !== "ALLOWED" ||
-      !new Set(["CUSTOMER_APPROVED","PAYMENT_PENDING","PAID"]).has(quote.project_state)) {
-    return json({ error: "QUOTE_NOT_READY_FOR_SUBSCRIPTION" }, 409);
+  if (quote.status !== "ACCEPTED" || quote.policy_status !== "ALLOWED" || quote.project_state !== "PAID") {
+    return json({ error:"INITIAL_PAYMENT_REQUIRED" },409);
   }
 
   const monthly = await env.DB.prepare(
