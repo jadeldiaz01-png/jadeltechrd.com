@@ -59,7 +59,7 @@ test("all 11 publicly listed services have a quote-gated PayPal path without a d
   }
 });
 
-test("monthly public prices are explicitly not auto-renewing PayPal subscriptions", () => {
+test("monthly public prices require explicit PayPal subscription approval", () => {
   assert.equal(discovery.authority.autonomous_financial_execution, false);
   const recurring = Object.entries(SERVICE_PRICING_CATALOG)
     .filter(([, components]) => 'monthly' in components || 'monthly_pack' in components)
