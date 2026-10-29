@@ -1467,6 +1467,16 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
   if (quote.status !== "ACCEPTED" || quote.policy_status !== "ALLOWED" || quote.project_state !== "CUSTOMER_APPROVED") {
     return json({ error: "QUOTE_NOT_READY_FOR_PAYMENT" }, 409);
   }
+  const recurringRow = await env.DB.prepare(
+    "SELECT COALESCE(SUM(line_amount_minor),0) AS amount_minor FROM quote_items WHERE quote_id=? AND price_component IN ('monthly','monthly_pack')"
+  ).bind(quoteId).first();
+  const recurringAmountMinor = Number(recurringRow?.amount_minor || 0);
+  const upfrontAmountMinor = Number(upfrontAmountMinor) - recurringAmountMinor;
+  if (!Number.isSafeInteger(recurringAmountMinor) || recurringAmountMinor < 0 ||
+      !Number.isSafeInteger(upfrontAmountMinor) || upfrontAmountMinor <= 0) {
+    return json({ error:"UPFRONT_PAYMENT_AMOUNT_INVALID" },409);
+  }
+  const payableQuote = { ...quote, total_amount_minor:upfrontAmountMinor };
 
   let providerGate = { enabled: false, environment: null };
   try {
@@ -1484,7 +1494,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
   const providerEnvironment = providerGate.environment;
   if (providerEnabled && providerEnvironment === "live" && paypalAutomaticCaptureEnabled(env)) {
     const captureLimit = paypalAutomaticCaptureLimitMinor(env);
-    const quoteAmount = Number(quote.total_amount_minor);
+    const quoteAmount = Number(upfrontAmountMinor);
     if (captureLimit === null || !Number.isSafeInteger(quoteAmount) || quoteAmount <= 0 || quoteAmount > captureLimit) {
       return json({ error:"PAYPAL_LIVE_CAPTURE_LIMIT_EXCEEDED", max_amount_minor:captureLimit }, 409);
     }
@@ -1528,7 +1538,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
       await env.DB.batch([
         env.DB.prepare(
           "INSERT INTO payment_orders (payment_order_id,quote_id,project_id,provider,provider_order_id,status,amount_minor,currency_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)"
-        ).bind(paymentOrderId,quoteId,quote.project_id,"paypal","", "PENDING",quote.total_amount_minor,quote.currency_code,now,now),
+        ).bind(paymentOrderId,quoteId,quote.project_id,"paypal","", "PENDING",upfrontAmountMinor,quote.currency_code,now,now),
         env.DB.prepare("UPDATE project_requests SET state='PAYMENT_PENDING',updated_at=? WHERE project_id=?")
           .bind(now,quote.project_id),
       ]);
@@ -1570,7 +1580,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
       quote_id:quoteId,
       project_id:quote.project_id,
       status:"PENDING",
-      amount_minor:quote.total_amount_minor,
+      amount_minor:upfrontAmountMinor,
       currency_code:quote.currency_code,
       provider:"paypal",
       provider_call_performed:false,
@@ -1581,7 +1591,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
 
   let provider;
   try {
-    provider = await createPayPalOrder(env, paymentOrderId, quote, deps.fetchImpl);
+    provider = await createPayPalOrder(env, paymentOrderId, payableQuote, deps.fetchImpl);
   } catch (error) {
     return json({
       error:String(error?.message || "PAYPAL_ORDER_CREATE_FAILED"),
@@ -1614,7 +1624,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
     quote_id:quoteId,
     project_id:quote.project_id,
     status:"PENDING",
-    amount_minor:quote.total_amount_minor,
+    amount_minor:upfrontAmountMinor,
     currency_code:quote.currency_code,
     provider:"paypal",
     provider_order_id:provider.providerOrderId,
