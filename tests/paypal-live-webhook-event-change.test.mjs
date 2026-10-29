@@ -20,7 +20,8 @@ test('LIVE webhook update is exact-SHA gated and requires the worker capture gua
   assert.match(workflow, /reason=ABSENT/);
   assert.match(workflow, /reason=WRONG_TYPE/);
   assert.match(workflow, /reason=ENABLED/);
-  assert.match(workflow, /WORKER_FINANCIAL_EXECUTION_AUTHORIZED=EXPLICIT_FALSE/);
+  assert.match(workflow, /WORKER_FINANCIAL_EXECUTION_AUTHORIZED=EXPLICIT_TRUE/);
+  assert.match(workflow, /capture_max.*25000/);
   for (const flag of ['PAYPAL_AUTOMATIC_CAPTURE_ENABLED', 'PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED', 'FINANCIAL_EXECUTION_AUTHORIZED']) {
     assert.match(workflow, new RegExp(`${flag}.*false|false.*${flag}`, 's'));
   }
