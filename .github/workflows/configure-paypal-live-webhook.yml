@@ -77,6 +77,7 @@ jobs:
           grep -Fq 'FINANCIAL_EXECUTION_AUTHORIZED:"false"' "$deploy"
           grep -Fq 'MAX_AUTONOMOUS_CAPITAL_USD:"0"' "$deploy"
           grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_ENABLED:"false"' "$deploy"
+          grep -Fq 'PAYPAL_SUBSCRIPTIONS_ENABLED:"false"' "$deploy"
           grep -Fq 'PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:"false"' "$deploy"
           grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:"0"' "$deploy"
           grep -Fq 'if (!paypalOrderCreationEnabled(env)) return { enabled: false, environment: null };' commercial-runtime/src/worker.mjs
