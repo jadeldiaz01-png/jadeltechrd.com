@@ -48,11 +48,11 @@ async function paypalPost(url, token, requestKey, payload, fetchImpl) {
   return response.json();
 }
 
-function approvalUrl(subscription) {
+function approvalUrl(subscription, environment) {
   const link = (subscription?.links || []).find((item) => item.rel === "approve");
   if (!link?.href) throw new Error("PAYPAL_SUBSCRIPTION_APPROVAL_URL_MISSING");
   const url = new URL(link.href);
-  if (url.protocol !== "https:" || url.hostname !== "www.paypal.com") {
+  const allowedHosts = environment === "live" ? new Set(["www.paypal.com"]) : new Set(["www.sandbox.paypal.com"]);\n  if (url.protocol !== "https:" || !allowedHosts.has(url.hostname)) {
     throw new Error("PAYPAL_SUBSCRIPTION_APPROVAL_URL_REJECTED");
   }
   return url.toString();
@@ -123,7 +123,7 @@ export async function createPayPalMonthlySubscription(env, {
     productId: product.id,
     planId: plan.id,
     providerSubscriptionId: subscription.id,
-    approvalUrl: approvalUrl(subscription),
+    approvalUrl: approvalUrl(subscription, environment),
     providerStatus: String(subscription.status || "APPROVAL_PENDING"),
   };
 }
