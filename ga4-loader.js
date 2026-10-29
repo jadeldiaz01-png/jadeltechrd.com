@@ -43,7 +43,7 @@
       if (!value) continue;
       const allowedValues = allowedAttributionValues[key];
       if (allowedValues && !allowedValues.has(value)) continue;
-      if (key === "cta_id" && !/^service_quote_[a-z0-9]{1,32}$/.test(value)) continue;
+      if (key === "cta_id" && !/^(?:service_quote_[a-z0-9]{1,32}|homepage_blueprint_entry)$/.test(value)) continue;
       clean[key] = value.slice(0, 120);
     }
     return clean;

@@ -208,8 +208,8 @@
           <h1>Web, automatización e IA <span>para resolver problemas reales de tu negocio.</span></h1>
           <p class="lead">Diseñamos soluciones que unen presencia digital, consultas y procesos supervisados. Empezamos con un alcance claro y medimos resultados sin prometer ventas.</p>
           <div class="actions">
-            <a class="button primary" href="/soluciones-negocios.html">Ver soluciones para negocios <span aria-hidden="true">↗</span></a>
-            <a class="button secondary" href="#servicios">Ver soluciones y precios</a>
+            <a class="button primary" data-revenue-event="offer_cta_click" data-cta-id="homepage_blueprint_entry" href="/ai-automation-blueprint.html?utm_source=homepage&amp;utm_medium=hero&amp;utm_campaign=blueprint_entry&amp;utm_content=primary_cta">Empieza con un proceso — US$250 <span aria-hidden="true">↗</span></a>
+            <a class="button secondary" href="#servicios">Ver todos los servicios</a>
           </div>
           <div class="hero-trust" aria-label="Principios de operación">
             <span>✓ Alcance antes de implementar</span>
