@@ -1393,6 +1393,13 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
   }
   const providerEnabled = providerGate.enabled;
   const providerEnvironment = providerGate.environment;
+  if (providerEnabled && providerEnvironment === "live" && paypalAutomaticCaptureEnabled(env)) {
+    const captureLimit = paypalAutomaticCaptureLimitMinor(env);
+    const quoteAmount = Number(quote.total_amount_minor);
+    if (captureLimit === null || !Number.isSafeInteger(quoteAmount) || quoteAmount <= 0 || quoteAmount > captureLimit) {
+      return json({ error:"PAYPAL_LIVE_CAPTURE_LIMIT_EXCEEDED", max_amount_minor:captureLimit }, 409);
+    }
+  }
 
   let existing = await env.DB.prepare(
     "SELECT payment_order_id,status,provider_order_id,provider_approval_url,amount_minor,currency_code,project_id FROM payment_orders WHERE quote_id=? AND status IN ('PENDING','COMPLETED') ORDER BY created_at DESC LIMIT 1"
