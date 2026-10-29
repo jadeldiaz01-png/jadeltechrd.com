@@ -82,6 +82,12 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/validate_github_actions_runtime_pins.py
+      - name: Verify PayPal LIVE Worker guard and read-only audit contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/paypal-live-worker-flags-readonly.test.mjs tests/paypal-live-webhook-event-change.test.mjs
+
       - name: Validate commercial runtime deploy governance
         shell: bash
         run: |
