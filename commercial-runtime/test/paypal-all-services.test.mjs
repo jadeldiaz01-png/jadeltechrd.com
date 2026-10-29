@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCatalogPrimaryQuoteItems, SERVICE_PRICING_CATALOG } from "../src/service-pricing.mjs";
+import { buildCatalogPrimaryQuoteItems, buildCatalogQuoteItems, SERVICE_PRICING_CATALOG } from "../src/service-pricing.mjs";
 import { handleAdminCatalogQuoteCreate, handleAdminPaymentOrderCreate } from "../src/worker.mjs";
 
 const PROJECT_ID="123e4567-e89b-12d3-a456-426614174000";
