@@ -1471,7 +1471,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
     "SELECT COALESCE(SUM(line_amount_minor),0) AS amount_minor FROM quote_items WHERE quote_id=? AND price_component IN ('monthly','monthly_pack')"
   ).bind(quoteId).first();
   const recurringAmountMinor = Number(recurringRow?.amount_minor || 0);
-  const upfrontAmountMinor = Number(upfrontAmountMinor) - recurringAmountMinor;
+  const upfrontAmountMinor = Number(quote.total_amount_minor) - recurringAmountMinor;
   if (!Number.isSafeInteger(recurringAmountMinor) || recurringAmountMinor < 0 ||
       !Number.isSafeInteger(upfrontAmountMinor) || upfrontAmountMinor <= 0) {
     return json({ error:"UPFRONT_PAYMENT_AMOUNT_INVALID" },409);
