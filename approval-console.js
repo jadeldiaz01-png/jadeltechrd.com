@@ -190,7 +190,7 @@ function render(data) {
                 >
                 <button data-quote-readiness="${htmlEscape(quote.quote_id)}">Comprobar readiness</button>
                 <button data-quote-accept="${htmlEscape(quote.quote_id)}" disabled>Registrar aceptación</button>
-              </div>` : quotePaymentControls(quote, paymentOrders)}
+              </div>` : quotePaymentControls(quote, paymentOrders, subscriptions)}
           </article>`).join("") : "<p>No hay cotizaciones activas.</p>"}
       </section>
       <section>
