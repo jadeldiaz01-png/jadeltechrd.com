@@ -917,6 +917,7 @@ export async function handleAdminApprovals(request, env) {
         projects: [],
         payments: payments.results || [],
         payment_orders: paymentOrders.results || [],
+      subscriptions: subscriptions.results || [],
       });
     }
 
@@ -934,6 +935,9 @@ export async function handleAdminApprovals(request, env) {
     ).all();
     const paymentOrders = await env.DB.prepare(
       "SELECT payment_order_id,quote_id,project_id,status,amount_minor,currency_code,provider_order_id,provider_approval_url,created_at FROM payment_orders WHERE status='PENDING' ORDER BY created_at DESC LIMIT 50"
+    ).all();
+    const subscriptions = await env.DB.prepare(
+      "SELECT subscription_id,quote_id,project_id,status,amount_minor,currency_code,provider_subscription_id,provider_approval_url,last_payment_at,created_at FROM paypal_subscriptions ORDER BY created_at DESC LIMIT 50"
     ).all();
     return json({
       projects: pending.results || [],
