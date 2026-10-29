@@ -308,7 +308,7 @@
             <h2>Un estudio de agentes, no una caja negra.</h2>
           </div>
           <p>Cada servicio indica su nivel real de madurez. “Piloto” no se presenta como producción y “Research-only” nunca se vende como operación financiera real.</p>
-          <p>Para los 11 servicios, primero solicita y acepta una cotización. El checkout PayPal LIVE se habilita solo para cotizaciones aprobadas en USD de hasta US$250. Enviar la solicitud no inicia un cobro ni una suscripción automática.</p>
+          <p>Para los 11 servicios, primero solicita y acepta una cotización. El checkout PayPal LIVE se habilita para cotizaciones aprobadas en USD de hasta US$14,800. Los importes mensuales usan una suscripción separada que el comprador debe aprobar en PayPal.</p>
         </div>
         <div class="filter-row reveal" role="group" aria-label="Filtrar servicios">
           ${categories.map(([id, label], index) => `<button type="button" class="filter-chip${index === 0 ? " is-active" : ""}" data-filter="${id}" aria-pressed="${index === 0}">${label}</button>`).join("")}
@@ -404,7 +404,7 @@
           <div>
             <div class="eyebrow">Pagos</div>
             <h2>Pago PayPal vinculado a una cotización aprobada.</h2>
-            <p>Primero envía tu solicitud. Confirmamos alcance, moneda y entregables; después generamos un checkout PayPal vinculado a la cotización aprobada. LIVE admite USD de hasta US$250. La captura ocurre tras la aprobación del comprador; solo se marca PAID después de validar la firma del evento y conciliar orden, cotización, importe y divisa.</p>
+            <p>Primero envía tu solicitud. Confirmamos alcance, moneda y entregables; después generamos un checkout PayPal vinculado a la cotización aprobada. LIVE admite pagos iniciales en USD de hasta US$14,800; las mensualidades requieren autorización separada en PayPal. La captura ocurre tras la aprobación del comprador; solo se marca PAID después de validar la firma del evento y conciliar orden, cotización, importe y divisa.</p>
           </div>
           <div class="payment-actions">
             <a class="button primary full" href="/solicitar-proyecto.html">Solicitar cotización</a>
@@ -426,10 +426,10 @@
             <div class="eyebrow">Infraestructura comercial</div>
             <h2>Solicitudes activas; verificación positiva del pago pendiente.</h2>
           </div>
-          <p>El sitio recibe solicitudes y prepara checkouts PayPal LIVE para cotizaciones aprobadas en USD de hasta US$250. El webhook está configurado y la prueba de firma inválida fue rechazada; falta validar la primera conciliación positiva con una captura real. Nexus solo marca PAID tras validar firma y coincidencia exacta de orden, cotización, importe y divisa.</p>
+          <p>El sitio recibe solicitudes y prepara checkouts PayPal LIVE para cotizaciones aprobadas en USD de hasta US$14,800; las mensualidades requieren aprobación separada en PayPal. El webhook está configurado y la prueba de firma inválida fue rechazada; falta validar la primera conciliación positiva con una captura real. Nexus solo marca PAID tras validar firma y coincidencia exacta de orden, cotización, importe y divisa.</p>
         </div>
         <div class="revenue-infra-grid reveal" aria-label="Capas de infraestructura para ingresos">
-          <article><span>01</span><strong>Checkout alojado</strong><p>La orden se vincula a una cotización aprobada en USD de hasta US$250. Tras la aprobación del comprador se captura el pago; el trabajo solo inicia cuando la notificación firmada concuerda exactamente con orden, cotización, importe y divisa.</p><small>Checkout con tope de US$250; conciliación positiva pendiente</small></article>
+          <article><span>01</span><strong>Checkout alojado</strong><p>La orden inicial se vincula a una cotización aprobada en USD de hasta US$14,800. Las mensualidades requieren una suscripción separada aprobada por el comprador; el trabajo solo inicia cuando la notificación firmada concuerda exactamente con orden, cotización, importe y divisa.</p><small>Tope inicial de US$14,800; conciliación positiva pendiente</small></article>
           <article><span>02</span><strong>Intake verificable</strong><p>Formulario con Turnstile, límites, idempotencia y workflow durable antes de crear compromisos.</p><small>Activo con gates fail-closed</small></article>
           <article><span>03</span><strong>Ledger de pagos</strong><p>El webhook LIVE y el rechazo de firmas inválidas están verificados. La primera conciliación positiva con una captura real sigue pendiente antes de confirmar el ledger y la entrega.</p><small>Primera conciliación positiva pendiente</small></article>
           <article><span>04</span><strong>Operación de agentes</strong><p>Nexus coordina briefs, scoring, tareas y reportes; no ejecuta pagos salientes, contratos, publicaciones ni trading real.</p><small>Supervisado</small></article>
