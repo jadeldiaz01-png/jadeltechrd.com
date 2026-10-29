@@ -287,7 +287,8 @@ jobs:
             echo '## PayPal LIVE bounded capture activated'
             echo
             echo 'Order creation: enabled'
-            echo 'Automatic capture: exact buyer-approved accepted USD upfront totals up to US$14,800 (1,480,000 cents)'\n            echo 'Monthly PayPal subscriptions: enabled up to US$10,000/month, only after buyer approval'
+            echo 'Automatic capture: exact buyer-approved accepted USD upfront totals up to US$14,800 (1,480,000 cents)'
+            echo 'Monthly PayPal subscriptions: enabled up to US$10,000/month, only after buyer approval'
             echo 'Automatic reconciliation: matching verified completed capture only'
             echo 'Financial execution authorization: bounded buyer-directed capture path enabled'
             echo 'Autonomous capital budget: US$0'
