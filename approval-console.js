@@ -363,7 +363,7 @@ resultsNode?.addEventListener("click", async (event) => {
         approvalUrl ? "success" : "error",
       );
     } catch (error) {
-      setStatus(\`No se pudo crear la autorización mensual: \${formatApiError(error)}\`, "error");
+      setStatus(`No se pudo crear la autorización mensual: ${formatApiError(error)}`, "error");
     }
     return;
   }
