@@ -166,10 +166,11 @@ jobs:
           grep -Fq 'PAYPAL_ORDER_CREATION_ENABLED:"false"' "$workflow"
           grep -Fq 'PAYPAL_LIVE_ORDER_CREATION_ENABLED:"false"' "$workflow"
           grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_ENABLED:"false"' "$workflow"
+          grep -Fq 'PAYPAL_SUBSCRIPTIONS_ENABLED:"false"' "$workflow"
           grep -Fq 'PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:"false"' "$workflow"
           grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:"0"' "$workflow"
           grep -Fq 'keep_vars:true' "$workflow"
-          grep -Fq '0007_offer_attribution.sql' "$workflow"
+          grep -Fq '0008_paypal_subscriptions.sql' "$workflow"
           grep -Fq 'npx wrangler deploy --keep-vars' "$workflow"
           echo M3_NONFINANCIAL_DEPLOY_CONTRACT=PASS
 
@@ -201,12 +202,12 @@ jobs:
           if [ -z "$pending_files" ]; then
             echo 'D1_PENDING_MIGRATIONS=PASS state=already_applied'
             echo 'D1_M3_MIGRATION_0007=SKIPPED_ALREADY_APPLIED'
-          elif [ "$pending_files" = "0007_offer_attribution.sql" ]; then
+          elif [ "$pending_files" = "0008_paypal_subscriptions.sql" ]; then
             echo 'D1_PENDING_MIGRATIONS=PASS state=apply_0007'
             npx wrangler d1 migrations apply "$D1_NAME" --remote --config wrangler.d1.jsonc
             echo 'D1_M3_MIGRATION_0007=PASS'
           else
-            echo "D1_PENDING_MIGRATIONS=FAIL expected=none_or_0007_offer_attribution.sql actual=$(printf '%s' "$pending_files" | tr '\n' ',')" >&2
+            echo "D1_PENDING_MIGRATIONS=FAIL expected=none_or_0008_paypal_subscriptions.sql actual=$(printf '%s' "$pending_files" | tr '\n' ',')" >&2
             exit 41
           fi
 
@@ -351,6 +352,7 @@ jobs:
               PAYPAL_ORDER_CREATION_ENABLED:"false",
               PAYPAL_LIVE_ORDER_CREATION_ENABLED:"false",
               PAYPAL_AUTOMATIC_CAPTURE_ENABLED:"false",
+              PAYPAL_SUBSCRIPTIONS_ENABLED:"false",
               PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:"false",
               PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:"0",
               PRODUCTION_AUTHORIZED:"false",
