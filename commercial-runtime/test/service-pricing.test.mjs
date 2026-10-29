@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import {
   SERVICE_PRICING_CATALOG,
   SERVICE_PRICING_CATALOG_VERSION,
-  buildCatalogPrimaryQuoteItems,\n  buildCatalogQuoteItems,
+  buildCatalogPrimaryQuoteItems,
+  buildCatalogQuoteItems,
   resolveCatalogPrice,
 } from "../src/service-pricing.mjs";
 
