@@ -5,6 +5,7 @@ const CATALOG_QUOTE_URL = `${API_ORIGIN}/api/v1/admin/quotes/from-catalog`;
 const QUOTE_ACCEPT_URL = `${API_ORIGIN}/api/v1/admin/quotes/accept`;
 const QUOTE_ACCEPT_READINESS_URL = `${API_ORIGIN}/api/v1/admin/quotes/acceptance-readiness`;
 const PAYMENT_ORDER_URL = `${API_ORIGIN}/api/v1/admin/payment-orders`;
+const SUBSCRIPTION_URL = `${API_ORIGIN}/api/v1/admin/subscriptions`;
 
 const form = document.getElementById("approval-auth");
 const tokenInput = document.getElementById("admin-token");
@@ -97,18 +98,23 @@ function safePayPalApprovalUrl(value) {
   }
 }
 
-function quotePaymentControls(quote, paymentOrders) {
+function quotePaymentControls(quote, paymentOrders, subscriptions) {
   if (quote.status !== "ACCEPTED") return "";
   const order = paymentOrders.find((item) => item.quote_id === quote.quote_id);
+  const subscription = subscriptions.find((item) => item.quote_id === quote.quote_id);
+  const recurring = Number(quote.recurring_amount_minor || 0);
+  const recurringControl = recurring > 0 ? (subscription?.provider_approval_url
+    ? `<div><a href="${htmlEscape(safePayPalApprovalUrl(subscription.provider_approval_url) || "#")}" target="_blank" rel="noopener noreferrer">Autorizar mensualidad en PayPal · ${formatMinor(recurring)}</a><span> · ${htmlEscape(subscription.status)}</span></div>`
+    : `<div><button data-subscription-create="${htmlEscape(quote.quote_id)}">Crear autorización mensual · ${formatMinor(recurring)}</button></div>`) : "";
   const approvalUrl = safePayPalApprovalUrl(order?.provider_approval_url);
   if (approvalUrl) {
-    return `<div><a href="${htmlEscape(approvalUrl)}" target="_blank" rel="noopener noreferrer">Abrir checkout PayPal</a></div>`;
+    return `<div><a href="${htmlEscape(approvalUrl)}" target="_blank" rel="noopener noreferrer">Abrir checkout PayPal</a></div>${recurringControl}`;
   }
   return `<div>
     <button data-payment-order-create="${htmlEscape(quote.quote_id)}">
       ${order ? "Completar orden PayPal" : "Crear orden PayPal"}
     </button>
-  </div>`;
+  </div>${recurringControl}`;
 }
 
 function captureAssist(order) {
@@ -136,6 +142,7 @@ function render(data) {
   const quotes = data.quotes || [];
   const payments = data.payments || [];
   const paymentOrders = data.payment_orders || [];
+  const subscriptions = data.subscriptions || [];
   resultsNode.innerHTML = `
     <div class="approval-list">
       <section>
@@ -197,6 +204,15 @@ function render(data) {
               : ""}
             ${captureAssist(order)}
           </article>`).join("") : "<p>No hay órdenes internas pendientes.</p>"}
+      </section>
+      <section>
+        <h3>Suscripciones PayPal</h3>
+        ${subscriptions.length ? subscriptions.map((subscription) => `
+          <article>
+            <strong>${htmlEscape(subscription.quote_id)} · ${formatMinor(subscription.amount_minor, subscription.currency_code)} / mes</strong>
+            <span>${htmlEscape(subscription.status)} · ${htmlEscape(subscription.last_payment_at || "sin pago confirmado")}</span>
+            ${safePayPalApprovalUrl(subscription.provider_approval_url) ? `<a href="${htmlEscape(safePayPalApprovalUrl(subscription.provider_approval_url))}" target="_blank" rel="noopener noreferrer">Abrir aprobación de PayPal</a>` : ""}
+          </article>`).join("") : "<p>No hay suscripciones registradas.</p>"}
       </section>
       <section>
         <h3>Pagos por reconciliar</h3>
@@ -326,6 +342,28 @@ resultsNode?.addEventListener("click", async (event) => {
       );
     } catch (error) {
       setStatus(`No se pudo crear la orden PayPal: ${formatApiError(error)}`, "error");
+    }
+    return;
+  }
+
+  const subscriptionButton = event.target.closest("button[data-subscription-create]");
+  if (subscriptionButton) {
+    setStatus("Preparando la autorización mensual de PayPal...", "working");
+    try {
+      const created = await api(SUBSCRIPTION_URL, {
+        method:"POST",
+        body:JSON.stringify({ quote_id:subscriptionButton.dataset.subscriptionCreate }),
+      });
+      render(await api(APPROVALS_URL));
+      const approvalUrl = safePayPalApprovalUrl(created.approval_url);
+      setStatus(
+        approvalUrl
+          ? "Suscripción preparada. El cliente debe aprobarla en PayPal antes del primer cargo mensual."
+          : "No se recibió un enlace válido de aprobación de PayPal.",
+        approvalUrl ? "success" : "error",
+      );
+    } catch (error) {
+      setStatus(\`No se pudo crear la autorización mensual: \${formatApiError(error)}\`, "error");
     }
     return;
   }
