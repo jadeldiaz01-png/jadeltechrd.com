@@ -89,7 +89,7 @@ jobs:
               PAYPAL_AUTOMATIC_CAPTURE_ENABLED:true \
               PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:true \
               FINANCIAL_EXECUTION_AUTHORIZED:true \
-              PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:25000; do
+              PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:1480000; do
               flag=${entry%%:*}
               expected=${entry#*:}
               count=$(jq -r --arg n "$flag" '[.[] | select(.name==$n)] | length' <<<"$bindings")
