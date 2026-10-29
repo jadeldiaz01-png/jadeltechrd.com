@@ -21,12 +21,12 @@ test('independent worker capture audit is manual, exact-SHA and read-only', () =
 });
 
 test('the audit requires explicit safe values and classifies wrong bindings without exposing them', () => {
-  for (const flag of ['PAYPAL_AUTOMATIC_CAPTURE_ENABLED:false','PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:false','FINANCIAL_EXECUTION_AUTHORIZED:false','PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:0']) {
+  for (const flag of ['PAYPAL_AUTOMATIC_CAPTURE_ENABLED:true','PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:true','FINANCIAL_EXECUTION_AUTHORIZED:true','PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:25000']) {
     assert.ok(workflow.includes(flag), flag);
   }
   for (const category of ['ABSENT','DUPLICATE','WRONG_TYPE','ENABLED','OTHER_VALUE','PASS']) {
     assert.match(workflow,new RegExp('reason='+category));
   }
-  assert.match(workflow, /if \[ "\$failed" -ne 0 \]; then echo WORKER_CAPTURE_GUARD_AUDIT=FAIL/);
+  assert.match(workflow, /if \[ "\$failed" -ne 0 \]; then echo WORKER_BOUNDED_PAYMENT_POLICY_AUDIT=FAIL/);
   assert.doesNotMatch(workflow, /echo\s+["']?\$(?:token|bindings|value)\b/);
 });

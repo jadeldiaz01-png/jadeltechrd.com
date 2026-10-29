@@ -155,6 +155,22 @@ test("unaccepted quote blocks every service before internal or provider payment 
     assert.equal(writes.length,0);
   }
 });
+test("LIVE payment order above the approved capture ceiling is rejected before provider or D1 writes",async()=>{
+  const {db,writes}=dbForQuote("support",90000);
+  const seen=[];
+  const response=await handleAdminPaymentOrderCreate(adminRequest("/api/v1/admin/payment-orders",{quote_id:QUOTE_ID}),{
+    ADMIN_API_TOKEN:"synthetic-admin-token",DB:db,
+    PAYPAL_ORDER_CREATION_ENABLED:"true",PAYPAL_ENVIRONMENT:"live",
+    PAYPAL_LIVE_ORDER_CREATION_ENABLED:"true",PRODUCTION_AUTHORIZED:"true",
+    PAYPAL_AUTOMATIC_CAPTURE_ENABLED:"true",PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:"25000",
+    FINANCIAL_EXECUTION_AUTHORIZED:"true",MAX_AUTONOMOUS_CAPITAL_USD:"0",
+    PAYPAL_CLIENT_ID:"synthetic-live-client",PAYPAL_CLIENT_SECRET:"synthetic-live-secret",
+  },{fetchImpl:async(url)=>{seen.push(String(url));throw new Error("provider must not be called");}});
+  assert.equal(response.status,409);
+  assert.equal((await response.json()).error,"PAYPAL_LIVE_CAPTURE_LIMIT_EXCEEDED");
+  assert.deepEqual(seen,[]);
+  assert.deepEqual(writes,[]);
+});
 test("monthly components are quote line items, not recurring PayPal subscriptions",()=>{
   const monthly=SERVICE_IDS.flatMap(serviceId=>Object.entries(SERVICE_PRICING_CATALOG[serviceId])
     .filter(([component])=>component==="monthly"||component==="monthly_pack")

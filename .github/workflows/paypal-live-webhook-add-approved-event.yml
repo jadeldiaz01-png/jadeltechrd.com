@@ -127,21 +127,21 @@ jobs:
                 echo "WORKER_LIVE_GUARD=FAIL flag=$flag reason=WRONG_TYPE" >&2; exit 7
               fi
               value=$(jq -r --arg name "$flag" '[.[] | select(.name==$name)][0].text // "__UNSET__"' <<<"$bindings")
-              if [ "$value" != false ]; then
+              if [ "$value" != true ]; then
                 if [ "$value" = true ]; then reason=ENABLED; else reason=OTHER_VALUE; fi
                 echo "WORKER_LIVE_GUARD=FAIL flag=$flag reason=$reason" >&2; exit 7
               fi
             done
             capture_max=$(jq -r '[.[] | select(.name=="PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR" and .type=="plain_text")][0].text // "__UNSET__"' <<<"$bindings")
-            test "$capture_max" = 0 || {
+            test "$capture_max" = 25000 || {
               echo WORKER_LIVE_CAPTURE_LIMIT=FAIL >&2
               exit 7
             }
           done <<<"$version_ids"
           echo WORKER_ACTIVE_VERSIONS=100_PERCENT
-          echo WORKER_AUTOMATIC_CAPTURE_AND_RECONCILIATION=EXPLICIT_FALSE
-          echo WORKER_AUTOMATIC_CAPTURE_MAX_MINOR=ZERO
-          echo WORKER_FINANCIAL_EXECUTION_AUTHORIZED=EXPLICIT_FALSE
+          echo WORKER_AUTOMATIC_CAPTURE_AND_RECONCILIATION=EXPLICIT_TRUE
+          echo WORKER_AUTOMATIC_CAPTURE_MAX_MINOR=25000
+          echo WORKER_FINANCIAL_EXECUTION_AUTHORIZED=EXPLICIT_TRUE
 
   add-event:
     needs: worker-config
