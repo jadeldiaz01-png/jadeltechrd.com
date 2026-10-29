@@ -39,6 +39,14 @@ const PAYPAL_LEDGER_EVENT_STATES = new Map([
   ["PAYMENT.SALE.COMPLETED", "REQUIRES_HUMAN"],
   ["PAYMENT.SALE.REFUNDED", "REJECTED"],
   ["PAYMENT.SALE.REVERSED", "REJECTED"],
+  ["PAYMENT.SALE.DENIED", "REJECTED"],
+  ["BILLING.SUBSCRIPTION.CREATED", "REQUIRES_HUMAN"],
+  ["BILLING.SUBSCRIPTION.ACTIVATED", "REQUIRES_HUMAN"],
+  ["BILLING.SUBSCRIPTION.UPDATED", "REQUIRES_HUMAN"],
+  ["BILLING.SUBSCRIPTION.CANCELLED", "REQUIRES_HUMAN"],
+  ["BILLING.SUBSCRIPTION.SUSPENDED", "REQUIRES_HUMAN"],
+  ["BILLING.SUBSCRIPTION.EXPIRED", "REQUIRES_HUMAN"],
+  ["BILLING.SUBSCRIPTION.PAYMENT.FAILED", "REJECTED"],
 ]);
 const PAYPAL_ORDER_APPROVED_EVENT = "CHECKOUT.ORDER.APPROVED";
 const TURNSTILE_ACTION = "project_request";
@@ -799,7 +807,42 @@ export async function handlePayPalWebhook(request, env, deps = {}) {
       "SELECT provider_event_id FROM payment_events WHERE provider_event_id=? LIMIT 1"
     ).bind(facts.providerEventId).first();
     if (existing) {
-      if (facts.eventType === "PAYMENT.CAPTURE.COMPLETED" && paypalAutomaticReconciliationEnabled(env)) {
+      const resource = event?.resource || {};
+  const providerSubscriptionId = String(
+    resource.id || resource.billing_agreement_id ||
+    resource.supplementary_data?.related_ids?.subscription_id || ""
+  ).slice(0, 128);
+  const subscriptionNextStatus = new Map([
+    ["BILLING.SUBSCRIPTION.ACTIVATED","ACTIVE"],
+    ["BILLING.SUBSCRIPTION.CANCELLED","CANCELLED"],
+    ["BILLING.SUBSCRIPTION.SUSPENDED","SUSPENDED"],
+    ["BILLING.SUBSCRIPTION.EXPIRED","EXPIRED"],
+    ["BILLING.SUBSCRIPTION.PAYMENT.FAILED","PAST_DUE"],
+    ["PAYMENT.SALE.DENIED","PAST_DUE"],
+    ["PAYMENT.SALE.REFUNDED","PAST_DUE"],
+    ["PAYMENT.SALE.REVERSED","PAST_DUE"],
+  ]).get(facts.eventType);
+  if (providerSubscriptionId && facts.eventType === "PAYMENT.SALE.COMPLETED") {
+    const existingSubscription = await env.DB.prepare(
+      "SELECT subscription_id,amount_minor,currency_code FROM paypal_subscriptions WHERE provider_subscription_id=? LIMIT 1"
+    ).bind(providerSubscriptionId).first();
+    let paidMinor = null;
+    try { paidMinor = providerAmountToMinor(facts.grossAmount); } catch {}
+    if (existingSubscription && paidMinor === Number(existingSubscription.amount_minor) &&
+        facts.currencyCode === existingSubscription.currency_code) {
+      await env.DB.prepare(
+        "UPDATE paypal_subscriptions SET status='ACTIVE',last_payment_at=?,last_event_type=?,updated_at=? WHERE provider_subscription_id=?"
+      ).bind(now,facts.eventType,now,providerSubscriptionId).run();
+    } else if (existingSubscription) {
+      console.error("paypal_subscription_payment_mismatch",{provider_event_id:facts.providerEventId});
+    }
+  } else if (providerSubscriptionId && subscriptionNextStatus) {
+    await env.DB.prepare(
+      "UPDATE paypal_subscriptions SET status=?,last_event_type=?,updated_at=? WHERE provider_subscription_id=?"
+    ).bind(subscriptionNextStatus,facts.eventType,now,providerSubscriptionId).run();
+  }
+
+  if (facts.eventType === "PAYMENT.CAPTURE.COMPLETED" && paypalAutomaticReconciliationEnabled(env)) {
         const prior = await env.DB.prepare(
           "SELECT ledger_id,ledger_state FROM payment_ledger WHERE provider_event_id=? LIMIT 1"
         ).bind(facts.providerEventId).first();
