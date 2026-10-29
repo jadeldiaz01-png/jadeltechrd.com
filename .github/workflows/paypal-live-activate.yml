@@ -1,14 +1,14 @@
-name: Activate PayPal LIVE order creation
+name: Activate PayPal LIVE bounded automatic capture
 
 on:
   workflow_dispatch:
     inputs:
       expected_sha:
-        description: Exact protected main SHA approved for PayPal LIVE order-creation activation
+        description: Exact protected main SHA approved for PayPal LIVE bounded-capture activation
         required: true
         type: string
       confirmation:
-        description: Type ACTIVATE_PAYPAL_LIVE_ORDER_CREATION
+        description: Type ACTIVATE_PAYPAL_LIVE_BOUNDED_CAPTURE_250
         required: true
         type: string
 
@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: jadel-paypal-live-order-activation
+  group: jadel-paypal-live-bounded-capture-250
   cancel-in-progress: false
 
 env:
@@ -29,7 +29,7 @@ env:
 
 jobs:
   resolve-production-d1:
-    if: ${{ inputs.confirmation == 'ACTIVATE_PAYPAL_LIVE_ORDER_CREATION' }}
+    if: ${{ inputs.confirmation == 'ACTIVATE_PAYPAL_LIVE_BOUNDED_CAPTURE_250' }}
     environment:
       name: d1-recovery-drill
     runs-on: ubuntu-24.04
@@ -191,11 +191,11 @@ jobs:
               PAYPAL_ENVIRONMENT:"live",
               PAYPAL_ORDER_CREATION_ENABLED:"true",
               PAYPAL_LIVE_ORDER_CREATION_ENABLED:"true",
-              PAYPAL_AUTOMATIC_CAPTURE_ENABLED:"false",
-              PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:"false",
-              PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:"0",
+              PAYPAL_AUTOMATIC_CAPTURE_ENABLED:"true",
+              PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:"true",
+              PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:"25000",
               PRODUCTION_AUTHORIZED:"true",
-              FINANCIAL_EXECUTION_AUTHORIZED:"false",
+              FINANCIAL_EXECUTION_AUTHORIZED:"true",
               MAX_AUTONOMOUS_CAPITAL_USD:"0"
             },
             d1_databases:[{binding:"DB",database_name:"jadel-commercial-runtime",database_id:$db}],
@@ -203,7 +203,7 @@ jobs:
             workflows:[{name:"jadel-project-lifecycle",binding:"PROJECT_WORKFLOW",class_name:"ProjectLifecycleWorkflow"}],
             triggers:{crons:["*/2 * * * *"]}
           }' > commercial-runtime/wrangler.paypal-live-activate.jsonc
-          jq -e '.vars.PAYPAL_ENVIRONMENT=="live" and .vars.PAYPAL_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_LIVE_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_CAPTURE_ENABLED=="false" and .vars.PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED=="false" and .vars.PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR=="0" and .vars.PRODUCTION_AUTHORIZED=="true" and .vars.FINANCIAL_EXECUTION_AUTHORIZED=="false" and .vars.MAX_AUTONOMOUS_CAPITAL_USD=="0"' commercial-runtime/wrangler.paypal-live-activate.jsonc >/dev/null
+          jq -e '.vars.PAYPAL_ENVIRONMENT=="live" and .vars.PAYPAL_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_LIVE_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_CAPTURE_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR=="25000" and .vars.PRODUCTION_AUTHORIZED=="true" and .vars.FINANCIAL_EXECUTION_AUTHORIZED=="true" and .vars.MAX_AUTONOMOUS_CAPITAL_USD=="0"' commercial-runtime/wrangler.paypal-live-activate.jsonc >/dev/null
           echo PAYPAL_LIVE_ACTIVATION_CONFIG=PASS
 
       - name: Install pinned Wrangler
@@ -214,7 +214,7 @@ jobs:
           npm install --no-save --ignore-scripts "wrangler@${WRANGLER_VERSION}"
           test "$(npx wrangler --version | tr -d '\r\n[:space:]')" = "$WRANGLER_VERSION"
 
-      - name: Activate LIVE order creation
+      - name: Activate bounded PayPal LIVE capture
         shell: bash
         working-directory: commercial-runtime
         env:
@@ -226,7 +226,37 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
           npx wrangler deploy --keep-vars --config wrangler.paypal-live-activate.jsonc
-          echo PAYPAL_LIVE_ORDER_CREATION_ACTIVATED=PASS
+          echo PAYPAL_LIVE_BOUNDED_CAPTURE_ACTIVATED=PASS
+
+      - name: Verify effective bounded LIVE payment flags (GET only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          account='${{ steps.cf.outputs.account_id }}'
+          token=$(printf '%s' "${CLOUDFLARE_API_TOKEN:-}" | tr -d '\r\n')
+          test -n "$account"; test -n "$token"; echo "::add-mask::$token"
+          auth=(-H "Authorization: Bearer $token" -H 'Accept: application/json')
+          api="https://api.cloudflare.com/client/v4/accounts/$account/workers/scripts/$WORKER_NAME"
+          deployments=$(curl --fail-with-body -sS "${auth[@]}" "$api/deployments?per_page=1")
+          test "$(jq -r '.success' <<<"$deployments")" = true
+          jq -e '(.result.deployments|length)==1 and ([.result.deployments[0].versions[].percentage]|add)==100' <<<"$deployments" >/dev/null
+          while IFS= read -r version_id; do
+            [[ "$version_id" =~ ^[0-9a-fA-F-]{36}$ ]]
+            version=$(curl --fail-with-body -sS "${auth[@]}" "$api/versions/$version_id")
+            bindings=$(jq -c '.result.resources.bindings // []' <<<"$version")
+            for entry in PAYPAL_AUTOMATIC_CAPTURE_ENABLED:true PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:true PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:25000 FINANCIAL_EXECUTION_AUTHORIZED:true MAX_AUTONOMOUS_CAPITAL_USD:0 PAYPAL_ORDER_CREATION_ENABLED:true PAYPAL_LIVE_ORDER_CREATION_ENABLED:true PRODUCTION_AUTHORIZED:true; do
+              name=${entry%%:*}; expected=${entry#*:}
+              count=$(jq -r --arg n "$name" '[.[]|select(.name==$n)]|length' <<<"$bindings")
+              test "$count" = 1 || { echo "WORKER_PAYMENT_FLAG=FAIL name=$name reason=ABSENT_OR_DUPLICATE" >&2; exit 41; }
+              actual=$(jq -r --arg n "$name" '[.[]|select(.name==$n)][0] | select(.type=="plain_text") | .text // "__WRONG_TYPE__"' <<<"$bindings")
+              test "$actual" = "$expected" || { echo "WORKER_PAYMENT_FLAG=FAIL name=$name reason=VALUE_OR_TYPE_MISMATCH" >&2; exit 42; }
+              echo "WORKER_PAYMENT_FLAG=PASS name=$name"
+            done
+            for secret_name in PAYPAL_CLIENT_ID PAYPAL_CLIENT_SECRET PAYPAL_WEBHOOK_ID; do
+              jq -e --arg n "$secret_name" '[.[]|select(.name==$n and .type=="secret_text")]|length==1' <<<"$bindings" >/dev/null
+            done
+          done < <(jq -r '.result.deployments[0].versions[].version_id' <<<"$deployments")
+          echo PAYPAL_LIVE_EFFECTIVE_FLAGS_AUDIT=PASS
 
       - name: Verify post-activation canaries
         shell: bash
@@ -247,11 +277,13 @@ jobs:
           test "$(jq -r '.error // empty' /tmp/paypal-activation-canary.json)" = PAYPAL_WEBHOOK_REJECTED
           echo PAYPAL_LIVE_POST_ACTIVATION=PASS
           {
-            echo '## PayPal LIVE order creation activated'
+            echo '## PayPal LIVE bounded capture activated'
             echo
             echo 'Order creation: enabled'
-            echo 'Automatic capture: not implemented'
-            echo 'Financial execution authority: false'
-            echo 'Autonomous capital: US$0'
-            echo 'Rollback: dispatch Deploy commercial runtime on this exact main to restore false flags'
+            echo 'Automatic capture: exact buyer-approved accepted USD quotes up to US$250 (25,000 cents)'
+            echo 'Automatic reconciliation: matching verified completed capture only'
+            echo 'Financial execution authorization: bounded buyer-directed capture path enabled'
+            echo 'Autonomous capital budget: US$0'
+            echo 'This workflow creates no order and captures no payment'
+            echo 'Rollback: deploy exact-main commercial runtime with capture, reconciliation and financial execution false and capture limit zero'
           } >> "$GITHUB_STEP_SUMMARY"
