@@ -917,7 +917,6 @@ export async function handleAdminApprovals(request, env) {
         projects: [],
         payments: payments.results || [],
         payment_orders: paymentOrders.results || [],
-      subscriptions: subscriptions.results || [],
       });
     }
 
@@ -945,6 +944,7 @@ export async function handleAdminApprovals(request, env) {
       quotes: quotes.results || [],
       payments: payments.results || [],
       payment_orders: paymentOrders.results || [],
+      subscriptions: subscriptions.results || [],
     });
   }
   if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
