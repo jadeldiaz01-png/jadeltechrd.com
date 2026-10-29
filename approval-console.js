@@ -103,18 +103,19 @@ function quotePaymentControls(quote, paymentOrders, subscriptions) {
   const order = paymentOrders.find((item) => item.quote_id === quote.quote_id);
   const subscription = subscriptions.find((item) => item.quote_id === quote.quote_id);
   const recurring = Number(quote.recurring_amount_minor || 0);
-  const recurringControl = recurring > 0 ? (subscription?.provider_approval_url
-    ? `<div><a href="${htmlEscape(safePayPalApprovalUrl(subscription.provider_approval_url) || "#")}" target="_blank" rel="noopener noreferrer">Autorizar mensualidad en PayPal · ${formatMinor(recurring)}</a><span> · ${htmlEscape(subscription.status)}</span></div>`
-    : `<div><button data-subscription-create="${htmlEscape(quote.quote_id)}">Crear autorización mensual · ${formatMinor(recurring)}</button></div>`) : "";
+  const subscriptionUrl = safePayPalApprovalUrl(subscription?.provider_approval_url);
+  const recurringControl = recurring <= 0 ? "" : subscriptionUrl
+    ? `<div><a href="${htmlEscape(subscriptionUrl)}" target="_blank" rel="noopener noreferrer">Autorizar mensualidad en PayPal · ${formatMinor(recurring)} / mes</a><span> · ${htmlEscape(subscription.status)}</span></div>`
+    : quote.project_state === "PAID"
+      ? `<div><button data-subscription-create="${htmlEscape(quote.quote_id)}">Crear suscripción mensual · ${formatMinor(recurring)} / mes</button></div>`
+      : `<p>La autorización mensual estará disponible después de conciliar el pago inicial.</p>`;
   const approvalUrl = safePayPalApprovalUrl(order?.provider_approval_url);
-  if (approvalUrl) {
-    return `<div><a href="${htmlEscape(approvalUrl)}" target="_blank" rel="noopener noreferrer">Abrir checkout PayPal</a></div>${recurringControl}`;
-  }
-  return `<div>
-    <button data-payment-order-create="${htmlEscape(quote.quote_id)}">
-      ${order ? "Completar orden PayPal" : "Crear orden PayPal"}
-    </button>
-  </div>${recurringControl}`;
+  const initialControl = quote.project_state === "PAID"
+    ? "<p>Pago inicial conciliado.</p>"
+    : approvalUrl
+      ? `<div><a href="${htmlEscape(approvalUrl)}" target="_blank" rel="noopener noreferrer">Abrir checkout PayPal</a></div>`
+      : `<div><button data-payment-order-create="${htmlEscape(quote.quote_id)}">${order ? "Completar orden PayPal" : "Crear orden PayPal"}</button></div>`;
+  return `${initialControl}${recurringControl}`;
 }
 
 function captureAssist(order) {
