@@ -1361,6 +1361,94 @@ export async function handleAdminQuoteAcceptance(request, env) {
   }, 200);
 }
 
+export async function handleAdminSubscriptionCreate(request, env, deps = {}) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+  if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  let input;
+  try { input = await readJsonWithLimit(request); }
+  catch { return json({ error: "INVALID_SUBSCRIPTION_REQUEST" }, 400); }
+  const quoteId = typeof input.quote_id === "string" && QUOTE_ID_RE.test(input.quote_id) ? input.quote_id : null;
+  if (!quoteId) return json({ error: "INVALID_QUOTE_ID" }, 400);
+
+  const quote = await env.DB.prepare(
+    "SELECT q.quote_id,q.project_id,q.status,q.currency_code,p.state AS project_state,p.policy_status FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.quote_id=? LIMIT 1"
+  ).bind(quoteId).first();
+  if (!quote) return json({ error: "QUOTE_NOT_FOUND" }, 404);
+  if (quote.status !== "ACCEPTED" || quote.policy_status !== "ALLOWED" ||
+      !new Set(["CUSTOMER_APPROVED","PAYMENT_PENDING","PAID"]).has(quote.project_state)) {
+    return json({ error: "QUOTE_NOT_READY_FOR_SUBSCRIPTION" }, 409);
+  }
+
+  const monthly = await env.DB.prepare(
+    "SELECT service_id,description,line_amount_minor FROM quote_items WHERE quote_id=? AND price_component IN ('monthly','monthly_pack') ORDER BY created_at"
+  ).bind(quoteId).all();
+  const items = monthly.results || [];
+  const amountMinor = items.reduce((sum,item) => sum + Number(item.line_amount_minor),0);
+  if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0 || amountMinor > 1_000_000) {
+    return json({ error: amountMinor <= 0 ? "QUOTE_HAS_NO_MONTHLY_SERVICES" : "PAYPAL_SUBSCRIPTION_AMOUNT_OUT_OF_RANGE" }, 409);
+  }
+  if (!envFlagTrue(env, "PAYPAL_SUBSCRIPTIONS_ENABLED")) return json({ error:"PAYPAL_SUBSCRIPTIONS_DISABLED" }, 409);
+
+  let providerGate;
+  try { providerGate = validatePayPalOrderCreation(env); }
+  catch (error) { return json({ error:String(error?.message || "PAYPAL_SUBSCRIPTION_NOT_CONFIGURED") }, 503); }
+  if (!providerGate.enabled) return json({ error:"PAYPAL_SUBSCRIPTION_PROVIDER_DISABLED" }, 409);
+
+  let existing = await env.DB.prepare(
+    "SELECT subscription_id,status,amount_minor,currency_code,provider_subscription_id,provider_approval_url FROM paypal_subscriptions WHERE quote_id=? LIMIT 1"
+  ).bind(quoteId).first();
+  if (existing?.provider_subscription_id) {
+    return json({
+      subscription_id:existing.subscription_id,quote_id:quoteId,project_id:quote.project_id,
+      status:existing.status,amount_minor:existing.amount_minor,currency_code:existing.currency_code,
+      provider_subscription_id:existing.provider_subscription_id,
+      approval_url:existing.provider_approval_url || null,replayed:true,
+    },200);
+  }
+
+  const subscriptionId = existing?.subscription_id || crypto.randomUUID();
+  const now = new Date().toISOString();
+  if (!existing) {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO paypal_subscriptions (subscription_id,quote_id,project_id,provider,status,amount_minor,currency_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)"
+      ).bind(subscriptionId,quoteId,quote.project_id,"paypal","PENDING",amountMinor,quote.currency_code,now,now).run();
+    } catch {
+      existing = await env.DB.prepare(
+        "SELECT subscription_id,status,amount_minor,currency_code,provider_subscription_id,provider_approval_url FROM paypal_subscriptions WHERE quote_id=? LIMIT 1"
+      ).bind(quoteId).first();
+      if (!existing) return json({ error:"SUBSCRIPTION_RECORD_CREATE_FAILED" },503);
+      if (existing.provider_subscription_id) {
+        return json({ subscription_id:existing.subscription_id,quote_id:quoteId,project_id:quote.project_id,status:existing.status,amount_minor:existing.amount_minor,currency_code:existing.currency_code,provider_subscription_id:existing.provider_subscription_id,approval_url:existing.provider_approval_url || null,replayed:true },200);
+      }
+    }
+  }
+
+  let provider;
+  try {
+    provider = await createPayPalMonthlySubscription(env,{
+      subscriptionId,quoteId,amountMinor,
+      serviceNames:items.map(item=>item.description || item.service_id).join(", "),
+    },deps.fetchImpl);
+  } catch (error) {
+    console.error("paypal_subscription_create_failed",{error_code:String(error?.message || "PAYPAL_SUBSCRIPTION_CREATE_FAILED").slice(0,80)});
+    return json({ error:String(error?.message || "PAYPAL_SUBSCRIPTION_CREATE_FAILED"),subscription_id:subscriptionId,retryable:true },502);
+  }
+  const updatedAt = new Date().toISOString();
+  await env.DB.prepare(
+    "UPDATE paypal_subscriptions SET provider_product_id=?,provider_plan_id=?,provider_subscription_id=?,provider_approval_url=?,status='APPROVAL_PENDING',last_event_type=?,updated_at=? WHERE subscription_id=? AND provider_subscription_id=''"
+  ).bind(provider.productId,provider.planId,provider.providerSubscriptionId,provider.approvalUrl,"CREATED_BY_JADEL",updatedAt,subscriptionId).run();
+  return json({
+    subscription_id:subscriptionId,quote_id:quoteId,project_id:quote.project_id,
+    status:"APPROVAL_PENDING",amount_minor:amountMinor,currency_code:quote.currency_code,
+    provider_subscription_id:provider.providerSubscriptionId,approval_url:provider.approvalUrl,
+    provider_environment:providerGate.environment,buyer_approval_required:true,
+    provider_call_performed:true,replayed:false,
+  },201);
+}
+
 export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
   if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
   if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
