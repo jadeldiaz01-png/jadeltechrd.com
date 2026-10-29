@@ -68,6 +68,7 @@ jobs:
           grep -Fq 'PAYPAL_ORDER_CREATION_ENABLED:"false"' "$deploy"
           grep -Fq 'PAYPAL_LIVE_ORDER_CREATION_ENABLED:"false"' "$deploy"
           grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_ENABLED:"false"' "$deploy"
+          grep -Fq 'PAYPAL_SUBSCRIPTIONS_ENABLED:"false"' "$deploy"
           grep -Fq 'PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:"false"' "$deploy"
           grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:"0"' "$deploy"
           grep -Fq 'PRODUCTION_AUTHORIZED:"false"' "$deploy"
