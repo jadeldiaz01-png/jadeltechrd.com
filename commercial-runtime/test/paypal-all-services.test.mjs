@@ -73,9 +73,10 @@ test("catalog-issued quote is valid for every approved single-service project", 
     const body=await response.json();
     assert.equal(response.status,201,serviceId);
     assert.equal(body.quote_source,"CANONICAL_SERVICE_CATALOG");
-    assert.equal(body.total_amount_minor,buildCatalogPrimaryQuoteItems([serviceId])[0].unit_amount_minor,serviceId);
+    const catalogItems=buildCatalogQuoteItems([serviceId]);
+    assert.equal(body.total_amount_minor,catalogItems.reduce((sum,item)=>sum+item.unit_amount_minor*item.quantity,0),serviceId);
     assert.equal(body.external_side_effect,false);
-    assert.deepEqual(records,[3]);
+    assert.deepEqual(records,[catalogItems.length+2]);
   }
 });
 test("all eleven services create only quote-bound internal pending payment orders when provider disabled",async()=>{
