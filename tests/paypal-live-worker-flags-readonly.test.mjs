@@ -21,7 +21,7 @@ test('independent worker capture audit is manual, exact-SHA and read-only', () =
 });
 
 test('the audit requires explicit safe values and classifies wrong bindings without exposing them', () => {
-  for (const flag of ['PAYPAL_AUTOMATIC_CAPTURE_ENABLED:true','PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:true','FINANCIAL_EXECUTION_AUTHORIZED:true','PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:25000']) {
+  for (const flag of ['PAYPAL_AUTOMATIC_CAPTURE_ENABLED:true','PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:true','FINANCIAL_EXECUTION_AUTHORIZED:true','PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:1480000']) {
     assert.ok(workflow.includes(flag), flag);
   }
   for (const category of ['ABSENT','DUPLICATE','WRONG_TYPE','ENABLED','OTHER_VALUE','PASS']) {

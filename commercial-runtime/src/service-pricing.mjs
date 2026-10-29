@@ -130,3 +130,25 @@ export function buildCatalogPrimaryQuoteItems(serviceIds) {
     });
   });
 }
+
+export function buildCatalogQuoteItems(serviceIds) {
+  const primary = buildCatalogPrimaryQuoteItems(serviceIds);
+  const recurring = [];
+  for (const serviceId of serviceIds) {
+    const service = SERVICE_PRICING_CATALOG[serviceId];
+    const monthlyComponents = Object.entries(service).filter(([component]) =>
+      component === "monthly" || component === "monthly_pack"
+    );
+    for (const [priceComponent, rule] of monthlyComponents) {
+      recurring.push(Object.freeze({
+        service_id:serviceId,
+        description:`${SERVICE_DISPLAY_NAMES[serviceId]} · mensual`,
+        quantity:1,
+        price_component:priceComponent,
+        unit_amount_minor:rule.amount_minor,
+      }));
+    }
+  }
+  return [...primary,...recurring];
+}
+

@@ -4,6 +4,7 @@ import {
   SERVICE_PRICING_CATALOG,
   SERVICE_PRICING_CATALOG_VERSION,
   buildCatalogPrimaryQuoteItems,
+  buildCatalogQuoteItems,
   resolveCatalogPrice,
 } from "../src/service-pricing.mjs";
 
@@ -92,4 +93,15 @@ test("selected services produce deterministic primary quote items", () => {
 test("catalog quote builder rejects unknown or duplicate service selections", () => {
   assert.throws(() => buildCatalogPrimaryQuoteItems(["unknown"]), /UNKNOWN_SERVICE_ID/);
   assert.throws(() => buildCatalogPrimaryQuoteItems(["architecture","architecture"]), /INVALID_PROJECT_SERVICE_IDS/);
+});
+
+test("catalog quotes include recurring components separately from primary charges", () => {
+  const items = buildCatalogQuoteItems(["support","cineforge","architecture"]);
+  assert.deepEqual(items.map((item) => [item.service_id,item.price_component,item.unit_amount_minor]), [
+    ["support","setup",90000],
+    ["cineforge","unit",18000],
+    ["architecture","setup",25000],
+    ["support","monthly",14900],
+    ["cineforge","monthly_pack",89900],
+  ]);
 });

@@ -133,14 +133,14 @@ jobs:
               fi
             done
             capture_max=$(jq -r '[.[] | select(.name=="PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR" and .type=="plain_text")][0].text // "__UNSET__"' <<<"$bindings")
-            test "$capture_max" = 25000 || {
+            test "$capture_max" = 1480000 || {
               echo WORKER_LIVE_CAPTURE_LIMIT=FAIL >&2
               exit 7
             }
           done <<<"$version_ids"
           echo WORKER_ACTIVE_VERSIONS=100_PERCENT
           echo WORKER_AUTOMATIC_CAPTURE_AND_RECONCILIATION=EXPLICIT_TRUE
-          echo WORKER_AUTOMATIC_CAPTURE_MAX_MINOR=25000
+          echo WORKER_AUTOMATIC_CAPTURE_MAX_MINOR=1480000
           echo WORKER_FINANCIAL_EXECUTION_AUTHORIZED=EXPLICIT_TRUE
 
   add-event:

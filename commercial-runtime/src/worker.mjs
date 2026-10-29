@@ -2,7 +2,8 @@ import { validateIdempotencyKey, validateProjectRequest } from "./validation.mjs
 import { buildRuntimeRevenueView } from "./revenue-intelligence.mjs";
 import { loadApprovedOpportunityFeed } from "./revenue-agent-bridge.mjs";
 import { buildRevenueRuntimeAuthorization } from "./revenue-agent-authorization.mjs";
-import { buildCatalogPrimaryQuoteItems, resolveCatalogPrice } from "./service-pricing.mjs";
+import { buildCatalogPrimaryQuoteItems, buildCatalogQuoteItems, resolveCatalogPrice } from "./service-pricing.mjs";
+import { createPayPalMonthlySubscription } from "./paypal-subscriptions.mjs";
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_WEBHOOK_BYTES = 64 * 1024;
@@ -38,6 +39,14 @@ const PAYPAL_LEDGER_EVENT_STATES = new Map([
   ["PAYMENT.SALE.COMPLETED", "REQUIRES_HUMAN"],
   ["PAYMENT.SALE.REFUNDED", "REJECTED"],
   ["PAYMENT.SALE.REVERSED", "REJECTED"],
+  ["PAYMENT.SALE.DENIED", "REJECTED"],
+  ["BILLING.SUBSCRIPTION.CREATED", "REQUIRES_HUMAN"],
+  ["BILLING.SUBSCRIPTION.ACTIVATED", "REQUIRES_HUMAN"],
+  ["BILLING.SUBSCRIPTION.UPDATED", "REQUIRES_HUMAN"],
+  ["BILLING.SUBSCRIPTION.CANCELLED", "REQUIRES_HUMAN"],
+  ["BILLING.SUBSCRIPTION.SUSPENDED", "REQUIRES_HUMAN"],
+  ["BILLING.SUBSCRIPTION.EXPIRED", "REQUIRES_HUMAN"],
+  ["BILLING.SUBSCRIPTION.PAYMENT.FAILED", "REJECTED"],
 ]);
 const PAYPAL_ORDER_APPROVED_EVENT = "CHECKOUT.ORDER.APPROVED";
 const TURNSTILE_ACTION = "project_request";
@@ -725,9 +734,55 @@ function paymentFacts(event) {
   };
 }
 
+async function reconcilePayPalSubscriptionSale(event, facts, ledgerId, env) {
+  const resource = event?.resource || {};
+  const providerSubscriptionId = String(
+    resource.billing_agreement_id ||
+    resource.supplementary_data?.related_ids?.subscription_id || ""
+  ).slice(0,128);
+  if (!providerSubscriptionId) return false;
+
+  const subscription = await env.DB.prepare(
+    "SELECT subscription_id,project_id,amount_minor,currency_code FROM paypal_subscriptions WHERE provider_subscription_id=? LIMIT 1"
+  ).bind(providerSubscriptionId).first();
+  if (!subscription) return false;
+
+  let paidMinor = null;
+  try { paidMinor = providerAmountToMinor(facts.grossAmount); } catch {}
+  if (paidMinor !== Number(subscription.amount_minor) ||
+      String(facts.currencyCode || "").toUpperCase() !== String(subscription.currency_code || "").toUpperCase()) {
+    console.error("paypal_subscription_payment_mismatch",{provider_event_id:facts.providerEventId});
+    return false;
+  }
+
+  const ledger = await env.DB.prepare(
+    "SELECT ledger_state,project_id FROM payment_ledger WHERE ledger_id=? AND provider_event_id=? LIMIT 1"
+  ).bind(ledgerId,facts.providerEventId).first();
+  if (!ledger) return false;
+  if (ledger.ledger_state === "MATCHED") return ledger.project_id === subscription.project_id;
+  if (ledger.ledger_state !== "REQUIRES_HUMAN") return false;
+
+  const now = new Date().toISOString();
+  const approvalId = crypto.randomUUID();
+  await env.DB.batch([
+    env.DB.prepare(INSERT_APPROVAL_SQL).bind(
+      approvalId,subscription.project_id,"subscription_payment_reconciliation","APPROVED","paypal_webhook",
+      "Verified recurring PayPal sale exactly matched the quoted subscription amount and currency.",
+      JSON.stringify({ledger_id:ledgerId,provider_event_id:facts.providerEventId,subscription_id:subscription.subscription_id}),now,
+    ),
+    env.DB.prepare(
+      "UPDATE payment_ledger SET project_id=?,ledger_state='MATCHED',notes=?,updated_at=? WHERE ledger_id=? AND ledger_state='REQUIRES_HUMAN'"
+    ).bind(subscription.project_id,"Verified recurring PayPal sale matched subscription amount and currency.",now,ledgerId),
+    env.DB.prepare(
+      "UPDATE paypal_subscriptions SET status='ACTIVE',last_payment_at=?,last_event_type=?,updated_at=? WHERE subscription_id=?"
+    ).bind(now,facts.eventType,now,subscription.subscription_id),
+  ]);
+  return true;
+}
+
 export async function handlePayPalWebhook(request, env, deps = {}) {
-  if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
-  if (!paypalWebhookConfigured(env)) return json({ error: "PAYPAL_WEBHOOK_NOT_CONFIGURED" }, 503);
+  if (request.method !== "POST") return json({ error:"METHOD_NOT_ALLOWED" },405);
+  if (!paypalWebhookConfigured(env)) return json({ error:"PAYPAL_WEBHOOK_NOT_CONFIGURED" },503);
   let raw;
   let event;
   try {
@@ -735,50 +790,42 @@ export async function handlePayPalWebhook(request, env, deps = {}) {
     event = JSON.parse(raw);
   } catch (error) {
     const code = String(error?.message || "INVALID_WEBHOOK");
-    return json({ error: code }, code === "REQUEST_TOO_LARGE" ? 413 : 400);
+    return json({ error:code },code === "REQUEST_TOO_LARGE" ? 413 : 400);
   }
 
   let verified;
   try {
-    verified = await verifyPayPalWebhook(request.headers, event, env, deps.fetchImpl);
+    verified = await verifyPayPalWebhook(request.headers,event,env,deps.fetchImpl);
   } catch (error) {
-    console.warn("paypal_webhook_verify_unavailable", { error: String(error?.message || "PAYPAL_VERIFY_UNAVAILABLE") });
-    return json({ error: "PAYPAL_VERIFY_UNAVAILABLE" }, 503);
+    console.warn("paypal_webhook_verify_unavailable",{error:String(error?.message || "PAYPAL_VERIFY_UNAVAILABLE")});
+    return json({ error:"PAYPAL_VERIFY_UNAVAILABLE" },503);
   }
   if (!verified.ok) {
-    console.warn("paypal_webhook_rejected", { reason: verified.reason });
-    return json({ error: "PAYPAL_WEBHOOK_REJECTED" }, 403);
+    console.warn("paypal_webhook_rejected",{reason:verified.reason});
+    return json({ error:"PAYPAL_WEBHOOK_REJECTED" },403);
   }
 
   const facts = paymentFacts(event);
-  if (!facts.providerEventId || !facts.eventType) return json({ error: "PAYPAL_EVENT_INVALID" }, 400);
+  if (!facts.providerEventId || !facts.eventType) return json({ error:"PAYPAL_EVENT_INVALID" },400);
   if (facts.eventType === PAYPAL_ORDER_APPROVED_EVENT) {
     if (!paypalAutomaticCaptureEnabled(env)) {
-      return json({ received:true, ignored:true, capture_performed:false, reason:"AUTOMATIC_CAPTURE_DISABLED" }, 202);
+      return json({received:true,ignored:true,capture_performed:false,reason:"AUTOMATIC_CAPTURE_DISABLED"},202);
     }
     try {
       const result = await captureBuyerApprovedOrder(event,env,deps.fetchImpl);
-      if (!result.captured) {
-        console.warn("paypal_autocapture_not_performed", { reason:result.reason || "POLICY_REJECTED" });
-      }
+      if (!result.captured) console.warn("paypal_autocapture_not_performed",{reason:result.reason || "POLICY_REJECTED"});
       return json({
-        received:true,
-        event_type:facts.eventType,
-        capture_performed:Boolean(result.captured),
-        already_completed:Boolean(result.alreadyCompleted),
-        reason:result.reason || undefined,
-      }, 202);
+        received:true,event_type:facts.eventType,capture_performed:Boolean(result.captured),
+        already_completed:Boolean(result.alreadyCompleted),reason:result.reason || undefined,
+      },202);
     } catch (error) {
-      console.error("paypal_autocapture_retryable_failure", {
-        error_code:String(error?.message || "PAYPAL_CAPTURE_FAILED").slice(0, 80),
-      });
-      return json({ error:"PAYPAL_AUTOCAPTURE_UNAVAILABLE" }, 503);
+      console.error("paypal_autocapture_retryable_failure",{error_code:String(error?.message || "PAYPAL_CAPTURE_FAILED").slice(0,80)});
+      return json({error:"PAYPAL_AUTOCAPTURE_UNAVAILABLE"},503);
     }
   }
+
   const ledgerState = PAYPAL_LEDGER_EVENT_STATES.get(facts.eventType);
-  if (!ledgerState) {
-    return json({ received: true, ignored: true, event_type: facts.eventType }, 202);
-  }
+  if (!ledgerState) return json({received:true,ignored:true,event_type:facts.eventType},202);
 
   const now = new Date().toISOString();
   const ledgerId = crypto.randomUUID();
@@ -795,52 +842,77 @@ export async function handlePayPalWebhook(request, env, deps = {}) {
     ]);
   } catch (error) {
     const existing = await env.DB.prepare(
-      "SELECT provider_event_id FROM payment_events WHERE provider_event_id=? LIMIT 1"
+      "SELECT ledger_id,ledger_state FROM payment_ledger WHERE provider_event_id=? LIMIT 1"
     ).bind(facts.providerEventId).first();
     if (existing) {
-      if (facts.eventType === "PAYMENT.CAPTURE.COMPLETED" && paypalAutomaticReconciliationEnabled(env)) {
-        const prior = await env.DB.prepare(
-          "SELECT ledger_id,ledger_state FROM payment_ledger WHERE provider_event_id=? LIMIT 1"
-        ).bind(facts.providerEventId).first();
-        if (prior?.ledger_state === "MATCHED") {
-          console.info("paypal_webhook_replay_idempotent", { event_type:facts.eventType, ledger_state:"MATCHED" });
-          return json({ received:true, replayed:true, ledger_state:"MATCHED" }, 200);
-        }
-        if (prior?.ledger_id) {
-          try {
-            const reconciled = await reconcileVerifiedPayPalCapture(event,facts,prior.ledger_id,env,deps.fetchImpl);
-            return json({ received:true, replayed:true, ledger_state:reconciled ? "MATCHED" : "REQUIRES_HUMAN" }, 200);
-          } catch (reconcileError) {
-            console.error("paypal_auto_reconciliation_retryable_failure", {
-              error_code:String(reconcileError?.message || "PAYMENT_AUTO_RECONCILIATION_FAILED").slice(0, 80),
-            });
-            return json({ error:"PAYMENT_AUTO_RECONCILIATION_UNAVAILABLE" }, 503);
-          }
+      if (facts.eventType === "PAYMENT.CAPTURE.COMPLETED" &&
+          paypalAutomaticReconciliationEnabled(env) && existing.ledger_id) {
+        try {
+          const matched = await reconcileVerifiedPayPalCapture(event,facts,existing.ledger_id,env,deps.fetchImpl);
+          return json({received:true,replayed:true,ledger_state:matched ? "MATCHED" : "REQUIRES_HUMAN"},200);
+        } catch (retryError) {
+          console.error("paypal_auto_reconciliation_retryable_failure",{error_code:String(retryError?.message || "PAYMENT_AUTO_RECONCILIATION_FAILED").slice(0,80)});
+          return json({error:"PAYMENT_AUTO_RECONCILIATION_UNAVAILABLE"},503);
         }
       }
-      return json({ received: true, replayed: true }, 200);
+      if (facts.eventType === "PAYMENT.SALE.COMPLETED" &&
+          paypalAutomaticReconciliationEnabled(env) && existing.ledger_id) {
+        try {
+          const matched = await reconcilePayPalSubscriptionSale(event,facts,existing.ledger_id,env);
+          return json({received:true,replayed:true,ledger_state:matched ? "MATCHED" : existing.ledger_state},200);
+        } catch (retryError) {
+          console.error("paypal_subscription_reconciliation_retryable_failure",{error_code:String(retryError?.message || "PAYMENT_SUBSCRIPTION_RECONCILIATION_FAILED").slice(0,80)});
+          return json({error:"PAYMENT_SUBSCRIPTION_RECONCILIATION_UNAVAILABLE"},503);
+        }
+      }
+      return json({received:true,replayed:true},200);
     }
-    console.error("paypal_webhook_write_failed", { event_id: facts.providerEventId, error: String(error) });
-    return json({ error: "PAYMENT_WRITE_FAILED" }, 503);
+    console.error("paypal_webhook_write_failed",{event_id:facts.providerEventId,error:String(error)});
+    return json({error:"PAYMENT_WRITE_FAILED"},503);
+  }
+
+  const resource = event?.resource || {};
+  const providerSubscriptionId = String(
+    resource.id || resource.billing_agreement_id ||
+    resource.supplementary_data?.related_ids?.subscription_id || ""
+  ).slice(0,128);
+  const subscriptionNextStatus = new Map([
+    ["BILLING.SUBSCRIPTION.ACTIVATED","ACTIVE"],
+    ["BILLING.SUBSCRIPTION.CANCELLED","CANCELLED"],
+    ["BILLING.SUBSCRIPTION.SUSPENDED","SUSPENDED"],
+    ["BILLING.SUBSCRIPTION.EXPIRED","EXPIRED"],
+    ["BILLING.SUBSCRIPTION.PAYMENT.FAILED","PAST_DUE"],
+    ["PAYMENT.SALE.DENIED","PAST_DUE"],
+    ["PAYMENT.SALE.REFUNDED","PAST_DUE"],
+    ["PAYMENT.SALE.REVERSED","PAST_DUE"],
+  ]).get(facts.eventType);
+  if (providerSubscriptionId && subscriptionNextStatus) {
+    await env.DB.prepare(
+      "UPDATE paypal_subscriptions SET status=?,last_event_type=?,updated_at=? WHERE provider_subscription_id=?"
+    ).bind(subscriptionNextStatus,facts.eventType,now,providerSubscriptionId).run();
+  }
+
+  if (facts.eventType === "PAYMENT.SALE.COMPLETED" && paypalAutomaticReconciliationEnabled(env)) {
+    try {
+      const matched = await reconcilePayPalSubscriptionSale(event,facts,ledgerId,env);
+      return json({received:true,provider_event_id:facts.providerEventId,ledger_state:matched ? "MATCHED" : ledgerState},202);
+    } catch (error) {
+      console.error("paypal_subscription_reconciliation_retryable_failure",{error_code:String(error?.message || "PAYMENT_SUBSCRIPTION_RECONCILIATION_FAILED").slice(0,80)});
+      return json({error:"PAYMENT_SUBSCRIPTION_RECONCILIATION_UNAVAILABLE"},503);
+    }
   }
 
   if (facts.eventType === "PAYMENT.CAPTURE.COMPLETED" && paypalAutomaticReconciliationEnabled(env)) {
     try {
-      const reconciled = await reconcileVerifiedPayPalCapture(event,facts,ledgerId,env,deps.fetchImpl);
-      return json({
-        received:true,
-        provider_event_id:facts.providerEventId,
-        ledger_state:reconciled ? "MATCHED" : ledgerState,
-      }, 202);
+      const matched = await reconcileVerifiedPayPalCapture(event,facts,ledgerId,env,deps.fetchImpl);
+      return json({received:true,provider_event_id:facts.providerEventId,ledger_state:matched ? "MATCHED" : ledgerState},202);
     } catch (error) {
-      console.error("paypal_auto_reconciliation_retryable_failure", {
-        error_code:String(error?.message || "PAYMENT_AUTO_RECONCILIATION_FAILED").slice(0, 80),
-      });
-      return json({ error:"PAYMENT_AUTO_RECONCILIATION_UNAVAILABLE" }, 503);
+      console.error("paypal_auto_reconciliation_retryable_failure",{error_code:String(error?.message || "PAYMENT_AUTO_RECONCILIATION_FAILED").slice(0,80)});
+      return json({error:"PAYMENT_AUTO_RECONCILIATION_UNAVAILABLE"},503);
     }
   }
 
-  return json({ received: true, provider_event_id: facts.providerEventId, ledger_state: ledgerState }, 202);
+  return json({received:true,provider_event_id:facts.providerEventId,ledger_state:ledgerState},202);
 }
 
 async function requireAdmin(request, env) {
@@ -883,7 +955,7 @@ export async function handleAdminApprovals(request, env) {
       "SELECT project_id,name,email,company,service_ids_json,offer_id,offer_landing_path,utm_source,utm_medium,utm_campaign,utm_content,state,policy_status,created_at,updated_at FROM project_requests WHERE policy_status='ALLOWED' AND state='POLICY_ALLOWED' ORDER BY updated_at DESC LIMIT 50"
     ).all();
     const quotes = await env.DB.prepare(
-      "SELECT q.quote_id,q.project_id,q.version,q.status,q.currency_code,q.total_amount_minor,q.expires_at,q.created_at,p.name,p.email FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.status IN ('ISSUED','ACCEPTED') ORDER BY q.created_at DESC LIMIT 50"
+      "SELECT q.quote_id,q.project_id,q.version,q.status,q.currency_code,q.total_amount_minor,q.expires_at,q.created_at,p.name,p.email,p.state AS project_state,COALESCE((SELECT SUM(qi.line_amount_minor) FROM quote_items qi WHERE qi.quote_id=q.quote_id AND qi.price_component IN ('monthly','monthly_pack')),0) AS recurring_amount_minor,(q.total_amount_minor-COALESCE((SELECT SUM(qi.line_amount_minor) FROM quote_items qi WHERE qi.quote_id=q.quote_id AND qi.price_component IN ('monthly','monthly_pack')),0)) AS upfront_amount_minor FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.status IN ('ISSUED','ACCEPTED') ORDER BY q.created_at DESC LIMIT 50"
     ).all();
     const payments = await env.DB.prepare(
       "SELECT l.ledger_id,l.provider_event_id,l.ledger_state,l.amount_usd,l.currency_code,l.created_at,e.resource_id,e.event_type,e.resource_status FROM payment_ledger l JOIN payment_events e ON e.provider_event_id=l.provider_event_id WHERE l.ledger_state IN ('RECEIVED','RECONCILING','REQUIRES_HUMAN') ORDER BY l.created_at DESC LIMIT 50"
@@ -891,12 +963,16 @@ export async function handleAdminApprovals(request, env) {
     const paymentOrders = await env.DB.prepare(
       "SELECT payment_order_id,quote_id,project_id,status,amount_minor,currency_code,provider_order_id,provider_approval_url,created_at FROM payment_orders WHERE status='PENDING' ORDER BY created_at DESC LIMIT 50"
     ).all();
+    const subscriptions = await env.DB.prepare(
+      "SELECT subscription_id,quote_id,project_id,status,amount_minor,currency_code,provider_subscription_id,provider_approval_url,last_payment_at,created_at FROM paypal_subscriptions ORDER BY created_at DESC LIMIT 50"
+    ).all();
     return json({
       projects: pending.results || [],
       quotable_projects: quotable.results || [],
       quotes: quotes.results || [],
       payments: payments.results || [],
       payment_orders: paymentOrders.results || [],
+      subscriptions: subscriptions.results || [],
     });
   }
   if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
@@ -1241,7 +1317,7 @@ export async function handleAdminCatalogQuoteCreate(request, env) {
   let normalized;
   try {
     serviceIds = JSON.parse(project.service_ids_json);
-    normalized = normalizeQuoteItems(buildCatalogPrimaryQuoteItems(serviceIds));
+    normalized = normalizeQuoteItems(buildCatalogQuoteItems(serviceIds));
   } catch (error) {
     return json({ error: String(error?.message || "INVALID_PROJECT_SERVICE_IDS") }, 400);
   }
@@ -1360,6 +1436,94 @@ export async function handleAdminQuoteAcceptance(request, env) {
   }, 200);
 }
 
+export async function handleAdminSubscriptionCreate(request, env, deps = {}) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+  if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  let input;
+  try { input = await readJsonWithLimit(request); }
+  catch { return json({ error: "INVALID_SUBSCRIPTION_REQUEST" }, 400); }
+  const quoteId = typeof input.quote_id === "string" && QUOTE_ID_RE.test(input.quote_id) ? input.quote_id : null;
+  if (!quoteId) return json({ error: "INVALID_QUOTE_ID" }, 400);
+
+  const quote = await env.DB.prepare(
+    "SELECT q.quote_id,q.project_id,q.status,q.currency_code,p.state AS project_state,p.policy_status FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.quote_id=? LIMIT 1"
+  ).bind(quoteId).first();
+  if (!quote) return json({ error: "QUOTE_NOT_FOUND" }, 404);
+  if (quote.status !== "ACCEPTED" || quote.policy_status !== "ALLOWED" || quote.project_state !== "PAID") {
+    return json({ error:"INITIAL_PAYMENT_REQUIRED" },409);
+  }
+
+  const monthly = await env.DB.prepare(
+    "SELECT service_id,description,line_amount_minor FROM quote_items WHERE quote_id=? AND price_component IN ('monthly','monthly_pack') ORDER BY created_at"
+  ).bind(quoteId).all();
+  const items = monthly.results || [];
+  const amountMinor = items.reduce((sum,item) => sum + Number(item.line_amount_minor),0);
+  if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0 || amountMinor > 1_000_000) {
+    return json({ error: amountMinor <= 0 ? "QUOTE_HAS_NO_MONTHLY_SERVICES" : "PAYPAL_SUBSCRIPTION_AMOUNT_OUT_OF_RANGE" }, 409);
+  }
+  if (!envFlagTrue(env, "PAYPAL_SUBSCRIPTIONS_ENABLED")) return json({ error:"PAYPAL_SUBSCRIPTIONS_DISABLED" }, 409);
+
+  let providerGate;
+  try { providerGate = validatePayPalOrderCreation(env); }
+  catch (error) { return json({ error:String(error?.message || "PAYPAL_SUBSCRIPTION_NOT_CONFIGURED") }, 503); }
+  if (!providerGate.enabled) return json({ error:"PAYPAL_SUBSCRIPTION_PROVIDER_DISABLED" }, 409);
+
+  let existing = await env.DB.prepare(
+    "SELECT subscription_id,status,amount_minor,currency_code,provider_subscription_id,provider_approval_url FROM paypal_subscriptions WHERE quote_id=? LIMIT 1"
+  ).bind(quoteId).first();
+  if (existing?.provider_subscription_id) {
+    return json({
+      subscription_id:existing.subscription_id,quote_id:quoteId,project_id:quote.project_id,
+      status:existing.status,amount_minor:existing.amount_minor,currency_code:existing.currency_code,
+      provider_subscription_id:existing.provider_subscription_id,
+      approval_url:existing.provider_approval_url || null,replayed:true,
+    },200);
+  }
+
+  let subscriptionId = existing?.subscription_id || crypto.randomUUID();
+  const now = new Date().toISOString();
+  if (!existing) {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO paypal_subscriptions (subscription_id,quote_id,project_id,provider,status,amount_minor,currency_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)"
+      ).bind(subscriptionId,quoteId,quote.project_id,"paypal","PENDING",amountMinor,quote.currency_code,now,now).run();
+    } catch {
+      existing = await env.DB.prepare(
+        "SELECT subscription_id,status,amount_minor,currency_code,provider_subscription_id,provider_approval_url FROM paypal_subscriptions WHERE quote_id=? LIMIT 1"
+      ).bind(quoteId).first();
+      if (!existing) return json({ error:"SUBSCRIPTION_RECORD_CREATE_FAILED" },503);
+      subscriptionId = existing.subscription_id;
+      if (existing.provider_subscription_id) {
+        return json({ subscription_id:existing.subscription_id,quote_id:quoteId,project_id:quote.project_id,status:existing.status,amount_minor:existing.amount_minor,currency_code:existing.currency_code,provider_subscription_id:existing.provider_subscription_id,approval_url:existing.provider_approval_url || null,replayed:true },200);
+      }
+    }
+  }
+
+  let provider;
+  try {
+    provider = await createPayPalMonthlySubscription(env,{
+      subscriptionId,quoteId,amountMinor,
+      serviceNames:items.map(item=>item.description || item.service_id).join(", "),
+    },deps.fetchImpl);
+  } catch (error) {
+    console.error("paypal_subscription_create_failed",{error_code:String(error?.message || "PAYPAL_SUBSCRIPTION_CREATE_FAILED").slice(0,80)});
+    return json({ error:String(error?.message || "PAYPAL_SUBSCRIPTION_CREATE_FAILED"),subscription_id:subscriptionId,retryable:true },502);
+  }
+  const updatedAt = new Date().toISOString();
+  await env.DB.prepare(
+    "UPDATE paypal_subscriptions SET provider_product_id=?,provider_plan_id=?,provider_subscription_id=?,provider_approval_url=?,status='APPROVAL_PENDING',last_event_type=?,updated_at=? WHERE subscription_id=? AND provider_subscription_id=''"
+  ).bind(provider.productId,provider.planId,provider.providerSubscriptionId,provider.approvalUrl,"CREATED_BY_JADEL",updatedAt,subscriptionId).run();
+  return json({
+    subscription_id:subscriptionId,quote_id:quoteId,project_id:quote.project_id,
+    status:"APPROVAL_PENDING",amount_minor:amountMinor,currency_code:quote.currency_code,
+    provider_subscription_id:provider.providerSubscriptionId,approval_url:provider.approvalUrl,
+    provider_environment:providerGate.environment,buyer_approval_required:true,
+    provider_call_performed:true,replayed:false,
+  },201);
+}
+
 export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
   if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
   if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
@@ -1378,6 +1542,16 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
   if (quote.status !== "ACCEPTED" || quote.policy_status !== "ALLOWED" || quote.project_state !== "CUSTOMER_APPROVED") {
     return json({ error: "QUOTE_NOT_READY_FOR_PAYMENT" }, 409);
   }
+  const recurringRow = await env.DB.prepare(
+    "SELECT COALESCE(SUM(line_amount_minor),0) AS amount_minor FROM quote_items WHERE quote_id=? AND price_component IN ('monthly','monthly_pack')"
+  ).bind(quoteId).first();
+  const recurringAmountMinor = Number(recurringRow?.amount_minor || 0);
+  const upfrontAmountMinor = Number(quote.total_amount_minor) - recurringAmountMinor;
+  if (!Number.isSafeInteger(recurringAmountMinor) || recurringAmountMinor < 0 ||
+      !Number.isSafeInteger(upfrontAmountMinor) || upfrontAmountMinor <= 0) {
+    return json({ error:"UPFRONT_PAYMENT_AMOUNT_INVALID" },409);
+  }
+  const payableQuote = { ...quote, total_amount_minor:upfrontAmountMinor };
 
   let providerGate = { enabled: false, environment: null };
   try {
@@ -1395,7 +1569,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
   const providerEnvironment = providerGate.environment;
   if (providerEnabled && providerEnvironment === "live" && paypalAutomaticCaptureEnabled(env)) {
     const captureLimit = paypalAutomaticCaptureLimitMinor(env);
-    const quoteAmount = Number(quote.total_amount_minor);
+    const quoteAmount = Number(upfrontAmountMinor);
     if (captureLimit === null || !Number.isSafeInteger(quoteAmount) || quoteAmount <= 0 || quoteAmount > captureLimit) {
       return json({ error:"PAYPAL_LIVE_CAPTURE_LIMIT_EXCEEDED", max_amount_minor:captureLimit }, 409);
     }
@@ -1439,7 +1613,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
       await env.DB.batch([
         env.DB.prepare(
           "INSERT INTO payment_orders (payment_order_id,quote_id,project_id,provider,provider_order_id,status,amount_minor,currency_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)"
-        ).bind(paymentOrderId,quoteId,quote.project_id,"paypal","", "PENDING",quote.total_amount_minor,quote.currency_code,now,now),
+        ).bind(paymentOrderId,quoteId,quote.project_id,"paypal","", "PENDING",upfrontAmountMinor,quote.currency_code,now,now),
         env.DB.prepare("UPDATE project_requests SET state='PAYMENT_PENDING',updated_at=? WHERE project_id=?")
           .bind(now,quote.project_id),
       ]);
@@ -1481,7 +1655,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
       quote_id:quoteId,
       project_id:quote.project_id,
       status:"PENDING",
-      amount_minor:quote.total_amount_minor,
+      amount_minor:upfrontAmountMinor,
       currency_code:quote.currency_code,
       provider:"paypal",
       provider_call_performed:false,
@@ -1492,7 +1666,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
 
   let provider;
   try {
-    provider = await createPayPalOrder(env, paymentOrderId, quote, deps.fetchImpl);
+    provider = await createPayPalOrder(env, paymentOrderId, payableQuote, deps.fetchImpl);
   } catch (error) {
     return json({
       error:String(error?.message || "PAYPAL_ORDER_CREATE_FAILED"),
@@ -1525,7 +1699,7 @@ export async function handleAdminPaymentOrderCreate(request, env, deps = {}) {
     quote_id:quoteId,
     project_id:quote.project_id,
     status:"PENDING",
-    amount_minor:quote.total_amount_minor,
+    amount_minor:upfrontAmountMinor,
     currency_code:quote.currency_code,
     provider:"paypal",
     provider_order_id:provider.providerOrderId,
@@ -1819,6 +1993,9 @@ export default {
     }
     if (url.pathname === "/api/v1/admin/quotes/accept") {
       return withAdminCors(await handleAdminQuoteAcceptance(request, env), origin, env);
+    }
+    if (url.pathname === "/api/v1/admin/subscriptions") {
+      return withAdminCors(await handleAdminSubscriptionCreate(request, env), origin, env);
     }
     if (url.pathname === "/api/v1/admin/payment-orders") {
       return withAdminCors(await handleAdminPaymentOrderCreate(request, env), origin, env);

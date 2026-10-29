@@ -93,10 +93,10 @@ test("catalog quote derives amounts from selected project services", async () =>
   const body = await response.json();
   assert.equal(response.status, 201);
   assert.equal(body.quote_source, "CANONICAL_SERVICE_CATALOG");
-  assert.equal(body.total_amount_minor, 90000);
+  assert.equal(body.total_amount_minor, 99900);
   assert.equal(body.external_side_effect, false);
   assert.equal(batches.length, 1);
-  assert.equal(batches[0].length, 4);
+  assert.equal(batches[0].length, 5);
 });
 
 test("quote creation rejects projects without ALLOWED policy", async () => {

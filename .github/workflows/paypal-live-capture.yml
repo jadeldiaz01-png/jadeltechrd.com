@@ -97,8 +97,8 @@ jobs:
           test "$(jq -r '.policy_status' <<<"$row")" = ALLOWED
           test "$(jq -r '.currency_code' <<<"$row")" = USD
           amount=$(jq -r '.amount_minor' <<<"$row")
-          [[ "$amount" =~ ^[0-9]+$ ]] && [ "$amount" -gt 0 ] && [ "$amount" -le 25000 ] || { echo PAYPAL_LIVE_CAPTURE_LIMIT_EXCEEDED max_minor=25000 >&2; exit 31; }
-          echo PAYPAL_LIVE_CAPTURE_LIMIT_MINOR=25000
+          [[ "$amount" =~ ^[0-9]+$ ]] && [ "$amount" -gt 0 ] && [ "$amount" -le 1480000 ] || { echo PAYPAL_LIVE_CAPTURE_LIMIT_EXCEEDED max_minor=1480000 >&2; exit 31; }
+          echo PAYPAL_LIVE_CAPTURE_LIMIT_MINOR=1480000
           echo "amount_minor=$amount" >> "$GITHUB_OUTPUT"
           echo PAYPAL_LIVE_D1_ORDER_PREFLIGHT=PASS
 

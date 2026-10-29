@@ -45,6 +45,7 @@ jobs:
           node --check commercial-runtime/src/offer-catalog.mjs
           node --check commercial-runtime/src/worker.mjs
           node --check commercial-runtime/src/service-pricing.mjs
+          node --check commercial-runtime/src/paypal-subscriptions.mjs
           node --check commercial-runtime/src/project-workflow.mjs
           node --check approval-console.js
           node --check commercial-runtime/src/revenue-intelligence.mjs

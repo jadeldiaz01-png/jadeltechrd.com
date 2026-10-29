@@ -1,0 +1,92 @@
+name: Add PayPal LIVE subscription lifecycle events
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact protected main SHA approved for this webhook update
+        required: true
+        type: string
+      confirmation:
+        description: Type ADD_PAYPAL_SUBSCRIPTION_EVENTS_TO_LIVE_WEBHOOK
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: jadel-paypal-live-subscription-webhook
+  cancel-in-progress: false
+env:
+  PAYPAL_API: https://api-m.paypal.com
+  PAYPAL_WEBHOOK_URL: https://intake.jadeltechrd.com/api/v1/paypal/webhooks
+jobs:
+  add-events:
+    if: \${{ inputs.confirmation == 'ADD_PAYPAL_SUBSCRIPTION_EVENTS_TO_LIVE_WEBHOOK' }}
+    environment:
+      name: jadeltechrd
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      EXPECTED_SHA: \${{ inputs.expected_sha }}
+      PAYPAL_CLIENT_ID_RAW: \${{ secrets.PAYPAL_CLIENT_ID }}
+      PAYPAL_CLIENT_SECRET_RAW: \${{ secrets.PAYPAL_CLIENT_SECRET }}
+      PAYPAL_WEBHOOK_ID_RAW: \${{ secrets.PAYPAL_WEBHOOK_ID }}
+    steps:
+      - name: Checkout exact protected main SHA
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: \${{ inputs.expected_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify source authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_SHA" = "$EXPECTED_SHA"
+          git fetch --no-tags https://github.com/$GITHUB_REPOSITORY.git +refs/heads/main:refs/remotes/origin/main
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
+          grep -Fq 'BILLING.SUBSCRIPTION.ACTIVATED' commercial-runtime/src/worker.mjs
+          grep -Fq 'PAYMENT.SALE.COMPLETED' commercial-runtime/src/worker.mjs
+          echo PAYPAL_SUBSCRIPTION_WEBHOOK_SHA_GUARD=PASS
+      - name: Add and verify required events
+        shell: bash
+        run: |
+          set -euo pipefail
+          normalize() { printf '%s' "$1" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'; }
+          fail() { echo "PAYPAL_SUBSCRIPTION_WEBHOOK=FAIL stage=$1 http=$2" >&2; exit 1; }
+          client_id=$(normalize "$PAYPAL_CLIENT_ID_RAW")
+          client_secret=$(normalize "$PAYPAL_CLIENT_SECRET_RAW")
+          webhook_id=$(normalize "$PAYPAL_WEBHOOK_ID_RAW")
+          test -n "$client_id" && test -n "$client_secret" && test -n "$webhook_id" || fail credentials none
+          echo "::add-mask::$client_id"
+          echo "::add-mask::$client_secret"
+          echo "::add-mask::$webhook_id"
+          response="$RUNNER_TEMP/paypal.json"
+          code=$(curl -sS -o "$response" -w '%{http_code}' -u "$client_id:$client_secret" -H 'Accept: application/json' -d 'grant_type=client_credentials' "$PAYPAL_API/v1/oauth2/token")
+          [[ "$code" =~ ^2[0-9][0-9]$ ]] || fail oauth "$code"
+          token=$(jq -r '.access_token // empty' "$response")
+          test -n "$token" || fail oauth_token "$code"
+          echo "::add-mask::$token"
+          code=$(curl -sS -o "$response" -w '%{http_code}' -H "Authorization: Bearer $token" "$PAYPAL_API/v1/notifications/webhooks/$webhook_id")
+          [[ "$code" =~ ^2[0-9][0-9]$ ]] || fail webhook_read "$code"
+          test "$(jq -r '.url // empty' "$response")" = "$PAYPAL_WEBHOOK_URL" || fail webhook_url "$code"
+          required='["BILLING.SUBSCRIPTION.CREATED","BILLING.SUBSCRIPTION.ACTIVATED","BILLING.SUBSCRIPTION.UPDATED","BILLING.SUBSCRIPTION.CANCELLED","BILLING.SUBSCRIPTION.SUSPENDED","BILLING.SUBSCRIPTION.EXPIRED","BILLING.SUBSCRIPTION.PAYMENT.FAILED","PAYMENT.SALE.COMPLETED","PAYMENT.SALE.DENIED","PAYMENT.SALE.REFUNDED","PAYMENT.SALE.REVERSED"]'
+          updated=$(jq -c --argjson required "$required" '
+            .event_types as $current |
+            ($current | map(.name)) as $names |
+            ($current + [$required[] as $name | select(($names | index($name)) == null) | {name:$name}])
+            | unique_by(.name)
+          ' "$response")
+          payload=$(jq -cn --argjson event_types "$updated" '[{op:"replace",path:"/event_types",value:$event_types}]')
+          code=$(curl -sS -o "$response" -w '%{http_code}' -X PATCH -H "Authorization: Bearer $token" -H 'Content-Type: application/json' --data "$payload" "$PAYPAL_API/v1/notifications/webhooks/$webhook_id")
+          [[ "$code" =~ ^2[0-9][0-9]$ ]] || fail webhook_update "$code"
+          code=$(curl -sS -o "$response" -w '%{http_code}' -H "Authorization: Bearer $token" "$PAYPAL_API/v1/notifications/webhooks/$webhook_id")
+          [[ "$code" =~ ^2[0-9][0-9]$ ]] || fail webhook_verify "$code"
+          jq -e --argjson required "$required" '
+            .url == env.PAYPAL_WEBHOOK_URL and
+            ([.event_types[].name] as $names | all($required[]; . as $name | ($names | index($name)) != null))
+          ' "$response" >/dev/null || fail event_verify "$code"
+          echo PAYPAL_SUBSCRIPTION_WEBHOOK_EVENTS=PASS

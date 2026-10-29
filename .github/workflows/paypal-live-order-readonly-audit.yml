@@ -372,7 +372,7 @@ jobs:
               test "$value" = true || { echo "LIVE_CONTROL_NOT_EXPLICITLY_TRUE flag=$flag" >&2; exit 30; }
             done
             capture_max=$(jq -r '[.[] | select(.name=="PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR" and .type=="plain_text")][0].text // "__UNSET__"' <<<"$bindings")
-            test "$capture_max" = 25000 || { echo LIVE_CAPTURE_LIMIT_MISMATCH >&2; exit 31; }
+            test "$capture_max" = 1480000 || { echo LIVE_CAPTURE_LIMIT_MISMATCH >&2; exit 31; }
           done <<<"$version_ids"
           echo 'WORKER_ACTIVE_DEPLOYMENT=100_PERCENT_VERIFIED'
           echo 'WORKER_D1_BINDING_MATCH=PASS'

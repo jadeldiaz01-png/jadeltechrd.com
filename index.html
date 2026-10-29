@@ -152,7 +152,7 @@
           <div>
             <div class="eyebrow">Servicios destacados</div>
             <h2>Una sola firma. Múltiples capacidades de IA aplicadas.</h2>
-            <p>Los 11 servicios permiten solicitar una cotización. El checkout PayPal LIVE se genera para cotizaciones aceptadas en USD de hasta US$250; enviar la solicitud no inicia un cobro ni una suscripción automática.</p>
+            <p>Los 11 servicios permiten solicitar una cotización. El checkout PayPal LIVE se genera para cotizaciones aceptadas en USD de hasta US$14,800. Las mensualidades se cobran solo tras la aprobación expresa de la suscripción en PayPal.</p>
           </div>
 
         </div>
@@ -190,7 +190,7 @@
             <div class="eyebrow">Pagos</div>
             <h2>Pago PayPal vinculado a una cotización aprobada.</h2>
             <p>
-              Primero envía tu solicitud. Confirmamos alcance, moneda y entregables; después generamos un checkout PayPal vinculado a tu cotización aprobada. El flujo LIVE admite importes en USD de hasta US$250. Solo se marca PAID después de validar la firma del evento y conciliar la captura con la orden, la cotización, el importe y la divisa.
+              Primero envía tu solicitud. Confirmamos alcance, moneda y entregables; después generamos un checkout PayPal vinculado a tu cotización aprobada. El flujo LIVE admite importes iniciales en USD de hasta US$14,800. Las mensualidades requieren una autorización separada del comprador. Solo se marca PAID después de validar la firma del evento y conciliar la captura con la orden, la cotización, el importe y la divisa.
             </p>
           </div>
           <div class="payment-actions">
@@ -213,16 +213,16 @@
             <div class="eyebrow">Infraestructura comercial</div>
             <h2>Intake activo; primer pago LIVE conciliado pendiente de validación.</h2>
           </div>
-          <p>El sitio recibe solicitudes. El checkout PayPal LIVE admite cotizaciones aceptadas en USD de hasta US$250; la captura y reconciliación están configuradas y los eventos con firma inválida se rechazan. Aún falta validar una primera captura real con evento firmado y coincidencia en el ledger; hasta entonces no se confirma PAID ni se inicia la entrega.</p>
+          <p>El sitio recibe solicitudes. El checkout PayPal LIVE admite cotizaciones aceptadas en USD de hasta US$14,800; los cobros mensuales requieren consentimiento en PayPal. La captura y reconciliación están configuradas y los eventos con firma inválida se rechazan. Aún falta validar una primera captura real con evento firmado y coincidencia en el ledger; hasta entonces no se confirma PAID ni se inicia la entrega.</p>
         </div>
         <div class="revenue-infra-grid reveal" aria-label="Capas de infraestructura para ingresos">
-          <article><span>01</span><strong>Checkout alojado</strong><p>El checkout LIVE se limita a cotizaciones aceptadas en USD de hasta US$250. La captura ocurre después de que el comprador aprueba la orden; la entrega espera la conciliación exacta.</p><small>Límite USD 250; primera conciliación positiva pendiente</small></article>
+          <article><span>01</span><strong>Checkout alojado</strong><p>El checkout inicial LIVE se limita a cotizaciones aceptadas en USD de hasta US$14,800. Las cuotas mensuales usan una suscripción separada que el cliente debe aprobar en PayPal. La captura ocurre después de la aprobación; la entrega espera la conciliación exacta.</p><small>Tope inicial USD 14,800; primera conciliación positiva pendiente</small></article>
           <article><span>02</span><strong>Intake verificable</strong><p>Formulario con Turnstile, límites, idempotencia y workflow durable antes de crear compromisos.</p><small>Activo con gates fail-closed</small></article>
           <article><span>03</span><strong>Ledger de pagos</strong><p>Webhook LIVE configurado. El ledger concilia automáticamente solo una captura completada cuya orden, cotización, importe y divisa coinciden; falta validar la primera operación real.</p><small>Primera conciliación LIVE pendiente</small></article>
           <article><span>04</span><strong>Operación de agentes</strong><p>Nexus coordina briefs, scoring, tareas y reportes; no ejecuta pagos salientes, contratos, publicaciones ni trading real.</p><small>Supervisado</small></article>
         </div>
         <div class="revenue-state-strip reveal">
-          <div><span>ACTIVO</span><strong>Catálogo + intake + checkout PayPal LIVE hasta US$250</strong></div>
+          <div><span>ACTIVO</span><strong>Catálogo + intake + checkout PayPal LIVE hasta US$14,800</strong></div>
           <div><span>PRÓXIMO</span><strong>Primera captura LIVE conciliada y validación de entrega</strong></div>
           <div><span>GATE</span><strong>Sin evento firmado y coincidencia exacta en ledger, no se marca PAID ni se entrega</strong></div>
         </div>
