@@ -142,7 +142,12 @@ jobs:
           test -n "$token"; echo "::add-mask::$token"
           webhook=$(curl --fail-with-body -sS -H "Authorization: Bearer $token" "$PAYPAL_LIVE_API/v1/notifications/webhooks/$webhook_id")
           test "$(jq -r '.url // empty' <<<"$webhook")" = "https://intake.jadeltechrd.com/api/v1/paypal/webhooks"
-          jq -e '[.event_types[]?.name] | index("PAYMENT.CAPTURE.COMPLETED") != null' <<<"$webhook" >/dev/null
+          required_events=("PAYMENT.CAPTURE.COMPLETED" "BILLING.SUBSCRIPTION.ACTIVATED" "BILLING.SUBSCRIPTION.CANCELLED" "BILLING.SUBSCRIPTION.SUSPENDED" "BILLING.SUBSCRIPTION.EXPIRED" "BILLING.SUBSCRIPTION.PAYMENT.FAILED" "PAYMENT.SALE.COMPLETED" "PAYMENT.SALE.REFUNDED" "PAYMENT.SALE.REVERSED")
+          for event_name in "${required_events[@]}"; do
+            jq -e --arg event "$event_name" '[.event_types[]?.name] | index($event) != null' <<<"$webhook" >/dev/null || {
+              echo "PAYPAL_REQUIRED_WEBHOOK_EVENT_MISSING name=$event_name" >&2; exit 12;
+            }
+          done
           echo PAYPAL_LIVE_PROVIDER_PREFLIGHT=PASS
 
       - name: Use Node 22
