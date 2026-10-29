@@ -238,7 +238,7 @@ jobs:
               raise SystemExit("PAYPAL_LIVE_READINESS_PROVIDER_ORDER_CALL=FAIL")
 
           manual_only(activation, "PAYPAL_LIVE_ACTIVATION")
-          require(activation, "ACTIVATE_PAYPAL_LIVE_BOUNDED_CAPTURE_250", "PAYPAL_LIVE_ACTIVATION_CONFIRMATION")
+          require(activation, "ACTIVATE_PAYPAL_LIVE_SERVICE_BILLING_14800", "PAYPAL_LIVE_ACTIVATION_CONFIRMATION")
           require(activation, 'test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"', "PAYPAL_LIVE_ACTIVATION_SHA")
           require(activation, 'PAYPAL_ENVIRONMENT:"live"', "PAYPAL_LIVE_ACTIVATION_ENV")
           require(activation, 'PAYPAL_ORDER_CREATION_ENABLED:"true"', "PAYPAL_LIVE_ACTIVATION_ORDER_FLAG")
