@@ -124,6 +124,7 @@ jobs:
           grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_ENABLED' commercial-runtime/src/worker.mjs
           grep -Fq 'PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED' commercial-runtime/src/worker.mjs
           grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR' commercial-runtime/src/worker.mjs
+          grep -Fq 'PAYPAL_SUBSCRIPTIONS_ENABLED' commercial-runtime/src/worker.mjs
           ! grep -Fq '/v2/checkout/orders/$paypal_order_id/capture' commercial-runtime/src/worker.mjs
           echo PAYPAL_LIVE_ACTIVATION_SOURCE_GATE=PASS
 
@@ -204,7 +205,7 @@ jobs:
             workflows:[{name:"jadel-project-lifecycle",binding:"PROJECT_WORKFLOW",class_name:"ProjectLifecycleWorkflow"}],
             triggers:{crons:["*/2 * * * *"]}
           }' > commercial-runtime/wrangler.paypal-live-activate.jsonc
-          jq -e '.vars.PAYPAL_ENVIRONMENT=="live" and .vars.PAYPAL_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_LIVE_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_CAPTURE_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR=="1480000" and .vars.PRODUCTION_AUTHORIZED=="true" and .vars.FINANCIAL_EXECUTION_AUTHORIZED=="true" and .vars.MAX_AUTONOMOUS_CAPITAL_USD=="0"' commercial-runtime/wrangler.paypal-live-activate.jsonc >/dev/null
+          jq -e '.vars.PAYPAL_ENVIRONMENT=="live" and .vars.PAYPAL_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_LIVE_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_CAPTURE_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR=="1480000" and .vars.PAYPAL_SUBSCRIPTIONS_ENABLED=="true" and .vars.PRODUCTION_AUTHORIZED=="true" and .vars.FINANCIAL_EXECUTION_AUTHORIZED=="true" and .vars.MAX_AUTONOMOUS_CAPITAL_USD=="0"' commercial-runtime/wrangler.paypal-live-activate.jsonc >/dev/null
           echo PAYPAL_LIVE_ACTIVATION_CONFIG=PASS
 
       - name: Install pinned Wrangler
@@ -245,7 +246,7 @@ jobs:
             [[ "$version_id" =~ ^[0-9a-fA-F-]{36}$ ]]
             version=$(curl --fail-with-body -sS "${auth[@]}" "$api/versions/$version_id")
             bindings=$(jq -c '.result.resources.bindings // []' <<<"$version")
-            for entry in PAYPAL_AUTOMATIC_CAPTURE_ENABLED:true PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:true PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:1480000 FINANCIAL_EXECUTION_AUTHORIZED:true MAX_AUTONOMOUS_CAPITAL_USD:0 PAYPAL_ORDER_CREATION_ENABLED:true PAYPAL_LIVE_ORDER_CREATION_ENABLED:true PRODUCTION_AUTHORIZED:true; do
+            for entry in PAYPAL_SUBSCRIPTIONS_ENABLED:true PAYPAL_AUTOMATIC_CAPTURE_ENABLED:true PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:true PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:1480000 FINANCIAL_EXECUTION_AUTHORIZED:true MAX_AUTONOMOUS_CAPITAL_USD:0 PAYPAL_ORDER_CREATION_ENABLED:true PAYPAL_LIVE_ORDER_CREATION_ENABLED:true PRODUCTION_AUTHORIZED:true; do
               name=${entry%%:*}; expected=${entry#*:}
               count=$(jq -r --arg n "$name" '[.[]|select(.name==$n)]|length' <<<"$bindings")
               test "$count" = 1 || { echo "WORKER_PAYMENT_FLAG=FAIL name=$name reason=ABSENT_OR_DUPLICATE" >&2; exit 41; }
