@@ -59,6 +59,7 @@ jobs:
           grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_ENABLED:"false"' "$deploy"
           grep -Fq 'PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:"false"' "$deploy"
           grep -Fq 'PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:"0"' "$deploy"
+          grep -Fq 'FINANCIAL_EXECUTION_AUTHORIZED:"false"' "$deploy"
           echo PAYPAL_WEBHOOK_CHANGE_EXACT_SHA=PASS
           echo PAYPAL_CAPTURE_SOURCE_GUARD=PASS
 
@@ -114,12 +115,22 @@ jobs:
                 exit 7
               }
             done
-            for flag in PAYPAL_AUTOMATIC_CAPTURE_ENABLED PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED; do
-              value=$(jq -r --arg name "$flag" '[.[] | select(.name==$name and .type=="plain_text")][0].text // "__UNSET__"' <<<"$bindings")
-              test "$value" = false || {
-                echo "WORKER_LIVE_GUARD=FAIL flag=$flag" >&2
-                exit 7
-              }
+            for flag in PAYPAL_AUTOMATIC_CAPTURE_ENABLED PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED FINANCIAL_EXECUTION_AUTHORIZED; do
+              count=$(jq -r --arg name "$flag" '[.[] | select(.name==$name)] | length' <<<"$bindings")
+              if [ "$count" = 0 ]; then
+                echo "WORKER_LIVE_GUARD=FAIL flag=$flag reason=ABSENT" >&2; exit 7
+              elif [ "$count" != 1 ]; then
+                echo "WORKER_LIVE_GUARD=FAIL flag=$flag reason=DUPLICATE" >&2; exit 7
+              fi
+              type=$(jq -r --arg name "$flag" '[.[] | select(.name==$name)][0].type // empty' <<<"$bindings")
+              if [ "$type" != plain_text ]; then
+                echo "WORKER_LIVE_GUARD=FAIL flag=$flag reason=WRONG_TYPE" >&2; exit 7
+              fi
+              value=$(jq -r --arg name "$flag" '[.[] | select(.name==$name)][0].text // "__UNSET__"' <<<"$bindings")
+              if [ "$value" != false ]; then
+                if [ "$value" = true ]; then reason=ENABLED; else reason=OTHER_VALUE; fi
+                echo "WORKER_LIVE_GUARD=FAIL flag=$flag reason=$reason" >&2; exit 7
+              fi
             done
             capture_max=$(jq -r '[.[] | select(.name=="PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR" and .type=="plain_text")][0].text // "__UNSET__"' <<<"$bindings")
             test "$capture_max" = 0 || {
@@ -130,6 +141,7 @@ jobs:
           echo WORKER_ACTIVE_VERSIONS=100_PERCENT
           echo WORKER_AUTOMATIC_CAPTURE_AND_RECONCILIATION=EXPLICIT_FALSE
           echo WORKER_AUTOMATIC_CAPTURE_MAX_MINOR=ZERO
+          echo WORKER_FINANCIAL_EXECUTION_AUTHORIZED=EXPLICIT_FALSE
 
   add-event:
     needs: worker-config
