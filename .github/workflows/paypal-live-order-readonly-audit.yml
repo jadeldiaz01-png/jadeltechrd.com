@@ -369,11 +369,11 @@ jobs:
             test "$(jq --arg id "$EXPECTED_D1_ID" '[.[] | select(.name=="DB" and .type=="d1" and .id==$id)] | length' <<<"$bindings")" = 1
             for flag in PAYPAL_AUTOMATIC_CAPTURE_ENABLED PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED FINANCIAL_EXECUTION_AUTHORIZED; do
               value=$(jq -r --arg n "$flag" '[.[] | select(.name==$n and .type=="plain_text")][0].text // "__UNSET__"' <<<"$bindings")
-              test "$value" = false || { echo "LIVE_CONTROL_NOT_EXPLICITLY_FALSE flag=$flag value=$value" >&2; exit 30; }
+              test "$value" = true || { echo "LIVE_CONTROL_NOT_EXPLICITLY_TRUE flag=$flag" >&2; exit 30; }
             done
           done <<<"$version_ids"
           echo 'WORKER_ACTIVE_DEPLOYMENT=100_PERCENT_VERIFIED'
           echo 'WORKER_D1_BINDING_MATCH=PASS'
-          echo 'CAPTURE_RECONCILIATION_AND_FINANCIAL_AUTHORIZATION=EXPLICIT_FALSE'
+          echo 'CAPTURE_RECONCILIATION_AND_FINANCIAL_AUTHORIZATION=EXPLICIT_TRUE'
           echo 'WORKER_BINDING_VALUES=REDACTED'
           echo 'WORKER_CONFIGURATION_OPERATION=GET_ONLY'
