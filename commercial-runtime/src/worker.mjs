@@ -1482,7 +1482,7 @@ export async function handleAdminSubscriptionCreate(request, env, deps = {}) {
     },200);
   }
 
-  const subscriptionId = existing?.subscription_id || crypto.randomUUID();
+  let subscriptionId = existing?.subscription_id || crypto.randomUUID();
   const now = new Date().toISOString();
   if (!existing) {
     try {
@@ -1494,6 +1494,7 @@ export async function handleAdminSubscriptionCreate(request, env, deps = {}) {
         "SELECT subscription_id,status,amount_minor,currency_code,provider_subscription_id,provider_approval_url FROM paypal_subscriptions WHERE quote_id=? LIMIT 1"
       ).bind(quoteId).first();
       if (!existing) return json({ error:"SUBSCRIPTION_RECORD_CREATE_FAILED" },503);
+      subscriptionId = existing.subscription_id;
       if (existing.provider_subscription_id) {
         return json({ subscription_id:existing.subscription_id,quote_id:quoteId,project_id:quote.project_id,status:existing.status,amount_minor:existing.amount_minor,currency_code:existing.currency_code,provider_subscription_id:existing.provider_subscription_id,approval_url:existing.provider_approval_url || null,replayed:true },200);
       }
