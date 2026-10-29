@@ -2,7 +2,7 @@ import { validateIdempotencyKey, validateProjectRequest } from "./validation.mjs
 import { buildRuntimeRevenueView } from "./revenue-intelligence.mjs";
 import { loadApprovedOpportunityFeed } from "./revenue-agent-bridge.mjs";
 import { buildRevenueRuntimeAuthorization } from "./revenue-agent-authorization.mjs";
-import { buildCatalogPrimaryQuoteItems, resolveCatalogPrice } from "./service-pricing.mjs";
+import { buildCatalogPrimaryQuoteItems, buildCatalogQuoteItems, resolveCatalogPrice } from "./service-pricing.mjs";
 import { createPayPalMonthlySubscription } from "./paypal-subscriptions.mjs";
 
 const MAX_BODY_BYTES = 16 * 1024;
@@ -928,7 +928,7 @@ export async function handleAdminApprovals(request, env) {
       "SELECT project_id,name,email,company,service_ids_json,offer_id,offer_landing_path,utm_source,utm_medium,utm_campaign,utm_content,state,policy_status,created_at,updated_at FROM project_requests WHERE policy_status='ALLOWED' AND state='POLICY_ALLOWED' ORDER BY updated_at DESC LIMIT 50"
     ).all();
     const quotes = await env.DB.prepare(
-      "SELECT q.quote_id,q.project_id,q.version,q.status,q.currency_code,q.total_amount_minor,q.expires_at,q.created_at,p.name,p.email,p.state AS project_state,COALESCE((SELECT SUM(qi.line_amount_minor) FROM quote_items qi WHERE qi.quote_id=q.quote_id AND qi.price_component IN ('monthly','monthly_pack')),0) AS recurring_amount_minor FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.status IN ('ISSUED','ACCEPTED') ORDER BY q.created_at DESC LIMIT 50"
+      "SELECT q.quote_id,q.project_id,q.version,q.status,q.currency_code,q.total_amount_minor,q.expires_at,q.created_at,p.name,p.email,p.state AS project_state,COALESCE((SELECT SUM(qi.line_amount_minor) FROM quote_items qi WHERE qi.quote_id=q.quote_id AND qi.price_component IN ('monthly','monthly_pack')),0) AS recurring_amount_minor,(q.total_amount_minor-COALESCE((SELECT SUM(qi.line_amount_minor) FROM quote_items qi WHERE qi.quote_id=q.quote_id AND qi.price_component IN ('monthly','monthly_pack')),0)) AS upfront_amount_minor FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.status IN ('ISSUED','ACCEPTED') ORDER BY q.created_at DESC LIMIT 50"
     ).all();
     const payments = await env.DB.prepare(
       "SELECT l.ledger_id,l.provider_event_id,l.ledger_state,l.amount_usd,l.currency_code,l.created_at,e.resource_id,e.event_type,e.resource_status FROM payment_ledger l JOIN payment_events e ON e.provider_event_id=l.provider_event_id WHERE l.ledger_state IN ('RECEIVED','RECONCILING','REQUIRES_HUMAN') ORDER BY l.created_at DESC LIMIT 50"
@@ -1289,7 +1289,7 @@ export async function handleAdminCatalogQuoteCreate(request, env) {
   let normalized;
   try {
     serviceIds = JSON.parse(project.service_ids_json);
-    normalized = normalizeQuoteItems(buildCatalogPrimaryQuoteItems(serviceIds));
+    normalized = normalizeQuoteItems(buildCatalogQuoteItems(serviceIds));
   } catch (error) {
     return json({ error: String(error?.message || "INVALID_PROJECT_SERVICE_IDS") }, 400);
   }
