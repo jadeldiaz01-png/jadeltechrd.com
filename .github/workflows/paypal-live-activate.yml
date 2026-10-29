@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       confirmation:
-        description: Type ACTIVATE_PAYPAL_LIVE_BOUNDED_CAPTURE_250
+        description: Type ACTIVATE_PAYPAL_LIVE_SERVICE_BILLING_14800
         required: true
         type: string
 
@@ -29,7 +29,7 @@ env:
 
 jobs:
   resolve-production-d1:
-    if: ${{ inputs.confirmation == 'ACTIVATE_PAYPAL_LIVE_BOUNDED_CAPTURE_250' }}
+    if: ${{ inputs.confirmation == 'ACTIVATE_PAYPAL_LIVE_SERVICE_BILLING_14800' }}
     environment:
       name: d1-recovery-drill
     runs-on: ubuntu-24.04
@@ -191,9 +191,9 @@ jobs:
               PAYPAL_ENVIRONMENT:"live",
               PAYPAL_ORDER_CREATION_ENABLED:"true",
               PAYPAL_LIVE_ORDER_CREATION_ENABLED:"true",
-              PAYPAL_AUTOMATIC_CAPTURE_ENABLED:"true",
+              PAYPAL_AUTOMATIC_CAPTURE_ENABLED:"true",\n              PAYPAL_SUBSCRIPTIONS_ENABLED:"true",
               PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:"true",
-              PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:"25000",
+              PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:"1480000",
               PRODUCTION_AUTHORIZED:"true",
               FINANCIAL_EXECUTION_AUTHORIZED:"true",
               MAX_AUTONOMOUS_CAPITAL_USD:"0"
@@ -203,7 +203,7 @@ jobs:
             workflows:[{name:"jadel-project-lifecycle",binding:"PROJECT_WORKFLOW",class_name:"ProjectLifecycleWorkflow"}],
             triggers:{crons:["*/2 * * * *"]}
           }' > commercial-runtime/wrangler.paypal-live-activate.jsonc
-          jq -e '.vars.PAYPAL_ENVIRONMENT=="live" and .vars.PAYPAL_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_LIVE_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_CAPTURE_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR=="25000" and .vars.PRODUCTION_AUTHORIZED=="true" and .vars.FINANCIAL_EXECUTION_AUTHORIZED=="true" and .vars.MAX_AUTONOMOUS_CAPITAL_USD=="0"' commercial-runtime/wrangler.paypal-live-activate.jsonc >/dev/null
+          jq -e '.vars.PAYPAL_ENVIRONMENT=="live" and .vars.PAYPAL_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_LIVE_ORDER_CREATION_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_CAPTURE_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED=="true" and .vars.PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR=="1480000" and .vars.PRODUCTION_AUTHORIZED=="true" and .vars.FINANCIAL_EXECUTION_AUTHORIZED=="true" and .vars.MAX_AUTONOMOUS_CAPITAL_USD=="0"' commercial-runtime/wrangler.paypal-live-activate.jsonc >/dev/null
           echo PAYPAL_LIVE_ACTIVATION_CONFIG=PASS
 
       - name: Install pinned Wrangler
@@ -244,7 +244,7 @@ jobs:
             [[ "$version_id" =~ ^[0-9a-fA-F-]{36}$ ]]
             version=$(curl --fail-with-body -sS "${auth[@]}" "$api/versions/$version_id")
             bindings=$(jq -c '.result.resources.bindings // []' <<<"$version")
-            for entry in PAYPAL_AUTOMATIC_CAPTURE_ENABLED:true PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:true PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:25000 FINANCIAL_EXECUTION_AUTHORIZED:true MAX_AUTONOMOUS_CAPITAL_USD:0 PAYPAL_ORDER_CREATION_ENABLED:true PAYPAL_LIVE_ORDER_CREATION_ENABLED:true PRODUCTION_AUTHORIZED:true; do
+            for entry in PAYPAL_AUTOMATIC_CAPTURE_ENABLED:true PAYPAL_AUTOMATIC_RECONCILIATION_ENABLED:true PAYPAL_AUTOMATIC_CAPTURE_MAX_MINOR:1480000 FINANCIAL_EXECUTION_AUTHORIZED:true MAX_AUTONOMOUS_CAPITAL_USD:0 PAYPAL_ORDER_CREATION_ENABLED:true PAYPAL_LIVE_ORDER_CREATION_ENABLED:true PRODUCTION_AUTHORIZED:true; do
               name=${entry%%:*}; expected=${entry#*:}
               count=$(jq -r --arg n "$name" '[.[]|select(.name==$n)]|length' <<<"$bindings")
               test "$count" = 1 || { echo "WORKER_PAYMENT_FLAG=FAIL name=$name reason=ABSENT_OR_DUPLICATE" >&2; exit 41; }
@@ -280,10 +280,10 @@ jobs:
             echo '## PayPal LIVE bounded capture activated'
             echo
             echo 'Order creation: enabled'
-            echo 'Automatic capture: exact buyer-approved accepted USD quotes up to US$250 (25,000 cents)'
+            echo 'Automatic capture: exact buyer-approved accepted USD upfront totals up to US$14,800 (1,480,000 cents)'\n            echo 'Monthly PayPal subscriptions: enabled up to US$10,000/month, only after buyer approval'
             echo 'Automatic reconciliation: matching verified completed capture only'
             echo 'Financial execution authorization: bounded buyer-directed capture path enabled'
             echo 'Autonomous capital budget: US$0'
             echo 'This workflow creates no order and captures no payment'
-            echo 'Rollback: deploy exact-main commercial runtime with capture, reconciliation and financial execution false and capture limit zero'
+            echo 'Rollback: deploy exact-main commercial runtime with capture, reconciliation, subscriptions and financial execution false and capture limit zero'
           } >> "$GITHUB_STEP_SUMMARY"
