@@ -21,21 +21,21 @@ env:
   PAYPAL_WEBHOOK_URL: https://intake.jadeltechrd.com/api/v1/paypal/webhooks
 jobs:
   add-events:
-    if: \${{ inputs.confirmation == 'ADD_PAYPAL_SUBSCRIPTION_EVENTS_TO_LIVE_WEBHOOK' }}
+    if: ${{ inputs.confirmation == 'ADD_PAYPAL_SUBSCRIPTION_EVENTS_TO_LIVE_WEBHOOK' }}
     environment:
       name: jadeltechrd
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     env:
-      EXPECTED_SHA: \${{ inputs.expected_sha }}
-      PAYPAL_CLIENT_ID_RAW: \${{ secrets.PAYPAL_CLIENT_ID }}
-      PAYPAL_CLIENT_SECRET_RAW: \${{ secrets.PAYPAL_CLIENT_SECRET }}
-      PAYPAL_WEBHOOK_ID_RAW: \${{ secrets.PAYPAL_WEBHOOK_ID }}
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      PAYPAL_CLIENT_ID_RAW: ${{ secrets.PAYPAL_CLIENT_ID }}
+      PAYPAL_CLIENT_SECRET_RAW: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+      PAYPAL_WEBHOOK_ID_RAW: ${{ secrets.PAYPAL_WEBHOOK_ID }}
     steps:
       - name: Checkout exact protected main SHA
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: \${{ inputs.expected_sha }}
+          ref: ${{ inputs.expected_sha }}
           fetch-depth: 1
           persist-credentials: false
       - name: Verify source authorization
