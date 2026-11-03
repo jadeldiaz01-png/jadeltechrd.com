@@ -5,6 +5,11 @@ const IDEMPOTENCY_SESSION_KEY = `jadel-project-request-idempotency-v1:${window.l
 const ALLOWED_SERVICES = new Set([
   "architecture","support","sales","social","cineforge","meta","analytics","revenue","quant","governance","multiagent"
 ]);
+const UTM_ALLOWLISTS = {
+  utm_source: new Set(["google", "bing", "linkedin", "workana", "upwork", "freelancer", "youtube", "facebook", "instagram", "referral"]),
+  utm_medium: new Set(["organic", "referral", "social", "marketplace", "cpc"]),
+  utm_campaign: new Set(["revenue_funnel_v1", "automation_blueprint", "support_tickets", "sales_intelligence", "dashboard_intelligence"]),
+};
 const english = document.documentElement.lang.toLowerCase().startsWith("en");
 const copy = english ? {
   preparing: "Preparing secure verification…",
@@ -111,12 +116,16 @@ function resetTurnstile() {
 function attributionFromQuery() {
   const params = new URLSearchParams(window.location.search);
   const bounded = (name) => String(params.get(name) || "").trim().slice(0, 120);
+  const utm = (name) => {
+    const value = bounded(name).toLowerCase();
+    return UTM_ALLOWLISTS[name]?.has(value) ? value : "";
+  };
   const offerId = bounded("offer_id");
   return {
     offer_id: /^[a-z][a-z0-9_]{0,63}$/.test(offerId) ? offerId : "",
-    utm_source: bounded("utm_source"),
-    utm_medium: bounded("utm_medium"),
-    utm_campaign: bounded("utm_campaign"),
+    utm_source: utm("utm_source"),
+    utm_medium: utm("utm_medium"),
+    utm_campaign: utm("utm_campaign"),
     utm_content: bounded("utm_content"),
   };
 }
@@ -259,7 +268,7 @@ form?.addEventListener("submit", async (event) => {
     completed = true;
     clearIdempotencyKey();
     const projectId = String(body.project_id || (english ? "recorded" : "registrado")).slice(0, 64);
-    window.RevenueAnalytics?.track("generate_lead", { lead_source: "website" });
+    if (!body.replayed) window.RevenueAnalytics?.track("generate_lead", { lead_source: "project_request" });
     const receiptMessage = body.replayed
       ? copy.replayed(projectId)
       : copy.received(projectId);

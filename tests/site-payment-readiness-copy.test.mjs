@@ -49,9 +49,13 @@ test("all 11 publicly listed services have a quote-gated PayPal path without a d
   assert.ok(new RegExp('data-cta-id="service_quote_\\$\\{service\\.id\\}"[^>]*>Solicitar cotización</a>').test(app));
 
   for (const id of ids) {
-    assert.match(fallback, new RegExp(`href="/solicitar-proyecto\\.html\\?services=${id}(?:&amp;|&)utm_source=service_catalog`), `static intake path for ${id}`);
+    const serviceCta = fallback.match(new RegExp(`<a class="mini-action service-quote"[^>]*data-cta-id="service_quote_${id}"[^>]*href="([^"]+)"`));
+    assert.ok(serviceCta, `static intake path for ${id}`);
+    assert.ok(serviceCta[1].startsWith(`/solicitar-proyecto.html?services=${id}`));
+    assert.doesNotMatch(serviceCta[1], /utm_(?:source|medium|campaign)=/);
     assert.match(app, new RegExp(`id: "${id}"`));
   }
+  assert.doesNotMatch(app, /utm_source=service_catalog|utm_medium=homepage|utm_campaign=service_intake/);
   for (const source of [fallback, app]) {
     assert.doesNotMatch(source, /https:\/\/www\.(?:sandbox\.)?paypal\.com\/checkoutnow/i);
     assert.doesNotMatch(source, /paypal\.com\/ncp\/payment\//i);

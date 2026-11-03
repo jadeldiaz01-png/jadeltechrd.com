@@ -42,7 +42,7 @@ test("both home renditions show same commercial entry and customer-friendly hero
   for (const markup of [fallback, rendered]) {
     assert.match(markup, /id="business-solutions-title"/);
     assert.match(markup, /href="\/soluciones-negocios.html"/);
-    assert.match(markup, /Web, automatización e IA/);
+    assert.match(markup, /Ordena el seguimiento de tus leads/);
     assert.match(markup, /sin prometer ventas/);
   }
 });

@@ -29,11 +29,26 @@ for (const offer of cfg.offers) {
 }
 const analytics = fs.readFileSync("revenue-funnel.js", "utf8");
 const ga4Loader = fs.readFileSync("ga4-loader.js", "utf8");
+const intakeClient = fs.readFileSync("project-request.js", "utf8");
+const intakeValidation = fs.readFileSync("commercial-runtime/src/validation.mjs", "utf8");
+if (!intakeClient.includes('track("generate_lead", { lead_source: "project_request" })')) fail("project request lead attribution contract");
 for (const source of [analytics, ga4Loader]) {
   if (!source.includes("allowedAttributionValues")) fail("fixed attribution allowlist missing");
-  if (!source.includes('utm_source: new Set(["website"')) fail("source values must be enumerated");
+  if (!source.includes('utm_source: new Set(["google"')) fail("source values must be enumerated");
+  if (/utm_source: new Set\(\[[^\]]*\b(?:website|service_catalog|use_case_path|pricing)\b/.test(source)) fail("internal navigation labels cannot be acquisition sources");
+  if (/utm_medium: new Set\(\[[^\]]*\bhomepage\b/.test(source)) fail("homepage cannot be an acquisition medium");
+  if (/utm_campaign: new Set\(\[[^\]]*\bservice_intake\b/.test(source)) fail("generic service intake cannot be a campaign");
   if (/params\.get\(["']utm_term["']\)/.test(source)) fail("free-text utm_term must not be collected");
   if (!source.includes("prohibitedKeyPattern") && !source.includes("const forbidden =")) fail("analytics PII key guard missing");
+}
+for (const source of [intakeClient, intakeValidation]) {
+  const attributionAllowlist = source.split("\n").filter((line) => /(?:utm_source|utm_campaign|source|campaign): new Set/.test(line)).join("\n");
+  for (const label of ["use_case_path", "service_catalog", "service_intake", "blueprint_entry", "website", "homepage"]) {
+    if (attributionAllowlist.includes(`"${label}"`)) fail(`internal attribution label accepted: ${label}`);
+  }
+}
+for (const source of [analytics, ga4Loader]) {
+  if (!source.includes('lead_source: new Set(["website", "project_request"])')) fail("project request lead_source must be allowlisted");
 }
 
 const homepage = fs.readFileSync("index.html", "utf8");
