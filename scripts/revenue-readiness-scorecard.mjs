@@ -7,6 +7,9 @@ const nni = (v, n) => { const x=Number(v); if(!Number.isSafeInteger(x)||x<0) die
 const nn = (v, n) => { const x=Number(v); if(!Number.isFinite(x)||x<0) die(`INVALID_${n.toUpperCase()}`); return x; };
 const r2 = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
 const usd = (v) => `US$${Number(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+const acquisitionChannels = new Set(["owned_site","organic_search","social","marketplace","paid_media","referral","unattributed","other"]);
+const acquisitionOffers = new Set(["automation_blueprint","whatsapp_support","sales_lead_intelligence","none","other"]);
+const acquisitionLocales = new Set(["en","es","other"]);
 
 export function buildScorecard(facts, config) {
   if (!facts || facts.source !== "commercial_d1.sales_settlements") die("UNTRUSTED_FACT_SOURCE");
@@ -19,6 +22,18 @@ export function buildScorecard(facts, config) {
   const yellow=nn(config.traffic_light?.yellow_min_ratio,"yellow_min_ratio");
   const green=nn(config.traffic_light?.green_min_ratio,"green_min_ratio");
   if (green!==1 || yellow<=0 || yellow>=green) die("INVALID_TRAFFIC_LIGHT");
+  const acquisitionWindow=config.acquisition_window;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(acquisitionWindow?.start_utc||"") || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(acquisitionWindow?.end_utc||"") || acquisitionWindow.end_utc<=acquisitionWindow.start_utc) die("INVALID_ACQUISITION_WINDOW");
+  const acquisitionByChannel=(facts.acquisition_breakdown??[]).map((row)=>{
+    if(!acquisitionChannels.has(row.channel)) die("INVALID_ACQUISITION_CHANNEL");
+    if(!acquisitionOffers.has(row.offer_id)) die("INVALID_ACQUISITION_OFFER");
+    if(!acquisitionLocales.has(row.locale)) die("INVALID_ACQUISITION_LOCALE");
+    return {channel:row.channel,offer_id:row.offer_id,locale:row.locale,
+      requests:nni(row.requests,"acquisition_requests"),qualified_leads:nni(row.qualified_leads,"acquisition_qualified_leads"),
+      quoted_projects:nni(row.quoted_projects,"acquisition_quoted_projects"),accepted_projects:nni(row.accepted_projects,"acquisition_accepted_projects"),
+      converted_customers:nni(row.converted_customers,"acquisition_converted_customers"),settled_payments:nni(row.settled_payments,"acquisition_settled_payments"),
+      settled_usd:r2(nni(row.settled_amount_minor,"acquisition_settled_amount_minor")/100)};
+  });
   const milestones=(config.milestones||[]).map((m)=>{
     const target=nn(m.target_usd,"target_usd"); if(target<=0) die("INVALID_TARGET");
     const ratio=settledUsd/target;
@@ -34,7 +49,8 @@ export function buildScorecard(facts, config) {
     authority:"READ_ONLY_REPORT", scope:config.scope,
     facts:{settled_usd:settledUsd,settled_payments:nni(facts.settled_payments??0,"settled_payments"),
       total_requests:nni(facts.total_requests??0,"total_requests"),qualified_leads:nni(facts.qualified_leads??0,"qualified_leads"),
-      converted_customers:nni(facts.converted_customers??0,"converted_customers")},
+      converted_customers:nni(facts.converted_customers??0,"converted_customers"),acquisition_by_channel:acquisitionByChannel},
+    acquisition_window:acquisitionWindow,
     milestones,next_milestone:next?{id:next.id,label:next.label,remaining_usd:next.remaining_usd,progress_pct:next.progress_pct,status:next.status}:null,
     all_targets_reached:!next, governance:config.governance
   };
@@ -46,6 +62,11 @@ export function markdown(s) {
     `**Projects with a recorded qualification:** ${s.facts.qualified_leads}`,`**Converted customers:** ${s.facts.converted_customers}`,"",
     "| Milestone | Status | Progress | Remaining |","|---|---:|---:|---:|"];
   for(const x of s.milestones) out.push(`| ${x.label} | ${x.status} | ${x.progress_pct.toFixed(2)}% | ${usd(x.remaining_usd)} |`);
+  out.push("","## Acquisition cohort","Window (UTC): `"+s.acquisition_window.start_utc+"` to `"+s.acquisition_window.end_utc+"`.",
+    "Counts are distinct projects by privacy-safe channel, offer and language groups. Unknown UTM values are mapped to `other`; raw UTM strings are not included.",
+    "| Channel | Offer | Language | Requests | Qualified | Quoted | Accepted | Paid projects | Settled revenue |","|---|---|---|---:|---:|---:|---:|---:|---:|");
+  if(s.facts.acquisition_by_channel.length){for(const x of s.facts.acquisition_by_channel)out.push(`| ${x.channel} | ${x.offer_id} | ${x.locale} | ${x.requests} | ${x.qualified_leads} | ${x.quoted_projects} | ${x.accepted_projects} | ${x.converted_customers} | ${usd(x.settled_usd)} |`);}
+  else out.push("| — | — | — | 0 | 0 | 0 | 0 | 0 | US$0.00 |");
   out.push("","Qualification count is distinct projects with at least one `qualify_lead` event in `lead_lifecycle_events`; zero recorded events does not prove zero leads were qualified.",
     "Converted customers: distinct projects with matched USD settlements.",
     "Source of truth for settled revenue: `sales_settlements` with `status='MATCHED'` and `currency_code='USD'`.",
