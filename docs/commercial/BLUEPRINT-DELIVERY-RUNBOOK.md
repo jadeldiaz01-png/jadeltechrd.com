@@ -47,9 +47,11 @@ El plazo de respuesta y el límite de un seguimiento son guardas operativas inic
 
 ## Control de rentabilidad
 
-Supuestos provisionales: cobro directo de US$250 por PayPal DO a 5.4% + US$0.30 y coste de oportunidad de US$35/h. El coste directo de labor es US$87.50 a 2.5 horas; el neto tras fee es US$236.20 y el margen bruto modelado es **62.9%**. No incluye impuestos, conversión/retiro, coste de adquisición, herramientas, tiempo comercial ni retrabajo.
+Modelo directo vigente (3-nov-2026): PayPal publica para vendedores de República Dominicana 5.40% + US$0.30 por transacción internacional recibida en USD. A US$250, son US$13.80 de fee de cobro y US$236.20 antes de retiro. Con 2.5 h × US$35 = US$87.50 de entrega, la contribución es US$148.70 y el **margen sobre lo facturado es 59.48%**; 62.9% sería margen dividido por el neto post-fee, no el margen bruto estándar. Fuente: [tarifas oficiales PayPal DO](https://www.paypal.com/do/business/paypal-business-fees?locale.x=es_AD).
 
-El precio de US$250 solo sostiene ese margen bajo el supuesto de cobro directo y costes omitidos iguales a cero. Con una comisión marketplace del 15%, el mismo paquete deja US$212.50 antes de labor y margen de **58.8%**; para mantener 60%, reducir la entrega a ≤2.43 horas o cobrar al menos US$258 antes de otros costes. No publicar precio por marketplace hasta revisar el fee real y el alcance aceptado.
+PayPal también lista retiro a cuenta bancaria local de DOP 100 por retiro en DOP o 0.50% con mínimo US$10 por retiro en USD; disponibilidad y conversión dependen de la cuenta y vía de retiro. Si aplica el retiro USD con mínimo US$10, la contribución de un cobro de US$250 baja a US$138.70 y el margen sobre lo facturado a **55.48%**. Con esos mismos supuestos, el precio matemático para margen de 60% es US$282.66 (redondeo operativo: US$285), antes de CAC, impuestos, conversión efectiva, herramientas, tiempo comercial o retrabajo. Mantener US$250 como hipótesis pública hasta medir la ruta real de retiro y disposición a pagar; no presentar US$285 como precio validado.
+
+El margen bruto estándar se calcula sobre el precio facturado: `(precio cobrado − fees de pago/retiro − costes directos de entrega) / precio cobrado`. Si el trabajo entra por marketplace, modelar su comisión real por separado; no trasladar el fee de PayPal ni reutilizar el supuesto anterior de 15% sin verificarlo para ese contrato.
 
 ## Registro mínimo por entrega
 
@@ -57,9 +59,10 @@ Registrar fecha, ID interno del proyecto, canal, oferta, estado (calificado/coti
 
 Fórmulas:
 
-- `neto = cobro bruto − fee de pago − otros costes variables de cobro`
+- `neto recibido = cobro bruto − fee de pago/retiro − otros costes directos de cobro`
 - `coste directo = horas de entrega × coste horario imputado + herramientas/costes directos`
-- `margen bruto = (neto − coste directo) / neto`
+- `contribución = neto recibido − coste directo`
+- `margen bruto sobre facturación = contribución / cobro bruto`
 - `venta = pago conciliado`, no formulario enviado, cotización creada ni evento manual de lead.
 
 Revisar la primera entrega contra el tope de tiempo y margen antes de repetir el precio. Cambiar una sola variable por iteración; no declarar validado el servicio hasta verificar pago, horas y costes reales.
