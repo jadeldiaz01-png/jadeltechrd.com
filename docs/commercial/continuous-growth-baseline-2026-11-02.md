@@ -251,3 +251,60 @@ La revisión local ejecutó comprobaciones de sintaxis JS, parseo del sitemap XM
 - El despliegue separado del Worker se completó en el SHA de `main` con el workflow gobernado [41613772101](https://github.com/jadeldiaz01-png/jadeltechrd.com/actions/runs/41613772101). La migración M3 de atribución estaba ya aplicada; el run no ejecutó una migración D1. El Worker se actualizó preservando variables/secretos y aprobó canarios de salud, CORS, preflight y rutas admin.
 - La lectura pública de `/health` confirmó `write_mode=fail-closed`; `GET /api/v1/admin/lead-lifecycle` sin bearer respondió 401. Esto comprueba que el endpoint existe y rechaza acceso anónimo; no prueba un registro autenticado ni requiere escribir en D1.
 - El scorecard de solo lectura [41613943830](https://github.com/jadeldiaz01-png/jadeltechrd.com/actions/runs/41613943830), generado a las 09:48:17 UTC tras desplegar el Worker, volvió a contar 16 solicitudes, 0 eventos `qualify_lead`, 0 clientes convertidos y US$0 conciliados. Esos requests son acumulados y mayormente anteriores al despliegue; todavía no hay observación post-lanzamiento suficiente ni venta comprobada.
+
+## Acceso de medición corregido en preparación — 3-nov-2026
+
+La causa del scorecard sin cifras quedó delimitada: `.github/workflows/revenue-readiness-scorecard.yml` consultaba la base comercial desde el entorno `d1-recovery-drill` usando `CLOUDFLARE_D1_API_TOKEN`, aunque el repositorio mantiene un entorno separado `d1-live-readonly-audit` con `CLOUDFLARE_D1_READONLY_API_TOKEN`. El contenido del secreto no se inspeccionó. El contrato del scorecard exige SQL SELECT-only.
+
+El preflight gobernado [41620778479](https://github.com/jadeldiaz01-png/jadeltechrd.com/actions/runs/41620778479) pasó el 3-nov-2026 con el SHA de `main` `0edd0dce383e45a9b93f0021a995ba67745cd768`: verificó el token contra la base exacta `jadel-commercial-runtime`, ejecutó `SELECT 1` y reportó `rows_written=0`. Esto confirma que la credencial dedicada de solo lectura y su entorno están operativos ahora.
+
+La rama `codex/scorecard-d1-readonly-credential` cambia solamente el entorno y el secreto que usa el scorecard, para que consulte con esa credencial de solo lectura comprobada. El cambio aún no está en `main`; hasta integrarlo y correr el scorecard manualmente con el SHA resultante no hay un corte nuevo de solicitudes o pagos. Las cifras más recientes continúan siendo la referencia previa, no evidencia posterior a este arreglo.
+
+El perfil de Upwork se revalidó como privado y `NOT_STARTED`, con cero trabajos y cero feedback. Se prepararon previews de título y resumen en español, sin guardar cambios. El resumen ofrece únicamente un Blueprint de un flujo por US$250, limitado a 2.5 horas y sin implementación ni promesas de ROI; requiere aprobación explícita en Upwork antes de guardarse.
+
+### Pulso HTTP posterior a Pages — 3-nov-2026, 10:40 UTC
+
+Una muestra secuencial desde un solo punto de red devolvió HTTP 200 para portada (TTFB 466 ms, 42.1 KB), Blueprint ES (437 ms, 9.8 KB), landing EN (309 ms, 8.8 KB), formulario ES con `offer_id` (294 ms, 9.4 KB) y formulario EN con `offer_id` (292 ms, 7.2 KB). Es un chequeo de disponibilidad y tiempo de primer byte, no una medición de Core Web Vitals ni de experiencia global; no hubo errores de ruta en esta muestra.
+
+## Muestra de posicionamiento orgánico — 3-nov-2026
+
+En una búsqueda pública dirigida a `site:jadeltechrd.com "AI Automation Blueprint"` y `site:jadeltechrd.com "automatización de leads"`, la herramienta no devolvió páginas del dominio. Esto sugiere poca visibilidad para esos términos en esa búsqueda, pero no es prueba de desindexación ni reemplaza Google Search Console.
+
+Tres alternativas públicas observadas hoy no son equivalentes, pero acotan el contexto de precio y expectativa:
+
+- [Amos Kalets](https://amoskalets.com/ai-audit) anuncia un audit sin costo de 30–45 minutos, mapa de flujo y plan del primer sprint.
+- [Opsmith](https://opsmith.co.uk/) ofrece auditoría y blueprint de flujo, scorecard de prioridad, roadmap de 90 días y walkthrough por £1,250 (página rastreada el mes pasado).
+- [noCode.Joe](https://nocodejoe.gumroad.com/l/ai-automation-blueprint-library) vende una biblioteca genérica de 30 recetas por US$49; es un producto descargable, no un diagnóstico personalizado.
+
+La oferta Jadel de US$250 por un solo flujo y máximo 2.5 horas queda entre una llamada gratuita de captación y una consultoría de mayor alcance; no es comparable a una biblioteca de plantillas. La muestra no demuestra precios efectivamente pagados ni demanda de Jadel. Mantener US$250 como hipótesis: probar primero el mensaje específico y la muestra ilustrativa, sin añadir una llamada gratuita de 45 min ni ampliar el alcance que erosiona el margen. Prioridad de medición: impresiones/clics de búsqueda y landing-to-request en Search Console/GA4; todavía no están disponibles.
+
+## Conectores disponibles para adquisición — 3-nov-2026, 10:42 UTC
+
+Consulta de solo lectura a Windsor.ai: Google Analytics 4 sigue conectado con dos cuentas llamadas “Jadel Tech RD” (IDs internos `555066228` y `555141593`); el plan Free permite solo una y las consultas anteriores fueron bloqueadas. Google Search Console (`searchconsole`) está disponible en el conector, pero no tiene ninguna cuenta conectada. No se inició OAuth ni se amplió ningún permiso.
+
+La próxima fuente adecuada para impresiones/clics orgánicos es conectar Search Console en modo lectura. El consentimiento OAuth y cualquier ajuste de GA4 necesitan aprobación del usuario bajo el modelo de mínimo privilegio. Hasta resolverlos no hay denominador web para atribuir sesiones, CTR o conversiones por búsqueda.
+
+## Muestra de entregable: verificación visual y acceso — 3-nov-2026, 10:45 UTC
+
+El enlace de muestra en la página ES y la página EN apunta a `/output/pdf/agentic-blueprint-illustrative-sample.pdf`; el recurso público devolvió HTTP 200, 80,080 bytes y `application/pdf` (una petición, 516 ms). El archivo tiene dos páginas carta. Se renderizó a 220 dpi para revisión: la página en inglés va primero y la española después; ambas tablas y sus cinco pasos se leen completos, con criterios de aceptación, tres métricas de línea base y límites de alcance. Declara de forma visible que es hipotético, que no es trabajo de cliente y que no presenta resultados medidos. El primer render de baja resolución hizo parecer recortadas las etiquetas ES; la revisión ampliada confirmó que era un artefacto de visualización, no un defecto del PDF. La muestra es un activo verificable de confianza y no requiere corrección.
+
+## Compatibilidad de cobro transfronterizo — 3-nov-2026
+
+La documentación de PayPal lista a República Dominicana con capacidad de **enviar, recibir y retirar** pagos; también indica que compradores internacionales pueden generar cargos de conversión y comisiones adicionales. La matriz de elegibilidad de PayPal Checkout marca República Dominicana como apta para Checkout empresarial antes y después del onboarding. Fuentes oficiales: [países y funciones](https://developer.paypal.com/payouts/supported-features/) (actualizado 10-sep-2026), [elegibilidad de vendedores](https://developer.paypal.com/platforms/seller-onboarding/) y [cobros internacionales](https://www.paypal.com/us/brc/article/how-to-accept-foreign-currency-with-your-business-account).
+
+Esto respalda que usar PayPal no excluye por país al dueño del negocio. No verifica credenciales LIVE específicas de Jadel, reglas del comprador, métodos disponibles por país, comisiones efectivas ni una transacción aprobada/conciliada. Mantener la conciliación real como gate antes de afirmar que el cobro global está validado.
+
+## Sensibilidad del margen a tarifas PayPal — 3-nov-2026
+
+La tarifa oficial de PayPal agrupa `DO` en la región AMER/LATAM: recibir comercio local cuesta 5.40% + cargo fijo; el cuadro de pagos internacionales muestra 5.40% + cargo fijo para todos los mercados. Para USD, el cargo fijo publicado es US$0.30. Si el saldo o pago recibido se convierte a otra moneda, el cuadro regional de conversión para AMER indica un recargo de 3.5% sobre el tipo base. Fuentes: [tarifas PayPal para cuentas comerciales](https://www.paypal.com/ml/business/paypal-business-fees), [tarifas de conversión regional](https://www.paypal.com/ml/business/paypal-business-fees#currency-conversions) y [funciones de cuenta por país](https://developer.paypal.com/payouts/supported-features/).
+
+Escenario con 2.5 h de entrega imputadas a US$35/h (US$87.50), sin impuestos, retrabajo ni herramientas:
+
+| Precio | Conversión USD→DOP | Neto tras fees estimados | Margen después de trabajo sobre neto | CAC máximo para sostener 60% |
+|---:|---:|---:|---:|---:|
+| US$250 | No | US$236.20 | 62.9% | US$6.98 |
+| US$250 | 3.5% del neto tras fee | US$227.93 | 61.6% | US$3.67 |
+| US$275 | 3.5% del neto tras fee | US$250.76 | 65.1% | US$12.80 |
+| US$300 | 3.5% del neto tras fee | US$273.58 | 68.0% | US$21.93 |
+
+El renglón de conversión es un escenario basado en la tarifa publicada, no en el método de retiro efectivo de la cuenta de Jadel. A US$250 el modelo queda con menos de US$4 de CAC si hay conversión a DOP; no debe darse por validado el margen hasta confirmar la moneda recibida/retirada y observar una liquidación real. US$275 mejora la holgura modelada; US$300 permite cerca de US$22 de CAC para conservar 60% de margen en este escenario. Ambos siguen siendo hipótesis y subir el precio sin medir puede perjudicar la conversión. Mantener US$250 solo como precio de prueba hasta registrar método de cobro, comisión, FX, horas y resultado.
