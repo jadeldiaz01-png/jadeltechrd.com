@@ -26,6 +26,14 @@ Usar Upwork solo como canal de descubrimiento complementario después de complet
 
 > Ayudo a equipos pequeños a convertir un proceso repetitivo de gestión de leads en un plan técnico claro y listo para cotizar. El servicio inicial cubre un solo flujo: reunión de hasta 45 minutos, mapa breve, arquitectura recomendada, backlog priorizado y una ronda corta de aclaración, con un máximo de 2.5 horas. No incluye construcción, despliegue ni integración productiva. Antes de empezar confirmamos el flujo, las herramientas, los entregables y los criterios de aceptación. No prometo ventas, ahorro ni ROI sin datos del cliente.
 
+### Perfil en español, versión preparada
+
+**Título candidato:** Automatización de leads y CRM | Flujos con IA, APIs e integraciones
+
+**Descripción:** Ayudo a pequeñas empresas a mapear un proceso repetitivo de captación y seguimiento de leads y decidir qué automatizar. El Blueprint inicial cubre un solo flujo: llamada remota de hasta 45 minutos, mapa breve del proceso actual, arquitectura recomendada, backlog priorizado y una ronda de aclaración. El trabajo se limita a 2.5 horas. Precio de prueba propuesto en Upwork: US$275; aún no está validado por ventas. Es consultoría y diseño; no incluye construcción, despliegue ni conexiones productivas. Antes de aceptar, confirmamos el objetivo, una fuente y las herramientas, el alcance, el plazo y los criterios de aceptación. Si requiere implementación, datos sensibles o varios procesos, se cotiza aparte. No prometo más ventas, ahorros ni ROI sin datos del cliente.
+
+**Enlace UTM para este perfil:** [Solicitar el Blueprint](https://jadeltechrd.com/solicitar-proyecto.html?services=architecture&offer_id=automation_blueprint&service_id=architecture&utm_source=upwork&utm_medium=marketplace&utm_campaign=automation_blueprint&utm_content=automation_blueprint). El formulario registra el canal `upwork` sin guardar textos libres del perfil en los eventos analíticos.
+
 ## Precio de prueba y margen
 
 El sitio propio conserva US$250 directos. Para un catálogo en Upwork, **US$275 es solo un precio candidato de prueba**, no una tarifa validada: con la comisión visible de 15%, quedan US$233.75 tras fee y US$146.25 después de imputar 2.5 h × US$35; el margen es **62.6% antes del CAC**. Para mantener 60% de margen, el CAC máximo es apenas US$6 por venta (unos 10 minutos a US$35/h si no se compran Connects). El precio mínimo matemático de US$258 alcanza 60% solo con CAC cero; un canal repetible requiere medir Connects, tiempo de propuestas, adquisición, retrabajo y otros costes. Con CAC total menor a US$146.25 el trabajo aún sería positivo, pero debajo del objetivo de 60%. Revisar el fee real por contrato antes de publicar. Los avisos observados son dispersos y ningún pago de Jadel demuestra disposición a pagar.
