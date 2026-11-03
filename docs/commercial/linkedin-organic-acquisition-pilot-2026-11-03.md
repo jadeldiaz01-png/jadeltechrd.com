@@ -1,7 +1,7 @@
 # Piloto de adquisición orgánica en LinkedIn
 
-**Estado:** borrador listo para aprobación del propietario; no publicado.
-**Corte de evidencia:** 3-nov-2026, 16:03 UTC.
+**Estado:** publicación autorizada por el propietario en chat el 3-nov; no publicada porque no hay cuenta de LinkedIn conectada y la sesión de navegador local está deshabilitada.
+**Corte de evidencia:** 3-nov-2026, 18:13 UTC.
 
 ## Hipótesis
 
@@ -13,6 +13,7 @@ Un mensaje concreto sobre el seguimiento de consultas por WhatsApp puede atraer 
 - GA4 reportó 43 sesiones y 3 usuarios activos durante 4-oct–2-nov; ese corte precede la demo y no permite saber si hubo tráfico elegible.
 - Una publicación de Workana para una agencia de seguros hispana en California pide un flujo de WhatsApp→CRM en español. El cliente tiene pagos previos, pero el anuncio de implementación recibió 62 propuestas y 76 interesados; no demuestra demanda por el diagnóstico de Jadel.
 - El JavaScript público acepta `utm_source=linkedin`, `utm_medium=social`, `utm_campaign=automation_blueprint` y conserva la atribución de sesión al pasar por la demo hacia el intake. Esto permite medir sesiones que acepten analítica y atribuir solicitudes; no elimina el sesgo del consentimiento.
+- Upwork reporta crecimiento interanual de 109% en habilidades de IA y 178% para AI Integration en trabajo contratado con origen estadounidense; en septiembre “AI workflow automation” fue la segunda búsqueda de IA de mayor crecimiento interanual. La U.S. Chamber reporta 66% de adopción de IA y 41% de uso de 6+ herramientas entre pymes estadounidenses. Son señales direccionales de un mercado principalmente estadounidense, no cifras mundiales ni prueba de ventas para Jadel.
 
 ## Publicación propuesta — español
 
@@ -24,6 +25,21 @@ Jadel Tech RD ofrece un Blueprint para mapear **un proceso**, recomendar una arq
 
 Puedes explorar una simulación con datos sintéticos aquí:
 https://jadeltechrd.com/demo-seguimiento-leads.html?utm_source=linkedin&utm_medium=social&utm_campaign=automation_blueprint
+
+## Publicación propuesta — inglés, primer test
+
+Are leads from your website, email, or WhatsApp falling through the cracks?
+
+Before adding another AI agent, map the process: what information comes in, where it is recorded, who owns the next step, and when a person should take over.
+
+Jadel Tech RD’s AI Automation Blueprint maps one lead follow-up workflow, recommends an architecture, and prioritizes next steps. Starting at US$250; up to 2.5 hours. Planning only: implementation is quoted separately, and revenue results are not promised.
+
+Explore a demo with synthetic data:
+https://jadeltechrd.com/en/lead-follow-up-demo.html?utm_source=linkedin&utm_medium=social&utm_campaign=automation_blueprint&utm_content=automation_blueprint
+
+Link checked 3-nov-2026, 18:24 UTC: HTTP 200, `lang="en"`, and demo script present. This verifies the destination asset, not the interactive experience in every browser.
+
+**Prioridad del piloto:** publicar primero esta versión en inglés porque la señal de demanda disponible proviene de contratación con origen en EE. UU. Mantener la versión española como siguiente prueba separada para una audiencia hispanohablante; no mezclar resultados ni presentarlas como una comparación si no reciben ventanas y atribución diferenciadas.
 
 ## Diseño de medición
 
@@ -40,4 +56,4 @@ https://jadeltechrd.com/demo-seguimiento-leads.html?utm_source=linkedin&utm_medi
 - **Solicitudes sin pago:** revisar elegibilidad, ajuste, cotización y objeciones; conservar causa de pérdida.
 - **Venta:** entregar dentro de 2.5 horas y calcular margen con costes reales antes de repetir o aumentar inversión.
 
-No publicar sin aprobación explícita. No usar testimonios, resultados, referencias a clientes ni experiencia técnica que Jadel no pueda demostrar.
+No se han enviado ni publicado mensajes. La aprobación recibida permite publicar el post, pero la operación sigue pendiente de conectar LinkedIn. No usar testimonios, resultados, referencias a clientes ni experiencia técnica que Jadel no pueda demostrar.
