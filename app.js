@@ -587,13 +587,13 @@
   const view = allowedViews.has(requested) ? requested : "home";
 
   const titles = {
-    home: "Agentes de IA & Automatización | Jadel Tech RD",
+    home: "Blueprint de automatización de leads desde US$250 | Jadel Tech RD",
     privacy: "Política de Privacidad | Jadel Tech RD",
     terms: "Condiciones del Servicio | Jadel Tech RD",
     "data-deletion": "Eliminación de Datos | Jadel Tech RD",
   };
   const descriptions = {
-    home: "Diseño e integración de agentes de IA, automatización, social intelligence, video, datos, seguridad y sistemas agentic con supervisión y gobernanza.",
+    home: "Plan técnico para automatizar un flujo de captación y seguimiento de clientes potenciales. Incluye mapa, arquitectura y backlog priorizado. Desde US$250.",
     privacy: "Política de Privacidad de las aplicaciones y servicios de Jadel Tech RD.",
     terms: "Condiciones del Servicio de las aplicaciones y servicios de Jadel Tech RD.",
     "data-deletion": "Instrucciones públicas para solicitar la eliminación de datos asociados a aplicaciones de Jadel Tech RD.",

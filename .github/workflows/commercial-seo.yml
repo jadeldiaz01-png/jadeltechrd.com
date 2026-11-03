@@ -53,7 +53,7 @@ jobs:
           parser.feed(html)
           title = re.search(r"<title>(.*?)</title>", html, re.I | re.S)
           assert title and title.group(1).strip(), "Title must be non-empty"
-          assert title.group(1).strip() == "Agentes de IA & Automatización | Jadel Tech RD"
+        assert title.group(1).strip() == "Blueprint de automatización de leads desde US$250 | Jadel Tech RD"
           assert '<link rel="canonical" href="https://jadeltechrd.com/">' in html
           assert parser.meta.get("description"), "Meta description must be non-empty"
           for key in (

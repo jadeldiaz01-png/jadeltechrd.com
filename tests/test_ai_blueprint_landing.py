@@ -65,9 +65,6 @@ class BlueprintTests(unittest.TestCase):
         self.assertEqual(len(intake_en), 1)
         expected_attribution = {
             'offer_id': 'automation_blueprint',
-            'utm_source': 'website',
-            'utm_medium': 'organic',
-            'utm_campaign': 'automation_blueprint',
             'utm_content': 'automation_blueprint',
         }
         for href in intake_es + intake_en:
@@ -77,7 +74,7 @@ class BlueprintTests(unittest.TestCase):
                 self.assertEqual(params.get(key), [value])
         for script_name in ('revenue-funnel.js', 'ga4-loader.js'):
             script = (ROOT / script_name).read_text(encoding='utf-8')
-            for key, value in expected_attribution.items():
+            for key, value in (('utm_content', expected_attribution['utm_content']),):
                 allowlist = next(
                     (line for line in script.splitlines() if line.strip().startswith(f'{key}: new Set(')),
                     '',

@@ -349,7 +349,7 @@ jobs:
           test -n "$browser"
           "$browser" --headless=new --no-sandbox --disable-gpu --virtual-time-budget=2500 \
             --dump-dom http://127.0.0.1:8765/ >/tmp/dom.html
-          grep -Fq 'Web, automatización e IA' /tmp/dom.html
+          grep -Fq 'AI Automation Blueprint' /tmp/dom.html
           grep -Fq 'href="/soluciones-negocios.html"' /tmp/dom.html
           grep -Fq 'Multi-Agent Orchestration' /tmp/dom.html
           grep -Fq 'Supervisión humana' /tmp/dom.html
