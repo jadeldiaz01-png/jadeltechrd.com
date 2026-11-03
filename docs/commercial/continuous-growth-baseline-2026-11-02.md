@@ -541,3 +541,20 @@ Otros anuncios abiertos de automatización comercial en la plataforma mostraban 
 **Decisión de producto/canal:** mantener el Blueprint como diagnóstico para un único flujo; priorizar en el siguiente experimento un mensaje a agencias y consultoras hispanohablantes que gestionan leads por WhatsApp y CRM. Explicar que Jadel mapea requisitos, riesgos, reglas de seguimiento y una arquitectura antes de construir; no insinuar experiencia previa con GHL o WhatsApp API ni ofrecer la implementación hasta verificar capacidad y accesos. El caso de California es solo un proxy del problema y no valida que ese segmento compre un diagnóstico de US$250. Evitar enviar propuesta a esa publicación con el alcance actual: requiere pruebas de experiencia similares que Jadel no tiene públicamente y compite contra decenas de ofertas.
 
 **Siguiente decisión de página:** no aumentar el catálogo ni crear aún una página por industria. El embudo propio sigue sin sesiones elegibles identificadas; el último corte disponible de GA4 acaba antes de la demo y el último D1 no muestra compras. Primero hace falta distribución etiquetada. Después de observar sesiones elegibles y entradas al formulario, se decidirá si conviene simplificar los estados técnicos de la portada y comparar español frente a inglés. La publicación del Blueprint, las condiciones del pago y los datos operacionales no se cambiaron en este ciclo.
+
+### Economía unitaria por canal — 3-nov-2026, 16:08 UTC
+
+Se normaliza “margen bruto” como `(precio cobrado − comisiones del canal − coste directo de entrega) / precio cobrado`. Supuesto de entrega: 2.5 h × US$35 = US$87.50; CAC, impuestos, FX, retiros, soporte y ventas/administración están excluidos y deben registrarse aparte.
+
+| Canal / precio ilustrativo | Fee del canal | Contribución antes de CAC | Margen sobre precio cobrado | Piso matemático para 60% antes de CAC |
+| --- | ---: | ---: | ---: | ---: |
+| Sitio directo · US$250, PayPal 5.40% + US$0.30 | US$13.80 | US$148.70 | 59.48% | US$253.76 |
+| Upwork · US$250, fee conservador 15% | US$37.50 | US$125.00 | 50.00% | US$350.00 |
+| Workana · US$250, 20% primer tramo | US$50.00 | US$112.50 | 45.00% | — |
+| Workana · US$392, 20% primeros US$300 + 10% excedente | US$69.20 | US$235.30 | 60.03% | US$391.67 aprox. |
+
+Upwork fija por contrato una comisión entre 0% y 15%; el porcentaje se muestra antes de enviar una propuesta y no es uniforme ([tarifa oficial](https://support.upwork.com/hc/en-us/articles/211062538-Learn-about-the-Freelancer-Service-Fee)). Los Connects cuestan US$0.15 cada uno ([precio oficial](https://support.upwork.com/hc/en-us/articles/211062898-Understanding-and-using-Connects)); con balance 0, propuestas y promociones añaden un coste de adquisición. Para Workana, la tarifa de primera relación es 20% sobre los primeros US$300 y baja a 10% hasta US$3,000; el cliente paga además 4.5% ([comisión oficial vigente](https://help.workana.com/hc/es/articles/360041235874--C%C3%B3mo-se-calcula-la-comisi%C3%B3n-en-Workana)).
+
+La cifra de 56.25% que aparece en el borrador de Workana es contribución dividida por el pago neto de comisión; no es margen sobre el precio facturado. La corrección para una meta de 60% sobre el precio cobrado es US$391.67 aprox. en Workana y US$350 en Upwork al fee máximo, ambos antes de CAC. En venta directa, el piloto de US$250 permanece ligeramente debajo de 60%; US$260 daría aproximadamente 60.83% con la misma tarifa PayPal estimada. No cambiar el precio web todavía: ninguna alternativa tiene elasticidad o venta observada.
+
+**Decisión de canal:** el piloto orgánico directo es el camino de menor coste para probar el Blueprint público de US$250; los marketplaces requieren un precio/alcance distintos y las publicaciones revisadas son muy competidas o exigen capacidad demostrable de implementación. Mantenerlos pausados, no comprar Connects ni enviar propuestas. El borrador de LinkedIn ya preparado es la siguiente acción de distribución sin gasto; requiere autorización explícita de publicación. La política de publicación externa del AGENTS.md sigue aplicando.
