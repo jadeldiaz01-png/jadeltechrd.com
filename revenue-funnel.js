@@ -102,6 +102,9 @@
     track(eventName, params = {}) {
       if (!/^[a-z][a-z0-9_]{1,39}$/.test(String(eventName))) return false;
       const payload = { ...attribution(), ...sanitize(params) };
+      for (const key of ["offer_id", "service_id"]) {
+        if (Object.hasOwn(params, key) && !String(params[key] ?? "").trim()) delete payload[key];
+      }
       window.dataLayer.push({
         event: String(eventName),
         ...payload,
@@ -125,6 +128,14 @@
       if (destination.origin === window.location.origin) {
         const currentAttribution = { ...sessionAttribution, ...queryAttribution(window.location.search) };
         const destinationParams = destination.searchParams;
+        const destinationServiceId = destinationParams.get("service_id") || destinationParams.get("services") || "";
+        const destinationOfferId = destinationParams.get("offer_id") || ({
+          architecture: "automation_blueprint",
+          support: "whatsapp_support",
+          sales: "sales_lead_intelligence"
+        })[destinationServiceId] || "";
+        destinationAttribution.service_id = allowedAttributionValues.service_id.has(destinationServiceId) ? destinationServiceId : "";
+        destinationAttribution.offer_id = allowedAttributionValues.offer_id.has(destinationOfferId) ? destinationOfferId : "";
         for (const key of ["utm_source", "utm_medium", "utm_campaign"]) {
           if (currentAttribution[key]) destinationParams.set(key, currentAttribution[key]);
           else destinationParams.delete(key);
@@ -132,9 +143,9 @@
         const ctaId = target.dataset.ctaId || target.id || "";
         if (validCtaId(ctaId)) {
           destinationParams.set("utm_content", ctaId);
-          destinationAttribution = { ...currentAttribution, utm_content: ctaId };
+          destinationAttribution = { ...currentAttribution, ...destinationAttribution, utm_content: ctaId };
         } else {
-          destinationAttribution = currentAttribution;
+          destinationAttribution = { ...currentAttribution, ...destinationAttribution };
           if (currentAttribution.utm_content) destinationParams.set("utm_content", currentAttribution.utm_content);
           else destinationParams.delete("utm_content");
         }

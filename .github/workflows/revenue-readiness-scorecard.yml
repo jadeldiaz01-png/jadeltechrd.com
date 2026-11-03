@@ -125,7 +125,7 @@ jobs:
                 GROUP BY scoped.channel,scoped.offer_id,scoped.locale
                 ORDER BY scoped.channel,scoped.offer_id,scoped.locale
               ) g) AS acquisition_breakdown;"
-          printf '%s' "$sql" | grep -Eq '^SELECT '; ! printf '%s' "$sql" | grep -Eiq '\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE)\b'
+          printf '%s' "$sql" | grep -Eq '^SELECT([[:space:]]|$)'; ! printf '%s' "$sql" | grep -Eiq '\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE)\b'
           resp=$(curl --fail-with-body -sS -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database/$db/query" --data "$(jq -n --arg sql "$sql" '{sql:$sql}')")
           test "$(jq -r '.success' <<<"$resp")" = true; row=$(jq -c '.result[0].results[0]' <<<"$resp"); test "$row" != null
           mkdir -p evidence
