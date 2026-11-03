@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://*.googletagmanager.com; style-src 'self'; img-src 'self' data: https://*.google-analytics.com https://*.googletagmanager.com; font-src 'self'; connect-src 'self' https://*.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.google.com; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+  <meta name="description" content="Prueba un ejemplo simulado de clasificación y seguimiento de leads. Usa datos sintéticos: no conecta CRM ni envía mensajes.">
+  <link rel="canonical" href="https://jadeltechrd.com/demo-seguimiento-leads.html">
+  <link rel="alternate" hreflang="es" href="https://jadeltechrd.com/demo-seguimiento-leads.html">
+  <link rel="alternate" hreflang="en" href="https://jadeltechrd.com/en/lead-follow-up-demo.html">
+  <link rel="alternate" hreflang="x-default" href="https://jadeltechrd.com/demo-seguimiento-leads.html">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/analytics-consent.css">
+  <link rel="stylesheet" href="/lead-follow-up-demo.css">
+  <title>Demo de seguimiento de leads | Jadel Tech RD</title>
+</head>
+<body data-offer-id="automation_blueprint" data-service-id="architecture">
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+  <header class="site-header"><div class="shell header-inner">
+    <a class="brand" href="/" aria-label="Jadel Tech RD — inicio"><span class="brand-mark" aria-hidden="true">JT</span><span>Jadel Tech RD</span></a>
+    <nav class="nav" aria-label="Navegación principal"><a href="/">Inicio</a><a href="/ai-automation-blueprint.html">Blueprint</a><a href="/en/lead-follow-up-demo.html" lang="en">English</a></nav>
+  </div></header>
+  <main id="main" class="shell lead-demo">
+    <section class="lead-demo-hero">
+      <p class="eyebrow">Demostración interactiva · caso ficticio</p>
+      <h1>Así podría ordenarse el seguimiento de una consulta.</h1>
+      <p class="lead">Explora un flujo sencillo: recibir una consulta, revisarla, preparar un borrador y dejar la decisión final a una persona.</p>
+      <p class="lead-demo-disclosure"><strong>Solo simulación:</strong> todos los datos son sintéticos. Esta página no conecta un CRM, no llama a modelos de IA, no guarda tu entrada ni envía emails o mensajes.</p>
+    </section>
+    <section class="lead-demo-layout" aria-label="Flujo de ejemplo">
+      <article class="lead-demo-panel">
+        <span class="lead-demo-kicker">Registro ficticio · DEMO-001</span>
+        <div class="lead-demo-record"><strong>Consulta de servicios profesionales</strong><p>Origen: formulario de ejemplo</p><p>Solicitud: “Quiero saber cómo organizar el seguimiento de nuevas consultas.”</p><p>Datos de contacto: omitidos</p></div>
+        <ol class="lead-demo-steps">
+          <li class="lead-demo-step"><h3>1 · Revisar criterios</h3><p>La demostración aplica una regla fija de ejemplo; no utiliza un modelo de IA.</p><button class="button secondary" id="classify-demo" type="button">Mostrar clasificación simulada</button><div class="lead-demo-result" id="classification-result" hidden><strong>Prioridad de ejemplo: revisar pronto</strong><p>Motivo ficticio: la consulta solicita próximos pasos. Una persona debe validar la prioridad real.</p></div></li>
+          <li class="lead-demo-step"><h3>2 · Preparar borrador</h3><p>El texto es un ejemplo estático, no está generado para una persona real.</p><button class="button secondary" id="draft-demo" type="button" disabled>Preparar borrador de ejemplo</button><div class="lead-demo-result" id="draft-result" hidden><strong>Borrador no enviado</strong><p>“Gracias por tu consulta. Podemos revisar el proceso y confirmar un alcance antes de cotizar.”</p></div></li>
+          <li class="lead-demo-step"><h3>3 · Decisión humana</h3><p>No se permite enviar automáticamente desde esta demo.</p><button class="button secondary" id="approve-demo" type="button" disabled>Simular aprobación (no enviar)</button><div class="lead-demo-result" id="approval-result" hidden><strong>Aprobado localmente; no se envió ningún mensaje.</strong></div></li>
+        </ol>
+        <div class="lead-demo-actions"><button class="mini-action" id="reset-demo" type="button">Reiniciar demo</button></div>
+        <p class="lead-demo-status" id="demo-status" role="status" aria-live="polite">Lista para simular el flujo de ejemplo.</p>
+      </article>
+      <aside class="lead-demo-panel">
+        <span class="lead-demo-kicker">Servicio real ofrecido</span>
+        <h2>Blueprint de un proceso</h2>
+        <p>El servicio de US$250 analiza un flujo real del negocio y entrega un mapa breve, una arquitectura recomendada y un backlog priorizado. El alcance se acuerda antes de empezar y tiene un límite de 2.5 horas.</p>
+        <p>El Blueprint es planificación: desarrollo, despliegue e integraciones productivas se cotizan por separado.</p>
+        <a class="button primary lead-demo-next" data-revenue-event="offer_cta_click" data-cta-id="lead_demo_es" href="/solicitar-proyecto.html?services=architecture&amp;offer_id=automation_blueprint&amp;service_id=architecture">Solicitar alcance y cotización</a>
+        <p><a href="/output/pdf/agentic-blueprint-illustrative-sample.pdf">Ver muestra ilustrativa del entregable (PDF)</a></p>
+      </aside>
+    </section>
+  </main>
+  <footer class="site-footer"><div class="shell"><p>Jadel Tech RD · <a href="/?view=privacy">Privacidad</a> · <a href="/?view=terms">Condiciones</a> · <a href="/en/lead-follow-up-demo.html" lang="en">English demo</a></p></div></footer>
+  <script src="/ga4-config.js" defer></script>
+  <script src="/ga4-loader.js" defer></script>
+  <script src="/analytics-consent.js" defer></script>
+  <script src="/revenue-funnel.js" defer></script>
+  <script src="/lead-follow-up-demo.js" defer></script>
+</body>
+</html>

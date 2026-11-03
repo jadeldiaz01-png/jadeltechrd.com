@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://*.googletagmanager.com; style-src 'self'; img-src 'self' data: https://*.google-analytics.com https://*.googletagmanager.com; font-src 'self'; connect-src 'self' https://*.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.google.com; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+  <meta name="description" content="Try a simulated lead follow-up workflow. It uses synthetic data and does not connect to a CRM or send messages.">
+  <link rel="canonical" href="https://jadeltechrd.com/en/lead-follow-up-demo.html">
+  <link rel="alternate" hreflang="en" href="https://jadeltechrd.com/en/lead-follow-up-demo.html">
+  <link rel="alternate" hreflang="es" href="https://jadeltechrd.com/demo-seguimiento-leads.html">
+  <link rel="alternate" hreflang="x-default" href="https://jadeltechrd.com/demo-seguimiento-leads.html">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/analytics-consent.css">
+  <link rel="stylesheet" href="/lead-follow-up-demo.css">
+  <title>Lead Follow-Up Demo | Jadel Tech RD</title>
+</head>
+<body data-offer-id="automation_blueprint" data-service-id="architecture">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header"><div class="shell header-inner">
+    <a class="brand" href="/" aria-label="Jadel Tech RD — home"><span class="brand-mark" aria-hidden="true">JT</span><span>Jadel Tech RD</span></a>
+    <nav class="nav" aria-label="Main navigation"><a href="/en/">Home</a><a href="/ai-automation-blueprint.html#en">Blueprint</a><a href="/demo-seguimiento-leads.html" lang="es">Español</a></nav>
+  </div></header>
+  <main id="main" class="shell lead-demo">
+    <section class="lead-demo-hero">
+      <p class="eyebrow">Interactive walkthrough · fictional example</p>
+      <h1>See one way to organize an incoming inquiry.</h1>
+      <p class="lead">Explore a simple flow: receive an inquiry, review it, prepare a draft, and leave the final decision to a person.</p>
+      <p class="lead-demo-disclosure"><strong>Simulation only:</strong> all data is synthetic. This page does not connect to a CRM, call an AI model, save your input, or send email or messages.</p>
+    </section>
+    <section class="lead-demo-layout" aria-label="Sample workflow">
+      <article class="lead-demo-panel">
+        <span class="lead-demo-kicker">Fictional record · DEMO-001</span>
+        <div class="lead-demo-record"><strong>Professional services inquiry</strong><p>Source: sample form</p><p>Request: “I want to organize follow-up for new inquiries.”</p><p>Contact details: omitted</p></div>
+        <ol class="lead-demo-steps">
+          <li class="lead-demo-step"><h3>1 · Review criteria</h3><p>This walkthrough applies a fixed sample rule; it does not use an AI model.</p><button class="button secondary" id="classify-demo" type="button">Show simulated classification</button><div class="lead-demo-result" id="classification-result" hidden><strong>Sample priority: review soon</strong><p>Fictional reason: the inquiry asks for next steps. A person must validate any real priority.</p></div></li>
+          <li class="lead-demo-step"><h3>2 · Prepare a draft</h3><p>The text is a static example, not generated for a real person.</p><button class="button secondary" id="draft-demo" type="button" disabled>Prepare sample draft</button><div class="lead-demo-result" id="draft-result" hidden><strong>Draft not sent</strong><p>“Thanks for your inquiry. We can review the process and confirm a scope before quoting.”</p></div></li>
+          <li class="lead-demo-step"><h3>3 · Human decision</h3><p>This demo cannot send anything automatically.</p><button class="button secondary" id="approve-demo" type="button" disabled>Simulate approval (no sending)</button><div class="lead-demo-result" id="approval-result" hidden><strong>Approved locally; no message was sent.</strong></div></li>
+        </ol>
+        <div class="lead-demo-actions"><button class="mini-action" id="reset-demo" type="button">Reset demo</button></div>
+        <p class="lead-demo-status" id="demo-status" role="status" aria-live="polite">Ready to simulate the sample workflow.</p>
+      </article>
+      <aside class="lead-demo-panel">
+        <span class="lead-demo-kicker">Actual service offered</span>
+        <h2>One-process Blueprint</h2>
+        <p>The US$250 service reviews one real business workflow and delivers a brief map, recommended architecture, and prioritized backlog. Scope is agreed before work starts and delivery is capped at 2.5 hours.</p>
+        <p>The Blueprint is a planning service: development, deployment, and production integrations are quoted separately.</p>
+        <a class="button primary lead-demo-next" data-revenue-event="offer_cta_click" data-cta-id="lead_demo_en" href="/en/request-project.html?services=architecture&amp;offer_id=automation_blueprint&amp;service_id=architecture">Request scope and a quote</a>
+        <p><a href="/output/pdf/agentic-blueprint-illustrative-sample.pdf">View the illustrative sample deliverable (PDF)</a></p>
+      </aside>
+    </section>
+  </main>
+  <footer class="site-footer"><div class="shell"><p>Jadel Tech RD · <a href="/en/privacy.html">Privacy</a> · <a href="/en/terms.html">Terms</a> · <a href="/demo-seguimiento-leads.html" lang="es">Demo en español</a></p></div></footer>
+  <script src="/ga4-config.js" defer></script>
+  <script src="/ga4-loader.js" defer></script>
+  <script src="/analytics-consent.js" defer></script>
+  <script src="/revenue-funnel.js" defer></script>
+  <script src="/lead-follow-up-demo.js" defer></script>
+</body>
+</html>

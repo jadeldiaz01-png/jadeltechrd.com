@@ -19,12 +19,12 @@
     utm_content: new Set(["automation_blueprint", "whatsapp_ai", "sales_intelligence"]),
     offer_id: new Set(["whatsapp_support", "automation_blueprint", "sales_lead_intelligence"]),
     service_id: new Set(["architecture", "support", "sales", "social", "cineforge", "meta", "analytics", "revenue", "quant", "governance", "multiagent"]),
-    landing_path: new Set(["/", "/en/", "/en/request-project.html", "/ai-automation-blueprint.html", "/automatizacion-procesos-ia-rd.html", "/whatsapp-ia-empresas-rd.html", "/agente-ventas-ia-rd.html", "/solicitar-proyecto.html"]),
+    landing_path: new Set(["/", "/en/", "/en/request-project.html", "/ai-automation-blueprint.html", "/automatizacion-procesos-ia-rd.html", "/whatsapp-ia-empresas-rd.html", "/agente-ventas-ia-rd.html", "/solicitar-proyecto.html", "/demo-seguimiento-leads.html", "/en/lead-follow-up-demo.html"]),
     lead_source: new Set(["website", "project_request"])
   });
 
   function validCtaId(value) {
-    return /^(?:service_quote_[a-z0-9]{1,32}|homepage_blueprint_(?:entry|scope|pricing)|english_blueprint_(?:entry|request)|hero_(?:request|catalog)|final_request)$/.test(value);
+    return /^(?:service_quote_[a-z0-9]{1,32}|homepage_blueprint_(?:entry|scope|pricing)|english_blueprint_(?:entry|request)|lead_demo_(?:es|en)|hero_(?:request|catalog)|final_request)$/.test(value);
   }
 
   function validAttributionValue(key, value) {

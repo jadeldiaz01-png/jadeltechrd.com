@@ -79,6 +79,9 @@ jobs:
             project-request.js
             solicitar-proyecto.html
             ai-automation-blueprint.html
+            demo-seguimiento-leads.html
+            lead-follow-up-demo.css
+            lead-follow-up-demo.js
             soluciones-negocios.html
             revenue-funnel.js
             ga4-config.js
@@ -99,6 +102,7 @@ jobs:
             matriz-oportunidades.css
             matriz-oportunidades.json
             en/index.html
+            en/lead-follow-up-demo.html
             en/request-project.html
             en/privacy.html
             en/terms.html
