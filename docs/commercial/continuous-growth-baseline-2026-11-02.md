@@ -172,6 +172,8 @@ El 3-nov-2026 se refinó localmente la promesa del Blueprint en `index.html`, `a
 
 En una relectura de la portada el mismo día se detectó que la tarjeta de «Arquitectura Agentic & Automatización» repetía el precio de US$250 con promesas más amplias, diluyendo el alcance y el CTA principal. Se alineó localmente esa tarjeta con el Blueprint y se reutilizó el valor `utm_content=automation_blueprint` permitido por el filtro de atribución. La modificación no cambia la oferta pública hasta publicarse.
 
+Como activo de confianza sin reseñas de clientes, el 3-nov-2026 se añadió a las páginas localizadas una muestra breve del tipo de recomendación para captar consultas y pasarlas al CRM. Se etiqueta como ilustrativa, sin datos ni resultados de clientes; incluye controles de deduplicación, aprobación humana, reintentos y métricas de línea base, sin inventar ROI. La revisión visual no estuvo disponible en este entorno; `git diff --check` pasó.
+
 La revisión local ejecutó comprobaciones de sintaxis JS, parseo del sitemap XML, existencia de referencias locales y `git diff --check`. También se simularon en memoria los eventos de `revenue-funnel.js` y `ga4-loader.js`: el CTA interno conservó UTM/oferta/servicio; un enlace externo no importó UTM ni email; GA4 no cargó antes del consentimiento; tras consentir, se envió el evento permitido y se eliminó el parámetro de email. Se ejecutó `validateProjectRequest()` del backend con locale `en-US`, `automation_blueprint`, `architecture` y la campaña propuesta; aceptó el payload. Son verificaciones de código aisladas, no una prueba de navegador ni de GA4 en producción. `npm/npx` no está instalado en el entorno, así que la revisión visual sigue pendiente.
 
 ## Proveniencia técnica
