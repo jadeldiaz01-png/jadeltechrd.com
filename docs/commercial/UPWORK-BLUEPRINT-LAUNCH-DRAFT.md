@@ -32,7 +32,7 @@ El sitio propio conserva US$250 directos. Para un catálogo en Upwork, **US$275 
 
 ## Activos y pasos de activación
 
-1. Adjuntar como muestra únicamente el entregable ilustrativo del sitio, etiquetado como **sample / not client work**; nunca presentarlo como trabajo de cliente.
+1. Adjuntar [la muestra bilingüe en PDF](../../output/pdf/agentic-blueprint-illustrative-sample.pdf), etiquetada como **sample / not client work**; nunca presentarla como trabajo de cliente.
 2. Confirmar identidad, idioma operativo, texto del perfil, términos, capacidad semanal y política de revisión antes de hacerlo público.
 3. Revisar comisión de servicio, Connects requeridos, competencia y presupuesto en cada trabajo relevante.
 4. Publicar un solo catálogo de Blueprint con alcance y exclusiones coincidentes con la web; no activar servicios de implementación a precio fijo sin estimación propia.

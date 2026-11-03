@@ -102,6 +102,7 @@ jobs:
             en/request-project.html
             en/privacy.html
             en/terms.html
+            output/pdf/agentic-blueprint-illustrative-sample.pdf
           )
           for asset in "${public_assets[@]}"; do
             test -f "$asset"
