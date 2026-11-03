@@ -139,6 +139,30 @@ function preselectFromQuery() {
   }
 }
 
+function configureBlueprintRequest() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("offer_id") !== "automation_blueprint" || params.get("service_id") !== "architecture" || !selectedServices().includes("architecture")) return;
+
+  const heroTitle = document.getElementById("request-hero-title");
+  const heroLead = document.getElementById("request-hero-lead");
+  const formIntro = document.getElementById("request-form-intro");
+  const serviceSummary = document.getElementById("blueprint-service-summary");
+  const serviceSelector = document.querySelector(".service-selector");
+  if (!heroTitle || !heroLead || !formIntro || !serviceSummary || !serviceSelector) return;
+
+  heroTitle.textContent = "Solicita tu AI Automation Blueprint";
+  heroLead.textContent = "Revisamos un proceso de captación y seguimiento de leads y te entregamos un mapa, una arquitectura recomendada y un backlog priorizado en un máximo de 2.5 horas. Comparte tus datos para confirmar el alcance y la cotización; este formulario no genera un cobro.";
+  document.getElementById("request-title").textContent = "Cuéntanos sobre el flujo que quieres mejorar";
+  formIntro.textContent = "Blueprint desde US$250. Indica tu contexto y las herramientas que utilizas para que podamos evaluar el alcance de un solo flujo.";
+  serviceSummary.hidden = false;
+  serviceSelector.hidden = true;
+  document.getElementById("submit-project").textContent = "Solicitar cotización del Blueprint";
+  const assuranceTitle = assurance?.querySelector("h2");
+  if (assuranceTitle) assuranceTitle.textContent = "Cómo funciona el Blueprint";
+  const technicalPanel = assurance?.querySelector(".nexus-intake-panel");
+  if (technicalPanel) technicalPanel.hidden = true;
+}
+
 async function waitForTurnstile(timeoutMs = 8000) {
   const started = Date.now();
   while (!window.turnstile) {
@@ -298,5 +322,6 @@ form?.addEventListener("submit", async (event) => {
 });
 
 preselectFromQuery();
+configureBlueprintRequest();
 updateSubmitState();
 bootstrapTurnstile().catch(explainRuntimeBlock);
