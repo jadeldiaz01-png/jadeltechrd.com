@@ -59,8 +59,10 @@ class BlueprintTests(unittest.TestCase):
                     'https://github.com/jadeldiaz01-png/support-tickets',
                     'https://github.com/jadeldiaz01-png/Agentic-Al-Brief'
                 })
-        intake = [u for u in self.page.links if u.startswith('/solicitar-proyecto.html?')]
-        self.assertEqual(len(intake), 2)
+        intake_es = [u for u in self.page.links if u.startswith('/solicitar-proyecto.html?')]
+        intake_en = [u for u in self.page.links if u.startswith('/en/request-project.html?')]
+        self.assertEqual(len(intake_es), 1)
+        self.assertEqual(len(intake_en), 1)
         expected_attribution = {
             'offer_id': 'automation_blueprint',
             'utm_source': 'website',
@@ -68,7 +70,7 @@ class BlueprintTests(unittest.TestCase):
             'utm_campaign': 'automation_blueprint',
             'utm_content': 'automation_blueprint',
         }
-        for href in intake:
+        for href in intake_es + intake_en:
             params = parse_qs(urlparse(href).query)
             self.assertEqual(params.get('services'), ['architecture'])
             for key, value in expected_attribution.items():
@@ -90,7 +92,8 @@ class BlueprintTests(unittest.TestCase):
         self.assertIn('Only after a quote is accepted', self.html)
         self.assertNotIn('paypal.com/ncp/payment/', self.html.lower())
         self.assertNotIn('https://www.paypal.com/checkoutnow', self.html.lower())
-        self.assertEqual(len([x for x in self.page.links if x.startswith('/solicitar-proyecto.html?')]), 2)
+        self.assertEqual(len([x for x in self.page.links if x.startswith('/solicitar-proyecto.html?')]), 1)
+        self.assertEqual(len([x for x in self.page.links if x.startswith('/en/request-project.html?')]), 1)
 
     def test_no_misleading_production_claim(self):
         self.assertIn('no un agente entregado en producción', self.html)
