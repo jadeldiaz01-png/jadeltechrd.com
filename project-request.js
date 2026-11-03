@@ -1,10 +1,52 @@
 const API_ORIGIN = "https://intake.jadeltechrd.com";
 const CONFIG_URL = `${API_ORIGIN}/api/v1/public-config`;
 const REQUEST_URL = `${API_ORIGIN}/api/v1/project-requests`;
-const IDEMPOTENCY_SESSION_KEY = "jadel-project-request-idempotency-v1";
+const IDEMPOTENCY_SESSION_KEY = `jadel-project-request-idempotency-v1:${window.location.pathname}`;
 const ALLOWED_SERVICES = new Set([
   "architecture","support","sales","social","cineforge","meta","analytics","revenue","quant","governance","multiagent"
 ]);
+const english = document.documentElement.lang.toLowerCase().startsWith("en");
+const copy = english ? {
+  preparing: "Preparing secure verification…",
+  ready: "Verification ready.",
+  expired: "Verification expired. Complete the challenge again.",
+  verificationError: "Verification could not be completed. Please try again.",
+  completeChallenge: "Complete the challenge to enable submission.",
+  configUnavailable: "The secure intake is temporarily unavailable. No information was sent.",
+  configInvalid: "The secure intake configuration could not be verified. No information was sent.",
+  turnstileTimeout: "Cloudflare verification did not load in time. Check script blockers or retry.",
+  blocked: "No information was sent. The form remains closed until secure verification is available.",
+  unknownBlock: "Secure verification is unavailable. The form remains blocked for safety.",
+  selectServices: "Select between 1 and 8 services.",
+  completeVerification: "Complete anti-bot verification.",
+  sending: "Sending your request securely…",
+  replayed: (id) => `This request was already recorded and was not duplicated. Reference: ${id}.`,
+  received: (id) => `Your request was recorded. Reference: ${id}.`,
+  rateLimited: "Too many attempts in a short time. Wait one minute and try again.",
+  turnstileFailed: "Verification expired or failed. Complete a new challenge and try again.",
+  idempotencyConflict: "The retry identifier does not match this request. Reload the page before trying again.",
+  requestFailed: "We could not record your request right now. No payment or commitment was created. Please try again.",
+} : {
+  preparing: "Preparando verificación segura…",
+  ready: "Verificación lista.",
+  expired: "La verificación expiró. Completa el reto nuevamente.",
+  verificationError: "No se pudo completar la verificación. Inténtalo de nuevo.",
+  completeChallenge: "Completa la verificación para habilitar el envío.",
+  configUnavailable: "El runtime no entregó configuración pública. El formulario queda bloqueado sin enviar datos.",
+  configInvalid: "La configuración pública del runtime no pasó contrato. El formulario queda bloqueado.",
+  turnstileTimeout: "Cloudflare Turnstile no cargó a tiempo. Revisa bloqueadores de scripts o reintenta.",
+  blocked: "No se enviaron datos. Nexus conserva el flujo en modo fail-closed hasta recuperar verificación segura.",
+  unknownBlock: "La verificación segura no está disponible. El formulario permanece bloqueado por seguridad.",
+  selectServices: "Selecciona entre 1 y 8 servicios.",
+  completeVerification: "Completa la verificación anti-bot.",
+  sending: "Enviando solicitud de forma segura…",
+  replayed: (id) => `Esta solicitud ya estaba registrada y no se duplicó. Folio de seguimiento: ${id}.`,
+  received: (id) => `Tu solicitud quedó registrada. Folio de seguimiento: ${id}.`,
+  rateLimited: "Demasiados intentos en poco tiempo. Espera un minuto y vuelve a intentarlo.",
+  turnstileFailed: "La verificación expiró o no fue válida. Completa un nuevo reto y reintenta.",
+  idempotencyConflict: "El identificador de reintento no coincide con esta solicitud. Recarga la página antes de volver a enviar.",
+  requestFailed: "No pudimos registrar la solicitud en este momento. No se creó ningún compromiso ni pago. Inténtalo nuevamente.",
+};
 
 const form = document.getElementById("project-request-form");
 const submit = document.getElementById("submit-project");
@@ -101,7 +143,7 @@ async function bootstrapTurnstile() {
   bootstrapping = true;
   turnstileToken = "";
   if (retryRuntime) retryRuntime.hidden = true;
-  turnstileStatus.textContent = "Preparando verificación segura…";
+  turnstileStatus.textContent = copy.preparing;
   setStatus("");
   const response = await fetch(CONFIG_URL, {
     method: "GET",
@@ -121,21 +163,21 @@ async function bootstrapTurnstile() {
     theme: "auto",
     callback(token) {
       turnstileToken = token;
-      turnstileStatus.textContent = "Verificación lista.";
+      turnstileStatus.textContent = copy.ready;
       updateSubmitState();
     },
     "expired-callback"() {
       turnstileToken = "";
-      turnstileStatus.textContent = "La verificación expiró. Completa el reto nuevamente.";
+      turnstileStatus.textContent = copy.expired;
       updateSubmitState();
     },
     "error-callback"() {
       turnstileToken = "";
-      turnstileStatus.textContent = "No se pudo completar la verificación. Inténtalo de nuevo.";
+      turnstileStatus.textContent = copy.verificationError;
       updateSubmitState();
     },
   });
-  turnstileStatus.textContent = "Completa la verificación para habilitar el envío.";
+  turnstileStatus.textContent = copy.completeChallenge;
   bootstrapping = false;
 }
 
@@ -143,13 +185,13 @@ function explainRuntimeBlock(error) {
   bootstrapping = false;
   const code = String(error?.message || "RUNTIME_UNAVAILABLE");
   const messages = {
-    PUBLIC_CONFIG_UNAVAILABLE: "El runtime no entregó configuración pública. El formulario queda bloqueado sin enviar datos.",
-    PUBLIC_CONFIG_INVALID: "La configuración pública del runtime no pasó contrato. El formulario queda bloqueado.",
-    TURNSTILE_CLIENT_TIMEOUT: "Cloudflare Turnstile no cargó a tiempo. Revisa bloqueadores de scripts o reintenta.",
+    PUBLIC_CONFIG_UNAVAILABLE: copy.configUnavailable,
+    PUBLIC_CONFIG_INVALID: copy.configInvalid,
+    TURNSTILE_CLIENT_TIMEOUT: copy.turnstileTimeout,
   };
   turnstileToken = "";
-  turnstileStatus.textContent = messages[code] || "La verificación segura no está disponible. El formulario permanece bloqueado por seguridad.";
-  setStatus("No se enviaron datos. Nexus conserva el flujo en modo fail-closed hasta recuperar verificación segura.", "error");
+  turnstileStatus.textContent = messages[code] || copy.unknownBlock;
+  setStatus(copy.blocked, "error");
   if (retryRuntime) retryRuntime.hidden = false;
   updateSubmitState();
 }
@@ -180,17 +222,17 @@ form?.addEventListener("submit", async (event) => {
   const services = selectedServices();
   if (!form.reportValidity()) return;
   if (services.length < 1 || services.length > 8) {
-    setStatus("Selecciona entre 1 y 8 servicios.", "error");
+    setStatus(copy.selectServices, "error");
     return;
   }
   if (!turnstileToken) {
-    setStatus("Completa la verificación anti-bot.", "error");
+    setStatus(copy.completeVerification, "error");
     return;
   }
 
   submitting = true;
   updateSubmitState();
-  setStatus("Enviando solicitud de forma segura…", "working");
+  setStatus(copy.sending, "working");
   const idempotencyKey = getIdempotencyKey();
 
   try {
@@ -216,11 +258,11 @@ form?.addEventListener("submit", async (event) => {
 
     completed = true;
     clearIdempotencyKey();
-    const projectId = String(body.project_id || "registrado").slice(0, 64);
-    window.RevenueAnalytics?.track("generate_lead", { lead_source: "project_request" });
+    const projectId = String(body.project_id || (english ? "recorded" : "registrado")).slice(0, 64);
+    window.RevenueAnalytics?.track("generate_lead", { lead_source: "website" });
     const receiptMessage = body.replayed
-      ? `Esta solicitud ya estaba registrada y no se duplicó. Folio de seguimiento: ${projectId}.`
-      : `Tu solicitud quedó registrada. Folio de seguimiento: ${projectId}.`;
+      ? copy.replayed(projectId)
+      : copy.received(projectId);
     setStatus(receiptMessage, "success");
     if (confirmation && confirmationSummary) {
       confirmationSummary.textContent = receiptMessage;
@@ -234,11 +276,11 @@ form?.addEventListener("submit", async (event) => {
   } catch (error) {
     const code = String(error?.message || "REQUEST_FAILED");
     const messages = {
-      RATE_LIMITED: "Demasiados intentos en poco tiempo. Espera un minuto y vuelve a intentarlo.",
-      TURNSTILE_FAILED: "La verificación expiró o no fue válida. Completa un nuevo reto y reintenta.",
-      IDEMPOTENCY_CONFLICT: "El identificador de reintento no coincide con esta solicitud. Recarga la página antes de volver a enviar.",
+      RATE_LIMITED: copy.rateLimited,
+      TURNSTILE_FAILED: copy.turnstileFailed,
+      IDEMPOTENCY_CONFLICT: copy.idempotencyConflict,
     };
-    setStatus(messages[code] || "No pudimos registrar la solicitud en este momento. No se creó ningún compromiso ni pago. Inténtalo nuevamente.", "error");
+    setStatus(messages[code] || copy.requestFailed, "error");
     resetTurnstile();
   } finally {
     submitting = false;

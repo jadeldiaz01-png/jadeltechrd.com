@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1220">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://*.googletagmanager.com; style-src 'self'; img-src 'self' data: https://*.google-analytics.com https://*.googletagmanager.com; font-src 'self'; connect-src 'self' https://*.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.google.com; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; upgrade-insecure-requests">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="description" content="AI Automation Blueprint desde US$250: diagnóstico de un proceso, arquitectura técnica y plan de implementación supervisada. Available in English and Spanish.">
   <title>AI Automation Blueprint desde US$250 | Jadel Tech RD</title>
@@ -15,8 +15,9 @@
   <meta property="og:url" content="https://jadeltechrd.com/ai-automation-blueprint.html">
   <meta name="twitter:card" content="summary">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/analytics-consent.css">
 </head>
-<body>
+<body data-offer-id="automation_blueprint" data-service-id="architecture">
   <a class="skip-link" href="#main">Saltar al contenido / Skip to content</a>
   <header class="site-header">
     <div class="shell header-inner">
@@ -50,7 +51,7 @@
         <li><a href="https://github.com/jadeldiaz01-png/support-tickets">Support &amp; Tickets — arquitectura de backend y controles</a></li>
         <li><a href="https://github.com/jadeldiaz01-png/Agentic-Al-Brief">Agentic AI Brief — sistema de investigación con gobernanza</a></li>
       </ul>
-      <p><a class="button primary" href="/solicitar-proyecto.html?services=architecture&amp;offer_id=automation_blueprint&amp;utm_source=website&amp;utm_medium=organic&amp;utm_campaign=automation_blueprint&amp;utm_content=automation_blueprint">Solicitar evaluación y cotización</a></p>
+      <p><a class="button primary" data-revenue-event="offer_cta_click" data-cta-id="service_quote_architecture" href="/solicitar-proyecto.html?services=architecture&amp;offer_id=automation_blueprint&amp;service_id=architecture&amp;utm_source=website&amp;utm_medium=organic&amp;utm_campaign=automation_blueprint&amp;utm_content=automation_blueprint">Solicitar evaluación y cotización</a></p>
     </section>
     <section class="section-block" id="en" lang="en" aria-labelledby="title-en">
       <div class="eyebrow">Technical assessment and architecture service</div>
@@ -73,10 +74,14 @@
         <li><a href="https://github.com/jadeldiaz01-png/support-tickets">Support &amp; Tickets — backend architecture and controls</a></li>
         <li><a href="https://github.com/jadeldiaz01-png/Agentic-Al-Brief">Agentic AI Brief — governed research system</a></li>
       </ul>
-      <p><a class="button primary" href="/solicitar-proyecto.html?services=architecture&amp;offer_id=automation_blueprint&amp;utm_source=website&amp;utm_medium=organic&amp;utm_campaign=automation_blueprint&amp;utm_content=automation_blueprint">Request an assessment and quote (Spanish intake form)</a></p>
-      <p>The current project intake form is in Spanish. English-language assistance can be discussed during project qualification; language support is not guaranteed until agreed.</p>
+      <p><a class="button primary" data-revenue-event="offer_cta_click" data-cta-id="service_quote_architecture" href="/en/request-project.html?services=architecture&amp;offer_id=automation_blueprint&amp;service_id=architecture&amp;utm_source=website&amp;utm_medium=organic&amp;utm_campaign=automation_blueprint&amp;utm_content=automation_blueprint">Request an assessment and quote in English</a></p>
+      <p>Submitting the request does not create a quote, contract, or payment. Scope and price are confirmed before payment.</p>
     </section>
   </main>
-  <footer class="site-footer"><div class="shell"><p>Jadel Tech RD · <a href="/?view=privacy">Privacidad / Privacy</a> · <a href="/?view=terms">Condiciones / Terms</a></p></div></footer>
+  <footer class="site-footer"><div class="shell"><p>Jadel Tech RD · <a href="/?view=privacy">Privacidad</a> · <a href="/?view=terms">Condiciones</a> · <a href="/en/privacy.html">Privacy policy</a> · <a href="/en/terms.html">Terms of service</a></p></div></footer>
+  <script src="/ga4-config.js" defer></script>
+  <script src="/ga4-loader.js" defer></script>
+  <script src="/analytics-consent.js" defer></script>
+  <script src="/revenue-funnel.js" defer></script>
 </body>
 </html>

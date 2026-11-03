@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en-US">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://*.googletagmanager.com https://challenges.cloudflare.com; style-src 'self'; img-src 'self' data: https://*.google-analytics.com https://*.googletagmanager.com; font-src 'self'; connect-src https://intake.jadeltechrd.com https://challenges.cloudflare.com https://*.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.google.com; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'none'; manifest-src 'self'; upgrade-insecure-requests">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="description" content="Request a quote for the Jadel Tech RD AI Automation Blueprint.">
+  <title>Request an AI Automation Blueprint | Jadel Tech RD</title>
+  <link rel="canonical" href="https://jadeltechrd.com/en/request-project.html">
+  <link rel="alternate" hreflang="en" href="https://jadeltechrd.com/en/request-project.html">
+  <link rel="alternate" hreflang="es" href="https://jadeltechrd.com/solicitar-proyecto.html">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/project-request.css">
+  <link rel="stylesheet" href="/analytics-consent.css">
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
+  <script src="/ga4-config.js" defer></script>
+  <script src="/ga4-loader.js" defer></script>
+  <script src="/analytics-consent.js" defer></script>
+  <script src="/revenue-funnel.js" defer></script>
+  <script type="module" src="/project-request.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header"><div class="shell header-inner">
+    <a class="brand" href="/en/" aria-label="Jadel Tech RD home"><span class="brand-mark" aria-hidden="true">JT</span><span>Jadel Tech RD</span></a>
+  <nav class="nav" aria-label="Main navigation"><a href="/en/">Blueprint</a><a href="/" lang="es">Español</a></nav>
+  </div></header>
+  <main id="main" class="shell request-shell">
+    <section class="request-hero">
+      <div class="eyebrow"><span class="live-dot"></span> Secure project intake</div>
+      <h1>Request your Blueprint quote.</h1>
+      <p class="lead">Tell us about one workflow. The intake validates and records your request for human review. Submitting it does not authorize payment, a contract, or external actions.</p>
+      <div class="hero-trust"><span>✓ Turnstile verification</span><span>✓ Rate limits and idempotency</span><span>✓ Human review before commitments</span></div>
+    </section>
+    <section class="request-grid" aria-labelledby="request-title">
+      <form id="project-request-form" class="request-card" novalidate>
+        <div><div class="eyebrow">Agentic Blueprint · from US$250</div><h2 id="request-title">Describe the workflow</h2><p>We will review fit and confirm scope, timing, and price in a quote before requesting payment. Do not submit passwords, tokens, or sensitive credentials.</p></div>
+        <div class="form-grid">
+          <label>Full name<input name="name" autocomplete="name" minlength="2" maxlength="100" required></label>
+          <label>Email<input name="email" type="email" autocomplete="email" maxlength="254" required></label>
+          <label>Company <span>(optional)</span><input name="company" autocomplete="organization" maxlength="120"></label>
+          <label class="full-field">Workflow and desired outcome <span>(optional)</span><textarea name="notes" maxlength="2000" rows="5" placeholder="What repeats today? Which tools are involved? What would a better process do?"></textarea></label>
+        </div>
+        <fieldset class="service-selector"><legend>Requested service</legend><label><input type="checkbox" name="service_ids" value="architecture" checked> AI Automation Blueprint · one workflow assessment and plan</label></fieldset>
+        <div class="turnstile-panel"><div id="turnstile-widget" aria-label="Anti-bot verification"></div><p id="turnstile-status" class="muted" role="status">Preparing secure verification…</p><button class="button secondary compact" id="retry-runtime" type="button" hidden>Retry secure verification</button></div>
+        <label class="consent-row"><input id="privacy-consent" type="checkbox" required> I agree that Jadel Tech RD may process these details to review and answer my request, as described in the <a href="/en/privacy.html">Privacy Policy</a>.</label>
+        <button class="button primary full" id="submit-project" type="submit" disabled>Submit secure request</button>
+        <p id="request-status" class="request-status" role="status" aria-live="polite"></p>
+      </form>
+      <section id="request-confirmation" class="request-card request-confirmation" aria-labelledby="request-confirmation-title" tabindex="-1" hidden>
+        <div class="eyebrow">Request received</div><h2 id="request-confirmation-title">Thank you. We have your request.</h2><p id="request-confirmation-summary" class="request-confirmation-summary" role="status" aria-live="polite"></p>
+        <ol class="request-confirmation-steps"><li><strong>Scope and price review</strong><span>We review your workflow before preparing a quote.</span></li><li><strong>Quote approval</strong><span>You can review and accept the proposed scope and amount.</span></li><li><strong>Quote-bound PayPal checkout</strong><span>Available only after approval, for eligible quotes up to US$250. Work waits for payment reconciliation.</span></li></ol>
+        <p class="request-confirmation-payment">This request does not create a quote, PayPal order, contract, or charge.</p><a class="button secondary full" href="/en/">Back to the Blueprint</a>
+      </section>
+      <aside id="request-assurance" class="request-card request-assurance">
+        <div class="eyebrow">What happens next</div><h2>Review before you decide</h2>
+        <ol><li><strong>1. Request received</strong><span>The runtime validates and records your submission.</span></li><li><strong>2. Scope review</strong><span>A human reviews the workflow and prepares a quote with deliverables and price.</span></li><li><strong>3. PayPal checkout</strong><span>If you accept an eligible quote up to US$250, a quote-bound checkout may be issued. No payment is created by submitting this form.</span></li></ol>
+        <p>Submitting a request is not contract acceptance, spending approval, or permission to publish or contact others.</p>
+        <a class="button secondary full" href="/en/">Back to the offer</a>
+      </aside>
+    </section>
+  </main>
+  <footer class="site-footer"><div class="shell footer-inner"><p>© <span id="year">2026</span> Jadel Tech RD.</p><nav aria-label="Legal links"><a href="/en/privacy.html">Privacy</a><a href="/en/terms.html">Terms</a><a href="/solicitar-proyecto.html" lang="es">Formulario en español</a></nav></div></footer>
+</body>
+</html>

@@ -36,6 +36,7 @@ test("admin approvals list pending projects and payment ledger with bearer token
   assert.deepEqual(body.payment_orders, []);
   assert.deepEqual(body.subscriptions, []);
   assert.equal(queries.length, 6);
+  assert.ok(queries.slice(0, 2).every((sql) => sql.includes("AS lead_stage")));
 });
 
 test("admin approvals can query an exact payment and order including terminal states", async () => {

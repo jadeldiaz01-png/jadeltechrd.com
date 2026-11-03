@@ -50,7 +50,7 @@ test("both home renditions show same commercial entry and customer-friendly hero
 test("marketing page is in sitemap and immutable Pages allowlist", () => {
   assert.match(sitemap, /https:\/\/jadeltechrd.com\/soluciones-negocios.html/);
   const staging = deployment.split("public_assets=(")[1]?.split(")")[0] ?? "";
-  assert.match(staging, /\n\s+soluciones-negocios.html\n/);
+  assert.match(staging, /\r?\n\s+soluciones-negocios.html\r?\n/);
   assert.match(deployment, /test "\$CONFIRMATION" = "DEPLOY_PUBLIC_SITE"/);
   assert.match(deployment, /test "\$GITHUB_SHA" = "\$EXPECTED_SHA"/);
   assert.match(landing, /form-action 'none'/);

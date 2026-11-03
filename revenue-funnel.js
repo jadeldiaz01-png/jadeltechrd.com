@@ -16,7 +16,7 @@
     utm_content: new Set(["automation_blueprint", "whatsapp_ai", "sales_intelligence"]),
     offer_id: new Set(["whatsapp_support", "automation_blueprint", "sales_lead_intelligence"]),
     service_id: new Set(["architecture", "support", "sales", "social", "cineforge", "meta", "analytics", "revenue", "quant", "governance", "multiagent"]),
-    landing_path: new Set(["/", "/automatizacion-procesos-ia-rd.html", "/whatsapp-ia-empresas-rd.html", "/agente-ventas-ia-rd.html", "/solicitar-proyecto.html"]),
+    landing_path: new Set(["/", "/en/", "/en/request-project.html", "/ai-automation-blueprint.html", "/automatizacion-procesos-ia-rd.html", "/whatsapp-ia-empresas-rd.html", "/agente-ventas-ia-rd.html", "/solicitar-proyecto.html"]),
     lead_source: new Set(["website"])
   });
 
@@ -46,7 +46,7 @@
       if (!value) continue;
       const allowedValues = allowedAttributionValues[key];
       if (allowedValues && !allowedValues.has(value)) continue;
-      if (key === "cta_id" && !/^(?:service_quote_[a-z0-9]{1,32}|homepage_blueprint_entry)$/.test(value)) continue;
+      if (key === "cta_id" && !/^(?:service_quote_[a-z0-9]{1,32}|homepage_blueprint_entry|english_blueprint_(?:entry|request))$/.test(value)) continue;
       out[key] = value.slice(0, 120);
     }
     return out;
@@ -75,7 +75,23 @@
   document.addEventListener("click", (event) => {
     const target = event.target.closest("[data-revenue-event]");
     if (!target) return;
+    let destinationAttribution = {};
+    try {
+      const destination = new URL(target.href, window.location.href);
+      if (destination.origin === window.location.origin) {
+        const currentParams = new URLSearchParams(window.location.search);
+        const destinationParams = new URLSearchParams(destination.search);
+        const keys = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "offer_id", "service_id"];
+        destinationAttribution = Object.fromEntries(keys.map((key) => {
+          const allowed = allowedAttributionValues[key];
+          const current = currentParams.get(key);
+          const next = destinationParams.get(key);
+          return [key, allowed?.has(current) ? current : next || ""];
+        }).filter(([, value]) => value));
+      }
+    } catch { /* Ignore malformed or non-link CTA targets. */ }
     window.RevenueAnalytics.track(target.dataset.revenueEvent, {
+      ...destinationAttribution,
       cta_id: target.dataset.ctaId || target.id || "cta"
     });
   });

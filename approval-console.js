@@ -1,5 +1,6 @@
 const API_ORIGIN = "https://intake.jadeltechrd.com";
 const APPROVALS_URL = `${API_ORIGIN}/api/v1/admin/approvals`;
+const LEAD_LIFECYCLE_URL = `${API_ORIGIN}/api/v1/admin/lead-lifecycle`;
 const PAYMENT_RECONCILE_URL = `${API_ORIGIN}/api/v1/admin/payments/reconcile`;
 const CATALOG_QUOTE_URL = `${API_ORIGIN}/api/v1/admin/quotes/from-catalog`;
 const QUOTE_ACCEPT_URL = `${API_ORIGIN}/api/v1/admin/quotes/accept`;
@@ -14,6 +15,7 @@ const statusNode = document.getElementById("approval-status");
 const resultsNode = document.getElementById("approval-results");
 
 let token = "";
+const leadLifecycleEventIds = new Map();
 
 function setStatus(message, kind = "") {
   statusNode.textContent = message;
@@ -118,6 +120,22 @@ function quotePaymentControls(quote, paymentOrders, subscriptions) {
   return `${initialControl}${recurringControl}`;
 }
 
+function leadLifecycleControls(project) {
+  const labels = {
+    working_lead: "En seguimiento",
+    qualify_lead: "Calificado",
+    disqualify_lead: "No calificado",
+  };
+  const stage = labels[project.lead_stage] ? project.lead_stage : "";
+  const current = labels[stage] || "Sin calificación comercial";
+  return `<div class="lead-lifecycle-control">
+    <p>Etapa comercial: <strong>${htmlEscape(current)}</strong></p>
+    <button data-lead-stage="working_lead" data-project="${htmlEscape(project.project_id)}" ${stage === "working_lead" ? "disabled" : ""}>Iniciar seguimiento</button>
+    <button data-lead-stage="qualify_lead" data-project="${htmlEscape(project.project_id)}" ${stage === "qualify_lead" ? "disabled" : ""}>Calificar lead</button>
+    <button data-lead-stage="disqualify_lead" data-project="${htmlEscape(project.project_id)}" ${stage === "disqualify_lead" ? "disabled" : ""}>No calificado</button>
+  </div>`;
+}
+
 function captureAssist(order) {
   if (order.status !== "PENDING" || !order.provider_order_id) return "";
   const command = [
@@ -167,6 +185,7 @@ function render(data) {
             <strong>${htmlEscape(project.name)} · ${htmlEscape(project.email)}</strong>
             <span>${htmlEscape(project.state)} · catálogo canónico</span>
             <small>${htmlEscape(project.service_ids_json)}</small>
+            ${leadLifecycleControls(project)}
             <div>
               <button data-catalog-quote-project="${htmlEscape(project.project_id)}">Crear cotización base</button>
             </div>
@@ -402,6 +421,33 @@ resultsNode?.addEventListener("click", async (event) => {
       setStatus("Reconciliación registrada.", "success");
     } catch (error) {
       setStatus(`No se pudo reconciliar el pago: ${formatApiError(error)}`, "error");
+    }
+    return;
+  }
+
+  const leadStageButton = event.target.closest("button[data-lead-stage]");
+  if (leadStageButton) {
+    const projectId = leadStageButton.dataset.project;
+    const stage = leadStageButton.dataset.leadStage;
+    const key = `${projectId}:${stage}`;
+    let sourceEventId = leadLifecycleEventIds.get(key);
+    try {
+      if (!sourceEventId) {
+        sourceEventId = crypto.randomUUID();
+        leadLifecycleEventIds.set(key, sourceEventId);
+      }
+      leadStageButton.disabled = true;
+      setStatus("Registrando etapa comercial...", "working");
+      const result = await api(LEAD_LIFECYCLE_URL, {
+        method: "POST",
+        body: JSON.stringify({ project_id: projectId, stage, source_event_id: sourceEventId }),
+      });
+      render(await api(APPROVALS_URL));
+      leadLifecycleEventIds.delete(key);
+      setStatus(result.unchanged ? "La solicitud ya estaba en esa etapa." : "Etapa comercial registrada.", "success");
+    } catch (error) {
+      leadStageButton.disabled = false;
+      setStatus(`No se pudo registrar la etapa: ${formatApiError(error)}`, "error");
     }
     return;
   }

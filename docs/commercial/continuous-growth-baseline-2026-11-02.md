@@ -1,0 +1,172 @@
+# Jadel Tech RD: baseline de crecimiento continuo
+
+**Corte de evidencia:** 2 de noviembre de 2026. **Estado:** análisis local; no publicado.
+
+## Decisión provisional
+
+El Agentic Blueprint de US$250 es el mejor candidato para la primera venta: ya tiene precio público, alcance reconocible y un intake que termina en revisión humana y cotización. El flujo de compra solo admite checkout de Blueprint hasta US$250. Esto hace coherente vender el diagnóstico como producto inicial; no demuestra todavía que sea el servicio con mayor conversión.
+
+La brecha de mayor impacto para clientes fuera del mercado hispanohablante es que la página Blueprint contiene texto en inglés pero su CTA dirige al formulario español. Las rutas `/en/`, `/en/privacy.html`, `/en/terms.html` y `/en/request-project.html` responden 404. La portada actual presenta 11 servicios, lo que compite por atención con la oferta inicial.
+
+## Objetivo continuo y oferta a validar
+
+**Objetivo de negocio:** conseguir el primer cliente global pagado y convertir la página en un canal medible para vender una automatización de captación y seguimiento de leads, con margen bruto positivo. La métrica final es cobro conciliado menos comisiones y coste directo de entrega; visitas, clics y formularios son indicadores intermedios.
+
+**Hipótesis de oferta con mayor señal de compra observada:** un piloto de un único flujo para empresas que reciben consultas y gestionan leads manualmente: formulario/webhook → clasificación explicable con IA → alta o actualización sin duplicados en el CRM → borrador de seguimiento sujeto a aprobación humana → registro de errores y reintentos seguros. El trabajo Upwork de US$2,000 descrito más abajo solicita precisamente ese tipo de flujo y criterios de aceptación; es una señal de problema presupuestado, no evidencia de que Jadel pueda cerrar o entregar ese precio.
+
+Por tanto, la página debería conducir a **un resultado concreto de implementación** y no repartir la atención entre once servicios. El Blueprint de US$250 puede seguir como fase de diagnóstico/descubrimiento, pero no debe presentarse como sustituto del resultado de implementación que muestran los anuncios. La decisión de sustituir el producto inicial queda como hipótesis comercial a validar: el perfil de Upwork carece de trabajos/reseñas y el sitio no tiene métricas de demanda accesibles. Antes de fijar precio de implementación, cerrar límites de alcance y estimar horas. Con proxy de US$35/h y meta de 60% de margen, la fórmula de precio mínimo directo es `(horas × 35 + otros costes directos) / 0.40`, ajustada por fee de pago; cada hora de alcance adicional eleva el mínimo en aproximadamente US$92.70 antes de otros costes bajo PayPal DO. En Upwork, con fee máxima de 15%, cada hora exige aproximadamente US$102.94. US$35/h es tarifa publicada del perfil, usada como proxy de coste de oportunidad, no coste interno medido.
+
+**Ciclo de validación:** registrar semanalmente impresiones/sesiones elegibles, clics en CTA, inicios y envíos de formulario, leads calificados, cotizaciones, ventas cobradas, horas reales, fees y margen. Cambiar una variable por iteración (oferta, mensaje, precio o formulario) y conservar fecha/versión. No declarar validada la oferta hasta tener al menos un pago y margen calculado; buscar repetibilidad con ventas de clientes distintos y margen positivo sostenido. Hoy no hay base de tráfico/conversión suficiente para fijar un objetivo estadístico de tasa o muestra.
+
+Precio de referencia mínimo para sostener 60% de margen bruto, usando US$35/h como proxy, antes de herramientas, impuestos, FX, adquisición y costes de soporte:
+
+| Horas directas estimadas | Precio mínimo web/PayPal DO | Precio mínimo marketplace al 15% |
+| ---: | ---: | ---: |
+| 4 h | US$371 | US$412 |
+| 8 h | US$741 | US$824 |
+| 12 h | US$1,111 | US$1,235 |
+
+Son límites de modelación y no precios de mercado comprobados. Calcular el precio final con el alcance y costes reales antes de publicar.
+
+## Evidencia del sitio y del embudo
+
+El sitio público sirve (HTTP 200) `ga4-config.js`, `ga4-loader.js`, `analytics-consent.js` y `revenue-funnel.js`. El código remoto permite `offer_view`, `offer_cta_click`, `intake_start` y `generate_lead`; este último se dispara después de una respuesta exitosa del intake. La analítica exige consentimiento; por tanto, GA4 no representa a quienes lo rechazan.
+
+La lectura de Google Analytics por Windsor.ai se intentó en este corte y fue rechazada: hay dos cuentas GA4 conectadas y el plan actual permite leer una. El error dice que las lecturas están pausadas. Se volvió a intentar el 2-nov-2026 solicitando solo la cuenta objetivo y un rango de 90 días; el mismo bloqueo impidió extraer sesiones, fuentes, países y eventos de navegador. La configuración local fija como propiedad objetivo la cuenta GA4 existente, pero confirma que el acceso de Editor no está verificado. Mantener esta brecha como P0 para decisiones de adquisición y conversión.
+
+Sí existe una fuente agregada de solo lectura para solicitudes y cobros: el workflow `Revenue readiness scorecard` consultó D1 y generó artefactos exitosos en tres cortes: **2026-11-02 06:02 UTC, 2026-11-02 15:53 UTC y 2026-11-03 00:58 UTC**. Los tres mostraron **16 solicitudes totales, 0 eventos registrados de leads calificados, 0 pagos conciliados y US$0 de ingreso liquidado**; el total no cambió durante **18 h 56 min** entre el primer y último corte. El scorecard también muestra 0 conversiones registradas, pero al no existir escritor de eventos de lifecycle, ese conteo no demuestra que no haya habido actividad comercial no registrada. Fuentes: [corte 00:58 UTC](https://github.com/jadeldiaz01-png/jadeltechrd.com/actions/runs/41556539695), [15:52 UTC](https://github.com/jadeldiaz01-png/jadeltechrd.com/actions/runs/41475864135) y [06:02 UTC](https://github.com/jadeldiaz01-png/jadeltechrd.com/actions/runs/41397457108). Los cobros conciliados sí son fuente autoritativa de ingreso; las 16 solicitudes agregadas no equivalen necesariamente a leads válidos ni deben usarse como denominador de conversión sin deduplicación/calificación.
+
+La configuración pública del intake también se consultó sin enviar una solicitud: una petición GET con origen `https://jadeltechrd.com` respondió con clave pública de Turnstile y acción `project_request`; la misma ruta sin encabezado Origin respondió `ORIGIN_NOT_ALLOWED`. Esto confirma que el formulario debe cargarse desde el dominio autorizado y que no hace falta exponer credenciales para el flujo inglés.
+
+Auditoría HTTP del sitemap público del 2-nov-2026: **12 URLs listadas, 11 HTTP 200 y 1 HTTP 404 (91.7% válidas)**. Las páginas comerciales listadas —incluida `/ai-automation-blueprint.html`— y el formulario español responden 200. El 404 es `/agent-readiness.html`: aunque existe en el repositorio, el workflow de Pages usa un allowlist de publicación que no incluye esa página ni sus dependencias; no es parte directa del recorrido de compra. En la rama local se retiró solo esa URL rota del sitemap; el cambio no se ha desplegado. Las rutas inglesas siguen 404 y todavía no aparecen en el sitemap público. `robots.txt` permite indexación para búsqueda, pero no se obtuvo Search Console ni datos de impresiones/clicks, por lo que la visibilidad orgánica no se puede cuantificar todavía.
+
+La instrumentación de navegador ofrece señales iniciales, pero las etapas comerciales posteriores requieren registros del intake/CRM, cotizaciones aceptadas y ledger PayPal. Una sesión o un `generate_lead` no es una venta.
+
+### Coherencia entre promesa y alcance
+
+La copia pública del paquete en la portada dice «Para identificar el primer workflow con ROI y controles claros»; se confirmó leyendo el asset desplegado e inmutable `app.db1be0131c51a903bc5490e9048b5c2ca8b97e30.js`. El alcance detallado de Blueprint ofrece descubrimiento, mapa, arquitectura, backlog y notas de integración/seguridad; no lista un modelo cuantificado de ROI, payback ni ahorro. La página específica de automatización aclara que no se inventa ROI y que se definen métricas/línea base con datos del proceso; la landing inglesa local también excluye explícitamente promesas de ingresos/ahorro. Hay una inconsistencia de expectativa: el usuario podría interpretar que los US$250 incluyen un análisis financiero de retorno. Ajuste recomendado para la portada: cambiar la promesa por «priorizar un primer proceso por impacto medible, coste y controles», o agregar explícitamente el cálculo de ROI al alcance con horas y supuestos definidos. Aún no hay una elección del propietario entre estas opciones; no se modificó esta copia en producción ni localmente.
+
+### Fricción observada en el intake
+
+El formulario para Blueprint solicita **2 campos obligatorios** (nombre y email), **2 opcionales** (empresa y descripción del flujo), verificación Turnstile y consentimiento de privacidad; el formulario inglés deja arquitectura seleccionada y el CTA español pasa `services=architecture`, que el JS usa para preseleccionarla. El envío no crea cotización, contrato, pago ni orden PayPal. Diseño actual favorece el envío rápido y deja calidad/calificación para el seguimiento humano; no hay tasa de abandono para saber si agregar campos o acortar pasos cambiaría la conversión. No añadir preguntas obligatorias hasta medir, salvo que el seguimiento pruebe que faltan datos para cotizar.
+
+### Auditabilidad del embudo first-party
+
+La revisión de código confirma que el runtime persiste la secuencia de negocio necesaria: `project_requests` (solicitud, estado, locale y UTM/offer por migración 0007), `quotes` (importe, estado emitido/aceptado), `payment_orders`, `payment_ledger` y `sales_settlements` (solo settlement `MATCHED`). No se consultó ninguna fila de producción. El GET administrativo `/api/v1/admin/approvals` exige bearer token y devuelve campos personales como nombre/email; la sesión no tiene un conector Cloudflare D1 ni hay un endpoint agregado de analítica identificado. No usar ese listado para conteos.
+
+Hay lectura agregada de solicitudes y liquidaciones por el scorecard, pero los cortes revisados no tienen eventos de lifecycle. La métrica `qualified_leads` cuenta proyectos con un evento `qualify_lead`; cero eventos no demuestra cero solicitudes calificadas por otro medio. Tampoco existe desglose por fecha, oferta, locale o campaña. La opción A de la [propuesta de instrumentación del ciclo de leads](../revenue/LEAD-LIFECYCLE-INSTRUMENTATION-PROPOSAL.md) ya está implementada localmente: registro manual autenticado para proyectos con política aprobada, clave idempotente, sin notas/PII en el evento; la conversión y el ingreso quedan vinculados a liquidaciones conciliadas. La suite local terminó con 217 aprobadas, 0 fallidas y 3 omitidas por falta de Bash. No se consultaron filas con PII ni se escribió en D1 de producción; el código aún no está en `main` ni desplegado.
+
+La configuración local contempla una ruta alternativa de exportación **diaria** GA4→BigQuery en el proyecto `jadeltechrd-analytics-prod`, con exportación streaming desactivada, pero su estado actual es `READY_TO_LINK_PROJECT_CONFIRMED`, no activa: no hay dataset observado ni tablas `events_YYYYMMDD`; la puerta de activación exige acceso Editor de GA4 y roles IAM de BigQuery. No se encontró conector BigQuery/Google Cloud disponible en las herramientas de lectura de esta sesión. Esta es evidencia de configuración local, no de que el enlace o los permisos existan en producción. Referencias locales: `config/ga4-bigquery-daily-export-v1.json` y `config/analytics-control-plane-v1.json`.
+
+**Opciones para recuperar medición:** (1) en Windsor, conservar la cuenta GA4 objetivo `555066228` y resolver la conexión duplicada para volver al límite gratuito; (2) activar el export diario de BigQuery según la configuración, tras verificar permisos y coste. La ruta (1) parece de menor coste operativo si la cuenta duplicada realmente es prescindible; ninguna desconexión o enlace se ha ejecutado. No activar export streaming ni gasto publicitario para resolver este bloqueo.
+
+## Señal de mercado y límites
+
+- Upwork informa crecimiento interanual de **178% en AI Integration** y **71% en AI Chatbot Development** en su marketplace. El conjunto anual 2026 se basa en actividad de contratación originada en Estados Unidos; es señal de categoría, no estimación de demanda global ni previsión de ventas para Jadel Tech RD. Fuente: [Upwork, In-Demand Skills 2026](https://www.upwork.com/press/releases/upworks-in-demand-skills-2026-demand-for-top-ai-skills-more-than-doubles-as-ai-is-embedded-into-everyday-work).
+- El Banco Mundial reporta más de **US$4.25 billones** en exportaciones mundiales de servicios entregados digitalmente en 2023. Incluye software, IT, soporte, creatividad y otras actividades; su amplitud impide tratarlo como TAM de Blueprint o como mercado accesible para una firma concreta. Fuente: [World Bank, Digital Progress and Trends Report 2025](https://documents1.worldbank.org/curated/en/099112525160536089/pdf/P505350-59c98ca8-0803-4f23-b470-17f3dab010ab.pdf), caso de estudio, pp. 108–110.
+- No se encontró una base defendible para estimar cuota de mercado, TAM/SAM/SOM de consultoría Agentic Blueprint, ni visitas orgánicas del dominio. La estimación de abajo es capacidad e ingresos por escenarios, no tamaño de mercado.
+
+### Muestra de precios públicos comparables (2-nov-2026)
+
+Se revisó una muestra intencional de seis ofertas públicas de Upwork que venden evaluación/planificación para un proceso: US$20 (mapa básico, 2 días), US$79 (auditoría + plan), US$95 (plan escrito de implementación, 3 días), US$150 (auditoría de flujo, 3 días), US$179 (plan de automatización de oficina, 5 días) y US$350 (evaluación con límites de riesgo/approval). Mediana de esta muestra: **US$122.50**; rango: **US$20–350**. El precio directo Jadel de US$250 es ~**2.0×** esa mediana y está por encima de la mayoría de estos comparables; el comparable de US$350 cubre controles operativos de mayor riesgo. Fuentes de listados: [US$20, workflow blueprint](https://www.upwork.com/services/product/development-it-a-clear-ai-workflow-plan-for-one-business-process-2105975874587207253), [US$79, audit and plan](https://www.upwork.com/services/product/development-it-an-ai-workflow-automation-system-for-your-business-2067916875542334664), [US$95, written plan](https://www.upwork.com/services/product/development-it-a-written-ai-automation-plan-for-your-business-process-2082232720847961479), [US$150, workflow audit](https://www.upwork.com/services/product/development-it-an-ai-automation-workflow-audit-and-implementation-plan-2094070860360095617), [US$179, office automation plan](https://www.upwork.com/services/product/development-it-an-ai-automation-plan-for-your-office-with-fixed-prices-2116935069453909792), [US$350, workflow risk assessment](https://www.upwork.com/services/product/development-it-an-ai-workflow-automation-assessment-and-implementation-plan-2102819584438918739).
+
+Fiverr muestra una consulta de 60 minutos para identificar oportunidades de automatización a **US$375** (perfil Fiverr Pro; 15 órdenes completadas y 1 reseña visible en la página al consultar). Es un punto de precio premium con credenciales y prueba social que Jadel aún no tiene en Upwork; no es comparable directo en alcance ni reputación ([AI Opportunity Snapshot](https://www.fiverr.com/dameonproctor/audit-your-business-and-identify-ai-automation-opportunities)). En la categoría Fiverr Automations & Agents aparecen **17,000+ resultados** y varios precios iniciales de US$10–90; son precios «desde», no contratos cerrados ni comparación homogénea ([categoría Automations & Agents](https://www.fiverr.com/categories/programming-tech/software-development/automations-workflows)).
+
+**Lectura y decisión:** US$250 no queda validado por evidencia de ventas y exige entregar más que un mapa ligero: sesión de descubrimiento, proceso actual, arquitectura recomendada y próximos pasos concretos. Mantenerlo como precio de la web es razonable solo con alcance acotado y muestra de entrega convincente; para marketplace sin reseñas, probar un producto inicial más pequeño de **US$95–150** con entregable/reunión reducidos podría disminuir la barrera, y ofrecer el Blueprint completo como siguiente escalón. Este escalón inferior es hipótesis de experimento; requiere revisar el margen con horas reales y aprobar cualquier cambio antes de publicar.
+
+## Canal de adquisición: Upwork
+
+La lectura de solo lectura del perfil del 3-nov-2026 confirmó visibilidad **privada**, **0 trabajos/contratos/feedback** y **0 Connects**. El perfil no es descubrible en su estado actual. La cuenta muestra que no hay historial de uso de Connects reciente. El título del perfil ya se enfoca en automatización IA e integración de APIs; enumera español fluido y una tarifa de US$35/h. Esto hace de Upwork un canal plausible por ajuste de habilidades, pero hoy no es un canal operativo para adquirir clientes.
+
+Upwork reporta más de **290,000 proyectos activos** en Project Catalog: la demanda existe junto a una oferta muy competida, por lo que publicar no garantiza impresiones ni ventas. Un proyecto debe detallar alcance, precio, plazo, revisiones, muestras y requisitos del cliente, y pasa por revisión de la plataforma. Fuentes oficiales: [Project Catalog para freelancers](https://support.upwork.com/hc/en-us/articles/360058234233-How-to-get-started-with-Project-Catalog-as-a-freelancer) y [qué es Project Catalog](https://support.upwork.com/hc/en-us/articles/10408677826963-What-is-Project-Catalog-on-Upwork).
+
+Upwork indica una comisión por contrato de **0% a 15%**, visible antes de aceptar/enviar la propuesta y fijada al inicio del contrato ([tarifa oficial](https://support.upwork.com/hc/en-us/articles/211062538-Learn-about-the-Freelancer-Service-Fee)). Escenario conservador al 15%: un proyecto de US$250 deja US$212.50 antes de costes e impuestos; imputando US$100 de entrega, quedan US$112.50 (52.9% del ingreso neto de plataforma). Un precio de US$300 dejaría US$255 tras la comisión y US$155 tras esos US$100 de entrega (60.8%). Son cálculos de sensibilidad con 4 h × US$25/h; no prueban disposición a pagar. No usar precio distinto por canal sin validar alcance y fee mostrada.
+
+### Demanda observada en búsquedas de trabajos (2-nov-2026)
+
+Consulta de solo lectura a Upwork: puestos fijos con pago verificado, ordenados por recencia, primeros cinco resultados con **“AI automation” en el título**. Los presupuestos publicados fueron **US$20, 50, 300, 800 y 1,500** (mediana US$300; rango US$20–1,500); los niveles de propuestas visibles iban de 10–15 a 50+, y 4/5 tenían 20 o más. Los alcances eran implementación/integración (Notion + Claude, chatbot/automatización, CRM/workflows y automatización de investigación/marketing), no un servicio puro de diagnóstico. Muestra ilustrativa de una página de resultados, no tasa de contratación ni precios pagados. Los cinco aparecían con fecha de publicación 2-nov-2026 en la búsqueda, pero no se comprobó si seguían abiertos ni si acabaron en contrato. Ejemplos: [automatización Claude + Notion, US$20](https://www.upwork.com/jobs/~022117318835533791729), [automatización de datos PE/VC, US$300](https://www.upwork.com/jobs/~022117376868703032215), [CRM y workflows inteligentes, US$800](https://www.upwork.com/jobs/~022117263639456797591).
+
+Una búsqueda distinta por título **“workflow automation”** devolvió primeros cinco presupuestos fijos de US$5, 10, 10, 70 y 800 (mediana US$10), también con propuestas visibles de 20–50 o 50+. Mezcla trabajos de distinto alcance y calidad, así que no es tarifa de mercado; sí muestra presión de precio y competencia por palabras genéricas. En las búsquedas no apareció evidencia suficiente de compradores que estén pidiendo y pagando un Blueprint independiente. Hipótesis comercial: presentar el diagnóstico como un producto de entrada que prepara un build claramente acotado; no asumir que el mercado lo comprará solo por llamarse “Blueprint”. No se enviaron propuestas ni mensajes.
+
+**Señal de problema para una oferta más concreta (2-nov-2026):** una búsqueda por título “lead automation”, fija y pago verificado, mostró cinco anuncios recientes con presupuestos de US$10, US$10, US$10, US$50 y US$2,000 (mediana US$10, muy distorsionada por cuatro presupuestos de bajo valor; no usarla como precio recomendado). Todos mostraban 20–50 o 50+ propuestas. El anuncio de US$2,000 pide capturar consultas, clasificarlas con Claude, integrar el CRM, evitar duplicados, redactar seguimiento sujeto a aprobación humana y registrar/reintentar errores; su cliente tenía pago verificado. Al consultar el detalle, la publicación mostraba 0 contratados/ofertas y 1 entrevista, pero la cuenta conectada tenía 0 Connects y no permitía postular (`can_apply=false`). El anuncio no equivale a venta y no se envió propuesta. Fuente de muestra: [automatización de calificación de leads e integración CRM, presupuesto publicado US$2,000](https://www.upwork.com/jobs/~022116185437759771488).
+
+**Actualización de demanda y capacidad de postular (3-nov-2026):** nuevas búsquedas por título, fija y cliente con pago verificado devolvieron cinco resultados para cada término “lead automation” y “CRM automation”, ordenados por recencia. Los presupuestos de “lead automation” fueron US$10, US$10, US$10, US$50 y US$2,000; los de “CRM automation”, US$10, US$10, US$800, US$10 y US$50. En ambos grupos la mediana es US$10, reflejo de los cuatro anuncios repetidos/de bajo presupuesto; no representa el precio de una implementación empresarial. Todos mostraron 20–50 o 50+ propuestas. Las fechas de publicación más recientes eran 2-nov; esta búsqueda no admite filtro de fechas y no prueba que cada publicación siga abierta.
+
+El detalle del anuncio de **US$800** para CRM y workflows inteligentes describe lead management con n8n, HubSpot/GoHighLevel, IA, deduplicación, reintentos y aprobación humana; registra 50+ propuestas. La actividad mostraba 0 contratados, 0 ofertas y 1 entrevista; el cliente tenía 16 contratos, US$11,404 gastados y 50% de hire rate. La postulación requería **27 Connects**; la cuenta Jadel tenía **0**, así que `can_apply=false`. No se envió propuesta. Fuente: [anuncio CRM/workflows, presupuesto US$800](https://www.upwork.com/jobs/~022117263639456797591). Esta evidencia confirma coincidencia del problema con el piloto, pero también alta competencia y una barrera inmediata de canal. No gastar en Connects ni cambiar visibilidad se ha autorizado en esta iteración.
+
+Esta señal refuerza probar el posicionamiento del piloto de implementación descrito en “Objetivo continuo y oferta a validar”, con alcance cerrado y precio calculado desde horas/costes. La muestra es pequeña, contiene precios de señuelo o alcances heterogéneos y se basa en un marketplace; no permite generalizar a todo el mercado global ni reemplaza datos propios. La búsqueda pública Semrush solicitada en esta iteración no pudo ejecutarse porque la cuenta reportó unidades API insuficientes; no se obtuvieron volúmenes de búsqueda, CPC ni datos de tráfico de competidores.
+
+**Prioridad del canal:** completar primero perfil público, muestras verificables y descripción en inglés; luego probar un único catálogo de Blueprint con alcance cerrado. Mantener el sitio propio a US$250 como hipótesis de venta directa. No publicar ni editar el perfil sin autorización expresa: hacer visible el perfil o enviar el catálogo produce cambios externos.
+
+## Economía unitaria del precio actual
+
+PayPal confirma que República Dominicana admite recibir y retirar fondos ([países y funciones compatibles](https://developer.paypal.com/payouts/supported-features/)). En la tabla para vendedores DO, cobrar transacciones domésticas cuesta **5.40% + comisión fija** y cobrar desde DO a otros mercados también cuesta **5.40% + comisión fija**; para USD la comisión fija publicada es **US$0.30** ([tarifas oficiales PayPal DO](https://api-c.paypal.com/do/business/paypal-business-fees?locale.x=es_AD), actualización 28-sep-2026). No se verificó la tarifa negociada o configuración de la cuenta Jadel. Si el saldo USD se convierte al retirar en América, la misma página publica una tarifa de conversión de 3.50%; el retiro bancario USD desde DO muestra además 0.50% con mínimo US$10. No los sumo a los ejemplos porque la ruta y moneda de liquidación de Jadel no están verificadas.
+
+Precio de referencia: **US$250 por Blueprint**, sin asumir ventas.
+
+| Ritmo hipotético | Cobro bruto/mes | Neto tras fee PayPal DO 5.4% + US$0.30 por cobro |
+| --- | ---: | ---: |
+| 1 venta por semana | US$1,083 | US$1,024 |
+| 2 ventas por semana | US$2,167 | US$2,047 |
+| 4 ventas por semana | US$4,333 | US$4,094 |
+
+Conversión usada: 52 semanas / 12 meses. Neto calculado suponiendo cobros PayPal de US$250 en USD, sin conversión, retiros, impuestos, herramientas, adquisición ni tiempo de venta.
+
+Para ilustrar el margen de entrega, a **US$25/h de coste laboral imputado**, una entrega de 2, 4, 6, 8 o 10 horas deja margen bruto de 78.8%, 57.7%, 36.5%, 15.3% o -5.9%, respectivamente, usando neto PayPal de US$236.20. Para una meta provisional de 60%, el coste laboral máximo sería US$94.48 y la entrega quedaría limitada a **3.78 h antes de retiro/conversión, impuestos, herramientas u otros costes**. La tarifa laboral y la meta son supuestos, no costes observados.
+
+### Sensibilidad de margen con el alcance publicado
+
+El alcance comunicado incluye una reunión remota, mapa del proceso actual, arquitectura, backlog priorizado, notas de integración/seguridad y una ronda de aclaraciones. No hay horas reales de entregas registradas. El perfil de Upwork conectado publica US$35/h; es una tarifa de venta declarada, no un coste interno verificado, así que se usa solo como segundo proxy de coste junto a US$25/h.
+
+| Precio y canal | Neto antes de costes/impuestos | Horas máximas a US$25/h para margen 60% | Horas máximas a US$35/h para margen 60% |
+| --- | ---: | ---: | ---: |
+| US$250, web directa, PayPal DO | US$236.20 | 3.78 h | 2.70 h |
+| US$250, marketplace con fee escenario 15% | US$212.50 | 3.40 h | 2.43 h |
+| US$300, marketplace con fee escenario 15% | US$255.00 | 4.08 h | 2.91 h |
+| US$95, marketplace con fee escenario 15% | US$80.75 | 1.29 h | 0.92 h |
+| US$150, marketplace con fee escenario 15% | US$127.50 | 2.04 h | 1.46 h |
+
+Los máximos suponen margen bruto = (neto después de fee − coste laboral directo) / neto después de fee, con meta de 60%; no incluyen conversión/retiro, herramientas, adquisición, impuestos, retrabajo ni tiempo comercial. A US$35/h imputados, el Blueprint de US$250 permite **2.70 h** en web con PayPal DO o 2.43 h bajo la fee máxima de Upwork. Por ello no conviene copiar el alcance completo a un producto de US$95–150: ese precio solo funciona para una sesión breve y resumen reducido. Decisión provisional: mantener US$250 en la web como precio de prueba y registrar horas por etapa en la próxima entrega; en Upwork, limitar explícitamente la versión de US$250 a <=2.4 h si el coste económico real se aproxima a US$35/h, o re-cotizar/reducir alcance si se excede. El precio de US$300 en marketplace solo cubre cerca de 2.9 h bajo esas mismas hipótesis.
+
+Conclusión práctica: mantener US$250 como hipótesis de lanzamiento y delimitar el Blueprint a un proceso y una entrega plantilla que quepan en el coste/tiempo permitido. No ampliar entregables ni bajar precio hasta medir horas reales, costes de pago y respuesta comercial.
+
+## Métricas necesarias para decidir
+
+| Etapa | Métrica | Fuente de verdad |
+| --- | --- | --- |
+| Descubrimiento | sesiones elegibles por `/en/` y canal/país | GA4 con consentimiento y, en paralelo, analítica agregada de hosting si está disponible |
+| Interés | `offer_view`, `offer_cta_click` | GA4; sin PII |
+| Intención | `intake_start` | GA4 |
+| Solicitud | `generate_lead` tras respuesta exitosa | GA4 + registro canónico del intake |
+| Calidad | leads contactables, calificados y cotizados | intake/CRM |
+| Venta | cotizaciones aceptadas y cobro conciliado | runtime y ledger PayPal |
+| Rentabilidad | horas de entrega, fees, costes de herramientas y adquisición, margen bruto | registro operativo/cost ledger |
+
+No optimizar con tasas hasta conseguir denominadores comparables y deduplicados. No enviar PII a GA4. Las señales de navegador no sustituyen la conciliación del pago.
+
+## Próximos gates
+
+1. Desbloquear GA4 en Windsor.ai sin quitar la propiedad correcta: conservar la propiedad objetivo asociada a `G-K60SQ2ZHL9`; revisar en Windsor cuál de las dos conexiones es redundante antes de desconectarla. El agente no tiene acción autorizada para modificar esa conexión.
+2. La rama de trabajo implementa como supuesto recomendado una landing y formulario ingleses del Blueprint, enlazados a privacidad y condiciones traducidas. La selección del usuario puede ajustar el alcance antes de publicar.
+3. Desplegar solo después de aprobación humana; comprobar rutas HTTP, Turnstile, intake de prueba, consentimiento y eventos de GA4 en DebugView/Realtime antes de dirigir tráfico.
+4. Resolver la lectura GA4 y registrar calificación, cotización, venta, horas y costes reales. Revaluar precio y margen con las primeras entregas.
+5. Activar el perfil de Upwork y preparar/publicar un solo proyecto catálogo cuando exista aprobación expresa; antes, completar muestras y el perfil en inglés. Medir visitas, invitaciones/propuestas, leads calificados, conversiones, comisión y horas por venta.
+
+## Implementación local preparada
+
+En la rama `codex/global-blueprint-intake` (base `db1be0131c51a903bc5490e9048b5c2ca8b97e30`) se añadieron `/en/`, `/en/request-project.html` y páginas inglesas de privacidad y condiciones. La landing usa el alcance y exclusiones del Blueprint definidos en la página bilingüe actual; el formulario reutiliza el intake y guarda `en-US`, UTM y `automation_blueprint`. Los dos allowlists analíticos admiten las nuevas rutas y CTAs; el click conserva atribución UTM válida del enlace interno, sin leer campos personales. La landing en inglés y la página bilingüe del Blueprint instrumentan vistas y clicks; la UI de consentimiento y los estados dinámicos del intake están localizados al inglés. La CTA inglesa existente ahora dirige al formulario inglés. El CTA inicial español incluye parámetros de atribución que pasan el allowlist.
+
+Tras revisar el scorecard real, se ajustó localmente `scripts/revenue-readiness-scorecard.mjs` para rotular esa cifra como «eventos de calificación registrados» y advertir que cero eventos no demuestra cero leads calificados. También se actualizó localmente `.github/workflows/pages.yml`: el allowlist de publicación ahora incluye las cuatro rutas inglesas y crea sus carpetas al preparar `_site`. Estos cambios aún no están en `main` ni en producción.
+
+Comprobación estática local adicional: **4/4 páginas inglesas existen y están listadas para staging; los recursos locales enlazados desde esas páginas existen y están en el allowlist; `git diff --check` no detectó errores**. Esto no ejecuta Actions, no prueba el formulario en navegador y no cambia el estado HTTP público.
+
+Estos archivos son una propuesta local; la comprobación HTTP del 2-nov-2026 devolvió 404 para `/en/` y `/en/request-project.html`, mientras la portada y `/ai-automation-blueprint.html` devolvieron 200. No se envió una solicitud de prueba a producción y no se atribuyen conversiones ni ventas a la implementación.
+
+La revisión local ejecutó comprobaciones de sintaxis JS, parseo del sitemap XML, existencia de referencias locales y `git diff --check`. También se simularon en memoria los eventos de `revenue-funnel.js` y `ga4-loader.js`: el CTA interno conservó UTM/oferta/servicio; un enlace externo no importó UTM ni email; GA4 no cargó antes del consentimiento; tras consentir, se envió el evento permitido y se eliminó el parámetro de email. Se ejecutó `validateProjectRequest()` del backend con locale `en-US`, `automation_blueprint`, `architecture` y la campaña propuesta; aceptó el payload. Son verificaciones de código aisladas, no una prueba de navegador ni de GA4 en producción. `npm/npx` no está instalado en el entorno, así que la revisión visual sigue pendiente.
+
+## Proveniencia técnica
+
+- Sitio inspeccionado: [jadeltechrd.com](https://jadeltechrd.com/), página bilingüe: [AI Automation Blueprint](https://jadeltechrd.com/ai-automation-blueprint.html), formulario: [solicitar-proyecto.html](https://jadeltechrd.com/solicitar-proyecto.html).
+- Estado de código público leído en `origin/main` (`db1be0131c51a903bc5490e9048b5c2ca8b97e30`, “Feature the US$250 Blueprint as the first-sale offer”). La rama de trabajo usa ese commit base; el checkout local preexistente y los archivos locales modificados por el usuario no se alteraron.
+- Lectura de GA4 por Windsor.ai: error del conector en este corte (cuentas conectadas: 2; límite del plan: 1); no se recibieron filas de métricas.
+- Upwork: consulta de solo lectura del perfil y la cuenta conectados; perfil privado/no iniciado y sin historial de trabajos. No se modificó el perfil, no se creó/publicó catálogo y no se enviaron propuestas.

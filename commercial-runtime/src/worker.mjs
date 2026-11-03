@@ -68,6 +68,8 @@ VALUES (?,?,?,?,?,?,?,?,?,?)`;
 const INSERT_APPROVAL_SQL = `INSERT INTO approval_events
 (approval_id,project_id,approval_type,decision,actor,reason,evidence_json,created_at)
 VALUES (?,?,?,?,?,?,?,?)`;
+const LEAD_LIFECYCLE_STAGES = new Set(["working_lead", "qualify_lead", "disqualify_lead"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function baseHeaders(extraHeaders = {}) {
   return {
@@ -949,10 +951,10 @@ export async function handleAdminApprovals(request, env) {
     }
 
     const pending = await env.DB.prepare(
-      "SELECT project_id,name,email,company,service_ids_json,offer_id,offer_landing_path,utm_source,utm_medium,utm_campaign,utm_content,state,policy_status,created_at,updated_at FROM project_requests WHERE policy_status IN ('PENDING','REQUIRES_HUMAN') ORDER BY created_at DESC LIMIT 50"
+      "SELECT p.project_id,p.name,p.email,p.company,p.service_ids_json,p.offer_id,p.offer_landing_path,p.utm_source,p.utm_medium,p.utm_campaign,p.utm_content,p.state,p.policy_status,p.created_at,p.updated_at,(SELECT l.stage FROM lead_lifecycle_events l WHERE l.project_id=p.project_id ORDER BY l.created_at DESC,l.event_id DESC LIMIT 1) AS lead_stage FROM project_requests p WHERE p.policy_status IN ('PENDING','REQUIRES_HUMAN') ORDER BY p.created_at DESC LIMIT 50"
     ).all();
     const quotable = await env.DB.prepare(
-      "SELECT project_id,name,email,company,service_ids_json,offer_id,offer_landing_path,utm_source,utm_medium,utm_campaign,utm_content,state,policy_status,created_at,updated_at FROM project_requests WHERE policy_status='ALLOWED' AND state='POLICY_ALLOWED' ORDER BY updated_at DESC LIMIT 50"
+      "SELECT p.project_id,p.name,p.email,p.company,p.service_ids_json,p.offer_id,p.offer_landing_path,p.utm_source,p.utm_medium,p.utm_campaign,p.utm_content,p.state,p.policy_status,p.created_at,p.updated_at,(SELECT l.stage FROM lead_lifecycle_events l WHERE l.project_id=p.project_id ORDER BY l.created_at DESC,l.event_id DESC LIMIT 1) AS lead_stage FROM project_requests p WHERE p.policy_status='ALLOWED' AND p.state='POLICY_ALLOWED' ORDER BY p.updated_at DESC LIMIT 50"
     ).all();
     const quotes = await env.DB.prepare(
       "SELECT q.quote_id,q.project_id,q.version,q.status,q.currency_code,q.total_amount_minor,q.expires_at,q.created_at,p.name,p.email,p.state AS project_state,COALESCE((SELECT SUM(qi.line_amount_minor) FROM quote_items qi WHERE qi.quote_id=q.quote_id AND qi.price_component IN ('monthly','monthly_pack')),0) AS recurring_amount_minor,(q.total_amount_minor-COALESCE((SELECT SUM(qi.line_amount_minor) FROM quote_items qi WHERE qi.quote_id=q.quote_id AND qi.price_component IN ('monthly','monthly_pack')),0)) AS upfront_amount_minor FROM quotes q JOIN project_requests p ON p.project_id=q.project_id WHERE q.status IN ('ISSUED','ACCEPTED') ORDER BY q.created_at DESC LIMIT 50"
@@ -1154,6 +1156,118 @@ export async function handleAdminApprovals(request, env) {
     ),
   ]);
   return json({ approval_id: approvalId, project_id: projectId, state: nextState, policy_status: nextPolicy });
+}
+
+async function findHumanLeadEvent(env, sourceEventId) {
+  return env.DB.prepare(
+    "SELECT event_id,project_id,stage,created_at FROM lead_lifecycle_events WHERE source='human' AND source_event_id=? LIMIT 1"
+  ).bind(sourceEventId).first();
+}
+
+function leadEventMatches(event, projectId, stage) {
+  return event?.project_id === projectId && event?.stage === stage;
+}
+
+export async function handleAdminLeadLifecycle(request, env) {
+  if (!adminConfigured(env)) return json({ error: "ADMIN_NOT_CONFIGURED" }, 503);
+  if (!await requireAdmin(request, env)) return json({ error: "UNAUTHORIZED" }, 401, { "www-authenticate": "Bearer" });
+  if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  let input;
+  try { input = await readJsonWithLimit(request); }
+  catch { return json({ error: "INVALID_LEAD_LIFECYCLE_REQUEST" }, 400); }
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return json({ error: "INVALID_LEAD_LIFECYCLE_REQUEST" }, 400);
+  }
+
+  const projectId = typeof input.project_id === "string" && UUID_RE.test(input.project_id)
+    ? input.project_id.toLowerCase() : null;
+  const sourceEventId = typeof input.source_event_id === "string" && UUID_RE.test(input.source_event_id)
+    ? input.source_event_id.toLowerCase() : null;
+  const stage = typeof input.stage === "string" ? input.stage : "";
+  if (!projectId || !sourceEventId || !LEAD_LIFECYCLE_STAGES.has(stage)) {
+    return json({ error: "INVALID_LEAD_LIFECYCLE_REQUEST" }, 400);
+  }
+
+  let priorEvent;
+  try { priorEvent = await findHumanLeadEvent(env, sourceEventId); }
+  catch { return json({ error: "LEAD_LIFECYCLE_UNAVAILABLE" }, 503); }
+  if (priorEvent) {
+    if (!leadEventMatches(priorEvent, projectId, stage)) {
+      return json({ error: "IDEMPOTENCY_KEY_REUSED" }, 409);
+    }
+    return json({
+      event_id: priorEvent.event_id,
+      project_id: projectId,
+      stage,
+      source_event_id: sourceEventId,
+      recorded_at: priorEvent.created_at,
+      replayed: true,
+    });
+  }
+
+  let project;
+  let currentEvent;
+  try {
+    project = await env.DB.prepare(
+      "SELECT project_id,state,policy_status FROM project_requests WHERE project_id=? LIMIT 1"
+    ).bind(projectId).first();
+    if (!project) return json({ error: "PROJECT_NOT_FOUND" }, 404);
+    if (project.policy_status !== "ALLOWED" || project.state !== "POLICY_ALLOWED") {
+      return json({ error: "PROJECT_NOT_COMMERCIALLY_READY" }, 409);
+    }
+    currentEvent = await env.DB.prepare(
+      "SELECT event_id,stage,created_at FROM lead_lifecycle_events WHERE project_id=? ORDER BY created_at DESC,event_id DESC LIMIT 1"
+    ).bind(projectId).first();
+  } catch {
+    return json({ error: "LEAD_LIFECYCLE_UNAVAILABLE" }, 503);
+  }
+
+  if (currentEvent?.stage === stage) {
+    return json({
+      event_id: currentEvent.event_id,
+      project_id: projectId,
+      stage,
+      recorded_at: currentEvent.created_at,
+      unchanged: true,
+    });
+  }
+
+  const eventId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  try {
+    const result = await env.DB.prepare(
+      "INSERT INTO lead_lifecycle_events (event_id,project_id,stage,source,source_event_id,evidence_json,created_at) VALUES (?,?,?,?,?,?,?)"
+    ).bind(
+      eventId,projectId,stage,"human",sourceEventId,
+      JSON.stringify({ source: "approval_console", actor: "admin" }),now,
+    ).run();
+    if (result?.success === false) throw new Error("LEAD_EVENT_INSERT_FAILED");
+  } catch {
+    try { priorEvent = await findHumanLeadEvent(env, sourceEventId); }
+    catch { return json({ error: "LEAD_LIFECYCLE_UNAVAILABLE" }, 503); }
+    if (priorEvent && leadEventMatches(priorEvent, projectId, stage)) {
+      return json({
+        event_id: priorEvent.event_id,
+        project_id: projectId,
+        stage,
+        source_event_id: sourceEventId,
+        recorded_at: priorEvent.created_at,
+        replayed: true,
+      });
+    }
+    if (priorEvent) return json({ error: "IDEMPOTENCY_KEY_REUSED" }, 409);
+    return json({ error: "LEAD_LIFECYCLE_UNAVAILABLE" }, 503);
+  }
+
+  return json({
+    event_id: eventId,
+    project_id: projectId,
+    stage,
+    source_event_id: sourceEventId,
+    recorded_at: now,
+    replayed: false,
+  }, 201);
 }
 
 
@@ -1981,6 +2095,9 @@ export default {
     }
     if (url.pathname === "/api/v1/admin/approvals") {
       return withAdminCors(await handleAdminApprovals(request, env), origin, env);
+    }
+    if (url.pathname === "/api/v1/admin/lead-lifecycle") {
+      return withAdminCors(await handleAdminLeadLifecycle(request, env), origin, env);
     }
     if (url.pathname === "/api/v1/admin/quotes") {
       return withAdminCors(await handleAdminQuoteCreate(request, env), origin, env);
