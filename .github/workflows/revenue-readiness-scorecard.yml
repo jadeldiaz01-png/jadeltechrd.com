@@ -34,13 +34,13 @@ jobs:
           set -euo pipefail
           node --check scripts/revenue-readiness-scorecard.mjs
           node --test scripts/test-revenue-readiness-scorecard.mjs
-          jq -e '.currency=="USD" and .scope=="cumulative_settled_revenue" and .source.table=="sales_settlements" and .source.query_semantics=="SELECT_ONLY" and ([.milestones[].target_usd]==[250,1000,5000]) and ([.governance[]]|any)==false' config/revenue-readiness-scorecard.json >/dev/null
+          jq -e '.currency=="USD" and .scope=="cumulative_settled_revenue" and .source.table=="sales_settlements" and .source.query_semantics=="SELECT_ONLY" and (.acquisition_window.start_utc|test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and (.acquisition_window.end_utc|test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and ([.milestones[].target_usd]==[250,1000,5000]) and ([.governance[]]|any)==false' config/revenue-readiness-scorecard.json >/dev/null
           wf=.github/workflows/revenue-readiness-scorecard.yml
-          sql_line=$(grep -F 'sql="SELECT ' "$wf")
-          test -n "$sql_line"
-          printf '%s' "$sql_line" | grep -Fq "FROM sales_settlements"
-          printf '%s' "$sql_line" | grep -Fq "COUNT(DISTINCT po.project_id) FROM sales_settlements s JOIN payment_orders po"
-          ! printf '%s' "$sql_line" | grep -Eiq '\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE)\b'
+          grep -Fq 'sql="SELECT ' "$wf"
+          grep -Fq "FROM sales_settlements s JOIN payment_orders po" "$wf"
+          grep -Fq "json_group_array(json_object" "$wf"
+          grep -Fq "WHERE p.created_at >= '\$cohort_start' AND p.created_at < '\$cohort_end'" "$wf"
+          ! sed -n '/sql="SELECT /,/;"/p' "$wf" | grep -Eiq '\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE)\b'
           echo REVENUE_SCORECARD_CONTRACT=PASS
 
   live-readonly:
@@ -77,12 +77,59 @@ jobs:
           test "$(jq -r '.success' <<<"$dbs")" = true
           test "$(jq -r --arg n "$D1_NAME" '[.result[]|select(.name==$n)]|length' <<<"$dbs")" = 1
           db=$(jq -r --arg n "$D1_NAME" '.result[]|select(.name==$n)|.uuid' <<<"$dbs")
-          sql="SELECT (SELECT COUNT(*) FROM project_requests) AS total_requests,(SELECT COUNT(DISTINCT project_id) FROM lead_lifecycle_events WHERE stage='qualify_lead') AS qualified_leads,(SELECT COUNT(DISTINCT po.project_id) FROM sales_settlements s JOIN payment_orders po ON po.payment_order_id=s.payment_order_id WHERE s.status='MATCHED' AND s.currency_code='USD') AS converted_customers,(SELECT COUNT(*) FROM sales_settlements WHERE status='MATCHED' AND currency_code='USD') AS settled_payments,(SELECT COALESCE(SUM(amount_minor),0) FROM sales_settlements WHERE status='MATCHED' AND currency_code='USD') AS settled_amount_minor;"
+          cohort_start=$(jq -r '.acquisition_window.start_utc' config/revenue-readiness-scorecard.json)
+          cohort_end=$(jq -r '.acquisition_window.end_utc' config/revenue-readiness-scorecard.json)
+          [[ "$cohort_start" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
+          [[ "$cohort_end" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
+          sql="SELECT
+            (SELECT COUNT(*) FROM project_requests) AS total_requests,
+            (SELECT COUNT(DISTINCT project_id) FROM lead_lifecycle_events WHERE stage='qualify_lead') AS qualified_leads,
+            (SELECT COUNT(DISTINCT po.project_id) FROM sales_settlements s JOIN payment_orders po ON po.payment_order_id=s.payment_order_id WHERE s.status='MATCHED' AND s.currency_code='USD') AS converted_customers,
+            (SELECT COUNT(*) FROM sales_settlements WHERE status='MATCHED' AND currency_code='USD') AS settled_payments,
+            (SELECT COALESCE(SUM(amount_minor),0) FROM sales_settlements WHERE status='MATCHED' AND currency_code='USD') AS settled_amount_minor,
+            (SELECT json_group_array(json_object('channel',g.channel,'offer_id',g.offer_id,'locale',g.locale,'requests',g.requests,'qualified_leads',g.qualified_leads,'quoted_projects',g.quoted_projects,'accepted_projects',g.accepted_projects,'converted_customers',g.converted_customers,'settled_payments',g.settled_payments,'settled_amount_minor',g.settled_amount_minor))
+              FROM (
+                SELECT scoped.channel,scoped.offer_id,scoped.locale,
+                  COUNT(DISTINCT scoped.project_id) AS requests,
+                  COUNT(DISTINCT CASE WHEN scoped.qualified=1 THEN scoped.project_id END) AS qualified_leads,
+                  COUNT(DISTINCT CASE WHEN scoped.quoted=1 THEN scoped.project_id END) AS quoted_projects,
+                  COUNT(DISTINCT CASE WHEN scoped.accepted=1 THEN scoped.project_id END) AS accepted_projects,
+                  COUNT(DISTINCT CASE WHEN scoped.settled_payments>0 THEN scoped.project_id END) AS converted_customers,
+                  SUM(scoped.settled_payments) AS settled_payments,
+                  SUM(scoped.settled_amount_minor) AS settled_amount_minor
+                FROM (
+                  SELECT p.project_id,
+                    CASE
+                      WHEN lower(trim(p.utm_source)) IN ('website','service_catalog','use_case_path','pricing','homepage') THEN 'owned_site'
+                      WHEN lower(trim(p.utm_medium))='cpc' THEN 'paid_media'
+                      WHEN lower(trim(p.utm_medium))='marketplace' OR lower(trim(p.utm_source)) IN ('upwork','workana','freelancer') THEN 'marketplace'
+                      WHEN lower(trim(p.utm_source)) IN ('google','bing') THEN 'organic_search'
+                      WHEN lower(trim(p.utm_source)) IN ('linkedin','youtube','facebook','instagram') OR lower(trim(p.utm_medium))='social' THEN 'social'
+                      WHEN lower(trim(p.utm_source))='referral' OR lower(trim(p.utm_medium))='referral' THEN 'referral'
+                      WHEN trim(p.utm_source)='' THEN 'unattributed'
+                      ELSE 'other'
+                    END AS channel,
+                    CASE WHEN lower(trim(p.offer_id)) IN ('automation_blueprint','whatsapp_support','sales_lead_intelligence') THEN lower(trim(p.offer_id)) WHEN trim(p.offer_id)='' THEN 'none' ELSE 'other' END AS offer_id,
+                    CASE WHEN lower(substr(trim(p.locale),1,2))='en' THEN 'en' WHEN lower(substr(trim(p.locale),1,2))='es' THEN 'es' ELSE 'other' END AS locale,
+                    CASE WHEN l.project_id IS NOT NULL THEN 1 ELSE 0 END AS qualified,
+                    CASE WHEN q.quoted=1 THEN 1 ELSE 0 END AS quoted,
+                    CASE WHEN q.accepted=1 THEN 1 ELSE 0 END AS accepted,
+                    COALESCE(s.settled_payments,0) AS settled_payments,
+                    COALESCE(s.settled_amount_minor,0) AS settled_amount_minor
+                  FROM project_requests p
+                  LEFT JOIN (SELECT project_id FROM lead_lifecycle_events WHERE stage='qualify_lead' GROUP BY project_id) l ON l.project_id=p.project_id
+                  LEFT JOIN (SELECT project_id,MAX(CASE WHEN status IN ('ISSUED','ACCEPTED') THEN 1 ELSE 0 END) AS quoted,MAX(CASE WHEN status='ACCEPTED' THEN 1 ELSE 0 END) AS accepted FROM quotes GROUP BY project_id) q ON q.project_id=p.project_id
+                  LEFT JOIN (SELECT po.project_id,COUNT(*) AS settled_payments,SUM(s.amount_minor) AS settled_amount_minor FROM sales_settlements s JOIN payment_orders po ON po.payment_order_id=s.payment_order_id WHERE s.status='MATCHED' AND s.currency_code='USD' GROUP BY po.project_id) s ON s.project_id=p.project_id
+                  WHERE p.created_at >= '$cohort_start' AND p.created_at < '$cohort_end'
+                ) scoped
+                GROUP BY scoped.channel,scoped.offer_id,scoped.locale
+                ORDER BY scoped.channel,scoped.offer_id,scoped.locale
+              ) g) AS acquisition_breakdown;"
           printf '%s' "$sql" | grep -Eq '^SELECT '; ! printf '%s' "$sql" | grep -Eiq '\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE)\b'
           resp=$(curl --fail-with-body -sS -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database/$db/query" --data "$(jq -n --arg sql "$sql" '{sql:$sql}')")
           test "$(jq -r '.success' <<<"$resp")" = true; row=$(jq -c '.result[0].results[0]' <<<"$resp"); test "$row" != null
           mkdir -p evidence
-          jq -n --argjson r "$row" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{source:"commercial_d1.sales_settlements",generated_at:$t,settled_amount_minor:($r.settled_amount_minor|tonumber),settled_payments:($r.settled_payments|tonumber),total_requests:($r.total_requests|tonumber),qualified_leads:($r.qualified_leads|tonumber),converted_customers:($r.converted_customers|tonumber)}' > evidence/revenue-readiness-facts.json
+          jq -n --argjson r "$row" --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{source:"commercial_d1.sales_settlements",generated_at:$t,settled_amount_minor:($r.settled_amount_minor|tonumber),settled_payments:($r.settled_payments|tonumber),total_requests:($r.total_requests|tonumber),qualified_leads:($r.qualified_leads|tonumber),converted_customers:($r.converted_customers|tonumber),acquisition_breakdown:((($r.acquisition_breakdown // "[]")|fromjson))}' > evidence/revenue-readiness-facts.json
       - name: Build scorecard
         shell: bash
         run: |
