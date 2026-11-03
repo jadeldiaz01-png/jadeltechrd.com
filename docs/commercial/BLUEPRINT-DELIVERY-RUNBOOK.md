@@ -8,6 +8,19 @@ Aceptar el paquete de entrada solo cuando el cliente pueda describir **un proces
 
 No incluir contraseñas, tokens o datos personales en el documento de trabajo. Usar ejemplos ficticios o campos anonimizados. La calificación comercial se registra en el CRM/flujo autorizado, no en GA4.
 
+## Seguimiento de solicitudes antes de cotizar
+
+Procedimiento operativo recomendado para procesar nuevas solicitudes y cualquier backlog. Es una guía interna, no un benchmark de mercado ni una autorización para enviar comunicaciones automáticamente.
+
+1. Revisar la solicitud en la consola autorizada, asociarla a su `project_id` y comprobar duplicados antes de iniciar contacto. No usar el conteo GA4 `generate_lead` como número de personas o solicitudes únicas.
+2. Si se inicia una respuesta humana, registrar `working_lead` con el evento administrativo idempotente. Responder dentro de **1 día hábil** cuando sea posible; registrar el tiempo comercial invertido por separado de las 2.5 horas de entrega.
+3. Confirmar cuatro puntos con el prospecto: un solo proceso repetitivo, problema/resultado deseado, herramientas actuales y persona que aprueba el trabajo. No pedir contraseñas, datos de clientes finales ni acceso de producción durante esta fase.
+4. Marcar `qualify_lead` solo cuando el proceso cabe en el alcance de una oferta y hay un contacto capaz de acordar el siguiente paso. Usar `disqualify_lead` solo después de revisión humana y conservar el motivo en el CRM comercial con acceso limitado, nunca en GA4 ni en el evento analítico.
+5. Para un encaje claro, presentar el Blueprint de US$250 con alcance de un proceso, entregables y tope de 150 minutos; dejar la cotización y condiciones al propietario. Si el prospecto solicita implementación, varios sistemas o un plazo/coste que excede la oferta, preparar alcance aparte antes de comprometer precio.
+6. Si no responde, hacer como máximo **un seguimiento humano** tras 2 días hábiles. Si continúa sin respuesta, cerrar el intento con motivo de CRM `sin respuesta`; no seguir consumiendo tiempo de venta sin una señal nueva.
+
+El plazo de respuesta y el límite de un seguimiento son guardas operativas iniciales para controlar CAC, no tasas ni SLAs comerciales validados. Medir durante las primeras diez solicitudes procesadas: minutos hasta primera respuesta, minutos de calificación, calificados, cotizados, aceptados y pagos conciliados. Revisar la regla si los prospectos o el proceso real muestran otra necesidad. No completar retroactivamente etapas que no se puedan verificar.
+
 ## Presupuesto máximo de 150 minutos
 
 | Fase | Tope | Salida |
