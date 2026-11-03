@@ -195,7 +195,7 @@
         </div>
         <div class="service-actions">
           <button class="mini-action" type="button" data-add-service="${service.id}" aria-pressed="false">Añadir</button>
-          <a class="mini-action service-quote" data-revenue-event="offer_cta_click" data-cta-id="service_quote_${service.id}" href="${governedIntakeUrl([service.id])}&utm_source=service_catalog&utm_medium=homepage&utm_campaign=service_intake">Solicitar cotización</a>
+          <a class="mini-action service-quote" data-revenue-event="offer_cta_click" data-cta-id="service_quote_${service.id}" href="${governedIntakeUrl([service.id])}">Solicitar cotización</a>
         </div>
       </div>
     </article>`;
@@ -204,12 +204,12 @@
     <section class="commercial-home" data-view="home">
       <section class="hero-v2" id="inicio">
         <div class="hero-copy reveal">
-          <div class="eyebrow"><span class="live-dot"></span> Automatización e IA aplicada para operaciones reales</div>
-          <h1>Web, automatización e IA <span>para resolver problemas reales de tu negocio.</span></h1>
-          <p class="lead">Diseñamos soluciones que unen presencia digital, consultas y procesos supervisados. Empezamos con un alcance claro y medimos resultados sin prometer ventas.</p>
+          <div class="eyebrow"><span class="live-dot"></span> Oferta de entrada · un solo flujo</div>
+          <h1>Ordena el seguimiento de tus leads <span>antes de construir una automatización.</span></h1>
+          <p class="lead">Un proceso de captación y seguimiento, desde US$250 y máximo 2.5 h. Recibe un plan técnico antes de decidir si construirlo; cotización humana, sin prometer ventas.</p>
           <div class="actions">
-            <a class="button primary" data-revenue-event="offer_cta_click" data-cta-id="homepage_blueprint_entry" href="/ai-automation-blueprint.html?utm_source=homepage&amp;utm_medium=hero&amp;utm_campaign=blueprint_entry&amp;utm_content=primary_cta">Empieza con un proceso — US$250 <span aria-hidden="true">↗</span></a>
-            <a class="button secondary" href="#servicios">Ver todos los servicios</a>
+            <a class="button primary" data-revenue-event="offer_cta_click" data-cta-id="homepage_blueprint_entry" href="/solicitar-proyecto.html?services=architecture&amp;offer_id=automation_blueprint&amp;service_id=architecture&amp;utm_content=homepage_blueprint_entry">Solicita el Blueprint — desde US$250 <span aria-hidden="true">↗</span></a>
+            <a class="button secondary" href="#blueprint-alcance">Qué incluye</a>
           </div>
           <div class="hero-trust" aria-label="Principios de operación">
             <span>✓ Alcance antes de implementar</span>
@@ -235,6 +235,21 @@
             <div><span class="event-ok">CONFIGURED</span><b>PayPal LIVE webhook</b><small>Approval event configured; invalid-signature probe rejected.</small></div><div><span class="event-wait">PENDING</span><b>Payment evidence</b><small>first positive reconciliation with a real capture pending</small></div>
             <div><span class="event-wait">HITL</span><b>Human approval</b><small>waiting before side effect</small></div>
           </div>
+        </div>
+      </section>
+
+      <section class="section-block conversion-path-section" id="blueprint-alcance" aria-labelledby="blueprint-alcance-title">
+        <div class="section-heading reveal">
+          <div><div class="eyebrow">Oferta de entrada · un solo flujo</div>
+            <h2 id="blueprint-alcance-title">Evalúa el flujo y define un plan antes de construir.</h2>
+          </div>
+          <p>Para pequeñas empresas y consultoras que reciben consultas por web, WhatsApp o email y necesitan ordenar su seguimiento.</p>
+        </div>
+        <div class="conversion-path-grid reveal">
+          <article class="conversion-path-card"><span>Alcance</span><strong>Hasta 45 min de descubrimiento</strong><p>Revisamos un proceso, sus herramientas y las restricciones que afectan su viabilidad.</p></article>
+          <article class="conversion-path-card"><span>Entregables</span><strong>Mapa, arquitectura y backlog</strong><p>Incluye recomendaciones de integración, seguridad y revisión humana; una ronda de aclaraciones.</p></article>
+          <article class="conversion-path-card"><span>Límite</span><strong>Desde US$250 · máximo 2.5 h</strong><p>Es un diagnóstico y plan. El desarrollo, las integraciones productivas y el ROI se cotizan aparte; no se garantizan resultados.</p></article>
+          <article class="conversion-path-card"><span>Muestra y siguiente paso</span><strong>Revisa el formato antes de solicitar</strong><p><a href="/output/pdf/agentic-blueprint-illustrative-sample.pdf">Ejemplo ilustrativo, no un caso de cliente.</a> La compra real es: solicitud → cotización humana → checkout PayPal vinculado → inicio tras conciliar el pago.</p><a class="button primary" data-revenue-event="offer_cta_click" data-cta-id="homepage_blueprint_scope" href="/solicitar-proyecto.html?services=architecture&amp;offer_id=automation_blueprint&amp;service_id=architecture&amp;utm_content=homepage_blueprint_scope">Solicitar evaluación y cotización</a></article>
         </div>
       </section>
 
@@ -280,19 +295,19 @@
           <p>Las mejores páginas B2B reducen fricción: cada visitante debe reconocer su problema, ver un camino concreto y solicitar alcance sin perderse en jerga técnica.</p>
         </div>
         <div class="conversion-path-grid reveal">
-          <a class="conversion-path-card" href="/solicitar-proyecto.html?services=support,analytics&utm_source=use_case_path&utm_medium=homepage&utm_campaign=service_intake">
+          <a class="conversion-path-card" href="/solicitar-proyecto.html?services=support,analytics">
             <span>Operaciones</span>
             <strong>Responder clientes y tickets con trazabilidad.</strong>
             <p>Soporte, clasificación, dashboard y escalación humana.</p>
             <small>Soporte & Tickets + Dashboards</small>
           </a>
-          <a class="conversion-path-card" href="/solicitar-proyecto.html?services=sales,revenue&utm_source=use_case_path&utm_medium=homepage&utm_campaign=service_intake">
+          <a class="conversion-path-card" href="/solicitar-proyecto.html?services=sales,revenue">
             <span>Crecimiento</span>
             <strong>Encontrar oportunidades sin prometer ingresos.</strong>
             <p>Research, scoring, brief comercial y ledger de evidencia.</p>
             <small>Sales + Revenue Intelligence</small>
           </a>
-          <a class="conversion-path-card" href="/solicitar-proyecto.html?services=governance,multiagent&utm_source=use_case_path&utm_medium=homepage&utm_campaign=service_intake">
+          <a class="conversion-path-card" href="/solicitar-proyecto.html?services=governance,multiagent">
             <span>Gobernanza</span>
             <strong>Llevar agentes a producción con controles.</strong>
             <p>Policies, approvals, observabilidad, SLOs y workflows durables.</p>
@@ -373,9 +388,9 @@
         <div class="pricing-grid">
           <article class="pricing-card reveal">
             <span class="plan-label">Discover</span><h3>Agentic Blueprint</h3><div class="plan-price"><strong>US$250</strong><span>desde</span></div>
-            <p>Para identificar el primer workflow con ROI y controles claros.</p>
-            <ul><li>Mapa de procesos</li><li>Arquitectura objetivo</li><li>Backlog priorizado</li><li>Plan de integración</li></ul>
-            <a href="/solicitar-proyecto.html?services=architecture&amp;offer_id=automation_blueprint&amp;utm_source=pricing&amp;utm_medium=homepage&amp;utm_campaign=blueprint_entry" class="button primary full">Solicitar alcance</a>
+            <p>Un proceso priorizado por impacto, coste, viabilidad y controles; sin prometer ROI.</p>
+            <ul><li>Mapa breve del flujo</li><li>Arquitectura recomendada</li><li>Backlog priorizado</li><li>Hasta 2.5 horas de trabajo</li></ul>
+            <a data-revenue-event="offer_cta_click" data-cta-id="homepage_blueprint_pricing" href="/solicitar-proyecto.html?services=architecture&amp;offer_id=automation_blueprint&amp;service_id=architecture&amp;utm_content=homepage_blueprint_pricing" class="button primary full">Solicitar alcance</a>
             <a href="/ai-automation-blueprint.html" class="mini-action">Ver detalles ES / EN</a>
           </article>
           <article class="pricing-card featured reveal">
@@ -572,13 +587,13 @@
   const view = allowedViews.has(requested) ? requested : "home";
 
   const titles = {
-    home: "Agentes de IA & Automatización | Jadel Tech RD",
+    home: "Blueprint de automatización de leads desde US$250 | Jadel Tech RD",
     privacy: "Política de Privacidad | Jadel Tech RD",
     terms: "Condiciones del Servicio | Jadel Tech RD",
     "data-deletion": "Eliminación de Datos | Jadel Tech RD",
   };
   const descriptions = {
-    home: "Diseño e integración de agentes de IA, automatización, social intelligence, video, datos, seguridad y sistemas agentic con supervisión y gobernanza.",
+    home: "Plan técnico para automatizar un flujo de captación y seguimiento de clientes potenciales. Incluye mapa, arquitectura y backlog priorizado. Desde US$250.",
     privacy: "Política de Privacidad de las aplicaciones y servicios de Jadel Tech RD.",
     terms: "Condiciones del Servicio de las aplicaciones y servicios de Jadel Tech RD.",
     "data-deletion": "Instrucciones públicas para solicitar la eliminación de datos asociados a aplicaciones de Jadel Tech RD.",

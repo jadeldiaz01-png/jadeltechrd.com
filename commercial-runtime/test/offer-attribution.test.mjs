@@ -18,7 +18,7 @@ function baseInput(overrides = {}) {
     locale:"es-DO",
     turnstile_token:"turnstile-token",
     offer_id:"automation_blueprint",
-    utm_source:"website",
+    utm_source:"upwork",
     utm_medium:"organic",
     utm_campaign:"revenue_funnel_v1",
     utm_content:"automation_blueprint",
@@ -41,7 +41,7 @@ test("intake preserves bounded campaign attribution and server-resolved landing"
   const value = validateProjectRequest(baseInput());
   assert.equal(value.offerId, "automation_blueprint");
   assert.equal(value.offerLandingPath, "/automatizacion-procesos-ia-rd.html");
-  assert.equal(value.utmSource, "website");
+  assert.equal(value.utmSource, "upwork");
   assert.equal(value.utmCampaign, "revenue_funnel_v1");
 });
 
@@ -84,4 +84,24 @@ test("direct resolver rejects malformed offer ids", () => {
     }),
     /INVALID_OFFER_ID/,
   );
+});
+
+test("internal navigation labels are discarded while recognized acquisition attribution is preserved", () => {
+  const value = validateProjectRequest(baseInput({
+    utm_source:"use_case_path",
+    utm_medium:"homepage",
+    utm_campaign:"service_intake",
+  }));
+  assert.equal(value.utmSource, "");
+  assert.equal(value.utmMedium, "");
+  assert.equal(value.utmCampaign, "");
+
+  const external = validateProjectRequest(baseInput({
+    utm_source:"upwork",
+    utm_medium:"marketplace",
+    utm_campaign:"automation_blueprint",
+  }));
+  assert.equal(external.utmSource, "upwork");
+  assert.equal(external.utmMedium, "marketplace");
+  assert.equal(external.utmCampaign, "automation_blueprint");
 });

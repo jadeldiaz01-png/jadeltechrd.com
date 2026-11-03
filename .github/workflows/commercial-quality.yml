@@ -34,7 +34,7 @@ jobs:
           test -s styles.css
           test -s robots.txt
           test -s sitemap.xml
-          grep -Fq 'Agentes de IA & Automatización | Jadel Tech RD' index.html
+          grep -Fq 'Blueprint de automatización de leads desde US$250 | Jadel Tech RD' index.html
           grep -Fq 'property="og:title"' index.html
           grep -Fq 'prefers-reduced-motion' styles.css
           grep -Fq 'data-deletion' app.js
@@ -72,7 +72,7 @@ jobs:
 
           "$browser" --headless=new --no-sandbox --disable-gpu --virtual-time-budget=2500 \
             --dump-dom http://127.0.0.1:8080/ > /tmp/home-rendered.html
-          grep -Fq 'Agentes de IA que' /tmp/home-rendered.html
+          grep -Fq 'Blueprint de automatización de leads' /tmp/home-rendered.html
           grep -Fq 'Arquitectura Agentic &amp; Automatización' /tmp/home-rendered.html || grep -Fq 'Arquitectura Agentic & Automatización' /tmp/home-rendered.html
           grep -Fq 'Configura una solución' /tmp/home-rendered.html || grep -Fq 'Construye tu alcance' /tmp/home-rendered.html
           grep -Fq 'Agentic Blueprint' /tmp/home-rendered.html

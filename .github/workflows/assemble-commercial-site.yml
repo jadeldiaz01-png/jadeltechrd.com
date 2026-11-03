@@ -31,7 +31,7 @@ jobs:
           cat .site-build/css.part* > styles.css
           node --check app.js
           grep -Fq 'data-deletion' app.js
-          grep -Fq 'Agentes de IA que' app.js
+          grep -Fq 'Blueprint de automatización de leads desde US$250' app.js
           grep -Fq 'prefers-reduced-motion' styles.css
           python - <<'PY'
           from html.parser import HTMLParser
