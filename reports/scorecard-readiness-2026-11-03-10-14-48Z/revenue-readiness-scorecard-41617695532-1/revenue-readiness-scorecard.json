@@ -1,0 +1,59 @@
+{
+  "schema": "jadel.revenue_readiness_scorecard.v1",
+  "generated_at": "2026-11-03T10:15:26Z",
+  "authority": "READ_ONLY_REPORT",
+  "scope": "cumulative_settled_revenue",
+  "facts": {
+    "settled_usd": 0,
+    "settled_payments": 0,
+    "total_requests": 16,
+    "qualified_leads": 0,
+    "converted_customers": 0
+  },
+  "milestones": [
+    {
+      "id": "settled_250",
+      "label": "US$250",
+      "target_usd": 250,
+      "settled_usd": 0,
+      "progress_pct": 0,
+      "remaining_usd": 250,
+      "status": "RED",
+      "achieved": false
+    },
+    {
+      "id": "settled_1000",
+      "label": "US$1,000",
+      "target_usd": 1000,
+      "settled_usd": 0,
+      "progress_pct": 0,
+      "remaining_usd": 1000,
+      "status": "RED",
+      "achieved": false
+    },
+    {
+      "id": "settled_5000",
+      "label": "US$5,000",
+      "target_usd": 5000,
+      "settled_usd": 0,
+      "progress_pct": 0,
+      "remaining_usd": 5000,
+      "status": "RED",
+      "achieved": false
+    }
+  ],
+  "next_milestone": {
+    "id": "settled_250",
+    "label": "US$250",
+    "remaining_usd": 250,
+    "progress_pct": 0,
+    "status": "RED"
+  },
+  "all_targets_reached": false,
+  "governance": {
+    "d1_mutation_authorized": false,
+    "payment_mutation_authorized": false,
+    "financial_execution_authorized": false,
+    "external_side_effects_authorized": false
+  }
+}
