@@ -46,12 +46,12 @@ jobs:
   live-readonly:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
     needs: contract
-    environment: d1-recovery-drill
+    environment: d1-live-readonly-audit
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     env:
       D1_NAME: jadel-commercial-runtime
-      CLOUDFLARE_D1_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_D1_READONLY_API_TOKEN_RAW: ${{ secrets.CLOUDFLARE_D1_READONLY_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          token=$(printf '%s' "${CLOUDFLARE_D1_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          token=$(printf '%s' "${CLOUDFLARE_D1_READONLY_API_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
           account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]'); test -n "$token"; test -n "$account"; echo "::add-mask::$token"
           auth=(-H "Authorization: Bearer $token" -H 'Content-Type: application/json')
           dbs=$(curl --fail-with-body -sS "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database?name=${D1_NAME}&per_page=100")
