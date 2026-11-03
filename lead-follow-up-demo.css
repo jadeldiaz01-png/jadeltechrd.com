@@ -1,0 +1,22 @@
+.lead-demo { padding-block: 3rem 5rem; }
+.lead-demo-hero { max-width: 780px; margin-bottom: 2rem; }
+.lead-demo-hero h1 { max-width: 16ch; }
+.lead-demo-disclosure { padding: 1rem 1.25rem; border: 1px solid var(--border, #334155); border-radius: 1rem; background: rgba(15, 23, 42, .72); }
+.lead-demo-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr); gap: 1.25rem; align-items: start; }
+.lead-demo-panel { padding: clamp(1.2rem, 3vw, 2rem); border: 1px solid var(--border, #334155); border-radius: 1.25rem; background: rgba(15, 23, 42, .76); box-shadow: 0 18px 50px rgba(0, 0, 0, .18); }
+.lead-demo-kicker { color: var(--accent, #60a5fa); font-size: .78rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.lead-demo-record { display: grid; gap: .55rem; padding: 1rem; border-radius: .9rem; background: rgba(2, 6, 23, .65); }
+.lead-demo-record strong { font-size: 1.15rem; }
+.lead-demo-record p, .lead-demo-panel p { margin: .2rem 0; color: var(--muted, #b7c3d4); }
+.lead-demo-steps { display: grid; gap: .8rem; margin: 1.1rem 0; padding: 0; list-style: none; }
+.lead-demo-step { padding: .85rem 1rem; border: 1px solid var(--border, #334155); border-radius: .8rem; }
+.lead-demo-step h3 { margin: 0 0 .35rem; font-size: 1rem; }
+.lead-demo-result { margin-top: .75rem; padding: .9rem 1rem; border-left: 3px solid var(--accent, #60a5fa); border-radius: .4rem; background: rgba(30, 41, 59, .7); }
+.lead-demo-result[hidden] { display: none; }
+.lead-demo-actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: 1rem; }
+.lead-demo-actions button { cursor: pointer; }
+.lead-demo-actions button:disabled { cursor: not-allowed; opacity: .48; }
+.lead-demo-status { min-height: 1.5em; color: var(--muted, #b7c3d4); }
+.lead-demo-next { margin-top: 1.5rem; }
+@media (max-width: 760px) { .lead-demo-layout { grid-template-columns: 1fr; } .lead-demo { padding-block: 2rem 3rem; } }
+@media (prefers-reduced-motion: reduce) { .lead-demo *, .lead-demo *::before, .lead-demo *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }

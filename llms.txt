@@ -45,3 +45,6 @@ is available on the public domain.
 Service maturity and pricing are described in the machine-readable service
 catalog. No claim of guaranteed income, customer ROI, autonomous financial
 authority or production deployment should be inferred from this discovery file.
+
+- Interactive lead follow-up demo (Spanish): https://jadeltechrd.com/demo-seguimiento-leads.html — synthetic data only; no CRM, AI API, or messages.
+- Interactive lead follow-up demo (English): https://jadeltechrd.com/en/lead-follow-up-demo.html — synthetic data only; no CRM, AI API, or messages.
