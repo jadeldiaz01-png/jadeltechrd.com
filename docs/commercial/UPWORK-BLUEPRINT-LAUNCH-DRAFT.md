@@ -2,6 +2,8 @@
 
 **Estado:** preparación local, no publicado. La cuenta conectada muestra perfil `NOT_STARTED`, visibilidad privada, 0 contratos/feedback, capacidad para enviar propuestas y **0 Connects**. El perfil actual indica español fluido; no se declara dominio profesional del inglés sin confirmación del propietario.
 
+**Revalidación de perfil 3-nov-2026:** el estado sigue privado/`NOT_STARTED`; Upwork reporta `can_submit_proposals=true`, pero 0 Connects. Se identifican 14 aptitudes, español fluido y ningún inglés declarado. No hay evidencia para afirmar fluidez inglesa ni para tratar al perfil como canal de adquisición activo. La consulta confirmó que cambios de título y resumen requieren confirmar una vista previa antes de guardarse; todavía no se guardó ninguno.
+
 ## Decisión de canal
 
 Usar Upwork solo como canal de descubrimiento complementario después de completar el perfil y publicar una muestra ilustrativa. No comprar Connects ni enviar propuestas hasta revisar el coste real por propuesta y autorizar ese gasto. El perfil privado/no iniciado no aporta descubrimiento orgánico actualmente.
@@ -28,9 +30,19 @@ Usar Upwork solo como canal de descubrimiento complementario después de complet
 
 ### Perfil en español, versión preparada
 
-**Título candidato:** Automatización de leads y CRM | Flujos con IA, APIs e integraciones
+**Título candidato:** Automatización de Leads y CRM | APIs e Integraciones Seguras
 
-**Descripción:** Ayudo a pequeñas empresas a mapear un proceso repetitivo de captación y seguimiento de leads y decidir qué automatizar. El Blueprint inicial cubre un solo flujo: llamada remota de hasta 45 minutos, mapa breve del proceso actual, arquitectura recomendada, backlog priorizado y una ronda de aclaración. El trabajo se limita a 2.5 horas. Precio de prueba propuesto en Upwork: US$275; aún no está validado por ventas. Es consultoría y diseño; no incluye construcción, despliegue ni conexiones productivas. Antes de aceptar, confirmamos el objetivo, una fuente y las herramientas, el alcance, el plazo y los criterios de aceptación. Si requiere implementación, datos sensibles o varios procesos, se cotiza aparte. No prometo más ventas, ahorros ni ROI sin datos del cliente.
+**Descripción:** Ayudo a pequeñas empresas hispanohablantes a ordenar un proceso repetitivo de captación y seguimiento de clientes potenciales.
+
+**Servicio inicial — AI Automation Blueprint (US$250):** analizamos un solo flujo en una sesión remota de hasta 45 minutos. Entrego un mapa breve del proceso actual, una arquitectura recomendada y un backlog priorizado, con una ronda corta de aclaración. El trabajo se limita a 2.5 horas.
+
+Es una fase de diagnóstico y diseño. No incluye desarrollo, despliegue, acceso a sistemas productivos ni envío automático de mensajes. Si acordamos continuar, cotizo la implementación por separado con alcance, precio y criterios de aceptación definidos.
+
+Antes de empezar confirmamos el objetivo, las herramientas involucradas, los datos necesarios y las restricciones del proceso. No prometo ventas, ahorros ni ROI sin datos verificables del negocio.
+
+Comunicación y entregables en español.
+
+El texto coincide con el precio web actual. US$250 sigue siendo hipótesis comercial hasta obtener una venta pagada y medir coste/horas reales.
 
 **Enlace UTM para este perfil:** [Solicitar el Blueprint](https://jadeltechrd.com/solicitar-proyecto.html?services=architecture&offer_id=automation_blueprint&service_id=architecture&utm_source=upwork&utm_medium=marketplace&utm_campaign=automation_blueprint&utm_content=automation_blueprint). El formulario registra el canal `upwork` sin guardar textos libres del perfil en los eventos analíticos.
 
