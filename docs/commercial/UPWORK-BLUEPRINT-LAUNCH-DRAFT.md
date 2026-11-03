@@ -28,7 +28,7 @@ Usar Upwork solo como canal de descubrimiento complementario después de complet
 
 ## Precio de prueba y margen
 
-El sitio propio conserva US$250 directos. Para un catálogo en Upwork, **US$275 es un precio candidato de prueba** si la comisión visible es 15%: neto de plataforma US$233.75; menos 2.5 h × US$35 = US$87.50 de coste laboral imputado; margen bruto modelado **62.6%**. El precio mínimo matemático para 60% bajo esa comisión es aproximadamente US$258, antes de impuestos, adquisición, retrabajo y otros costes; US$275 añade un margen de precio de solo US$17.50 sobre ese mínimo. Si la comisión real difiere, recalcular antes de publicar. No es una tarifa de mercado validada: los avisos observados son muy dispersos y ningún pago de Jadel demuestra disposición a pagar.
+El sitio propio conserva US$250 directos. Para un catálogo en Upwork, **US$275 es solo un precio candidato de prueba**, no una tarifa validada: con la comisión visible de 15%, quedan US$233.75 tras fee y US$146.25 después de imputar 2.5 h × US$35; el margen es **62.6% antes del CAC**. Para mantener 60% de margen, el CAC máximo es apenas US$6 por venta (unos 10 minutos a US$35/h si no se compran Connects). El precio mínimo matemático de US$258 alcanza 60% solo con CAC cero; un canal repetible requiere medir Connects, tiempo de propuestas, adquisición, retrabajo y otros costes. Con CAC total menor a US$146.25 el trabajo aún sería positivo, pero debajo del objetivo de 60%. Revisar el fee real por contrato antes de publicar. Los avisos observados son dispersos y ningún pago de Jadel demuestra disposición a pagar.
 
 ## Activos y pasos de activación
 
