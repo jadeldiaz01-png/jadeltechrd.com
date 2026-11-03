@@ -2,6 +2,28 @@
 
 **Corte de evidencia:** 2 de noviembre de 2026. **Estado:** análisis local; no publicado.
 
+## Actualización de evidencia y plan cuantitativo — 3 de noviembre de 2026
+
+Esta sección reemplaza las observaciones HTTP anteriores cuando las contradiga; las cifras históricas del resto del documento se conservan como registro de lo que se observó en su fecha.
+
+**Sitio global:** revalidé en vivo las **15 URL del sitemap: 15/15 (100%) HTTP 200**, incluidas `/en/`, `/en/request-project.html`, privacidad y términos en inglés. La landing del AI Automation Blueprint y el intake español también responden 200. El CTA inglés lleva a `/en/request-project.html` con `offer_id=automation_blueprint` y parámetros UTM; no hace falta mantener la antigua conclusión de que el recorrido inglés termina en 404. Esto comprueba disponibilidad HTTP, no indexación, visitas ni conversiones. En la portada el Blueprint aparece primero, con precio de US$250 y límite de 2.5 horas; el sitio todavía presenta 11 servicios, por lo que la campaña debe concentrar tráfico en una única oferta.
+
+**Señal de mercado:** el informe 2026 de Upwork reporta crecimiento interanual de **178% en AI Integration** y **109% agregado para habilidades que mencionan IA** en su marketplace; el método usa datos de ingresos de freelancers y demanda originada en EE. UU. El reporte mensual de septiembre además sitúa “AI workflow automation” como segunda búsqueda relacionada con IA de mayor crecimiento interanual, sin publicar aquí un porcentaje absoluto. Son señales para priorizar automatización aplicada a procesos, no estimaciones del tamaño global del mercado ni garantía de ventas para Jadel. Fuentes: [metodología y cifras Upwork 2026](https://www.upwork.com/research/in-demand-skills-2026), [búsquedas de septiembre 2026](https://www.upwork.com/research/upwork-monthly-hiring-insights-september-2026). La comisión de Upwork varía de 0% a 15% por contrato; modelar el caso conservador con 15% hasta conocer la tasa que muestre una oferta real ([tarifa oficial](https://support.upwork.com/hc/en-us/articles/211062538-Learn-about-the-Freelancer-Service-Fee)). No hay base verificable para cuantificar TAM global, CPC o volumen de búsquedas: no convertir el crecimiento de una plataforma en un mercado total.
+
+**Objetivo de adquisición para validar, no benchmark de industria:** generar **100 sesiones elegibles por canal y oferta**, identificadas por UTM, antes de comparar canales; considerar elegible una sesión de un dueño/operador de pequeña empresa interesado en automatizar captación o seguimiento de leads. Registrar, por separado y semanalmente: sesiones elegibles → clic Blueprint → inicio de intake → solicitud completa → calificada → cotización → pago conciliado → horas/fees. GA4 solo observa a quienes aceptan analítica; cotejar con el ledger de solicitudes y cobros y deduplicar antes de informar resultados.
+
+Para planificación, no como pronóstico, la conversión sesión-a-pago puede variar ampliamente. Sensibilidad ilustrativa del embudo completo:
+
+| Escenario supuesto | Sesión→CTA | CTA→intake completo | Intake→calificado | Cotización→pago | Conversión total modelada | Sesiones por venta modeladas |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Bajo | 3% | 25% | 30% | 15% | 0.034% | ~2,963 |
+| Base | 6% | 40% | 50% | 20% | 0.240% | ~417 |
+| Alto | 10% | 50% | 60% | 30% | 0.900% | ~111 |
+
+Fórmula: producto de las cuatro tasas; sesiones por venta = 1 / conversión total. Todas las tasas son supuestos sin calibración de Jadel ni validación externa. Las primeras **100 sesiones elegibles por canal** sirven para medir eventos y calidad inicial, pero pueden no bastar para observar una venta; no proclamar ganador estadístico con esa muestra. Si no hay pagos conciliados, ampliar muestra o ajustar una sola variable a la vez (segmento/mensaje, CTA, precio o intake) según la etapa donde se pierda el embudo. Objetivo comercial inicial se mantiene: **1 Blueprint pagado y conciliado**, entregado en ≤2.5 h, margen bruto ≥60%; para US$250 ese margen exige costear el tiempo y fees reales, y el margen de 62.9% estimado con PayPal y US$35/h es solo un caso base.
+
+**Lectura actual de evidencia:** el snapshot documentado anteriormente marcaba 16 solicitudes acumuladas, ningún evento registrado de calificación, ningún pago conciliado y US$0 liquidados. Esto sigue sin acreditar ventas ni tasas de conversión: falta exposición/sesiones elegibles por canal y los eventos de lead lifecycle pueden estar subregistrados. Próxima lectura debe usar el scorecard de cohorte fechado, no comparar los 16 registros acumulados con tráfico de otra ventana. Estado de oferta: US$250 queda como precio de prueba; no subir ni bajar hasta observar consultas calificadas, cotizaciones, pagos, horas y coste de canal.
+
 ## Decisión provisional
 
 El Agentic Blueprint de US$250 es el mejor candidato para la primera venta: ya tiene precio público, alcance reconocible y un intake que termina en revisión humana y cotización. La página comercial declara capacidad de checkout hasta US$14,800; el formulario público anteriormente decía US$250, aunque el catálogo incluye servicios de mayor precio. Se corrigió la copia local en ES/EN para eliminar esa contradicción. Esto hace coherente probar el diagnóstico como producto inicial; no demuestra todavía que sea el servicio con mayor conversión.
