@@ -4,6 +4,16 @@
 
 **Revalidación de perfil 3-nov-2026:** el estado sigue privado/`NOT_STARTED`; Upwork reporta `can_submit_proposals=true`, pero 0 Connects. Se identifican 14 aptitudes, español fluido y ningún inglés declarado. No hay evidencia para afirmar fluidez inglesa ni para tratar al perfil como canal de adquisición activo. La consulta confirmó que cambios de título y resumen requieren confirmar una vista previa antes de guardarse; todavía no se guardó ninguno.
 
+## Reconsulta de mercado Upwork — 3-nov-2026
+
+Leí seis búsquedas de solo lectura: `lead automation`, `CRM workflow`, `AI integration`, `automation audit`, `workflow automation` y `lead management`, con presupuesto fijo mínimo US$200, pago verificado y no más de 20 propuestas cuando aplicaba. Las búsquedas no deduplican anuncios y no tienen filtro temporal; las fechas se revisaron anuncio por anuncio. No usar el número de resultados como demanda total.
+
+- **No surgió una oportunidad de Blueprint de alcance acotado** entre los resultados revisados. Un aviso reciente de AI integration por US$1,000 era afiliación para una app de compras, ajeno a la oferta. Un aviso de US$250 de lead management pedía preparar y ejecutar una campaña de correo sobre una lista de aproximadamente 6,450 contactos: marketing de salida, no diagnóstico de automatización.
+- El mejor solapamiento superficial fue un HubSpot CRM/recruitment de **US$400** (publicado 30-oct, 15–20 propuestas), pero el detalle exige completar dos pipelines, automatizaciones, dashboards, pruebas, documentación y handoff; solicita ejemplos de implementaciones HubSpot previas. Su actividad mostraba **12 invitaciones a entrevista, 0 contratados, 0 ofertas** y el usuario requería **9 Connects**; la cuenta tiene 0 y `can_apply=false`. **Descartar** por falta de Connects, competencia/etapa del proceso y evidencia específica HubSpot requerida. No enviar postulación. [Aviso](https://www.upwork.com/jobs/~022116002489016403699).
+- El feed personalizado de “más recientes” no encontró coincidencias en 7 días, y “Best Matches” devolvió `no_personalization`. Eso no prueba ausencia de demanda en Upwork: el perfil privado/iniciado incompleto reduce el valor de recomendaciones y la consulta no cubre el marketplace entero.
+
+**Decisión de canal:** no gastar en Connects a partir de esta muestra ni ampliar el catálogo hacia proyectos de implementación que exijan credenciales no demostradas. Resolver primero la visibilidad/estado del perfil y construir un ejemplo ilustrativo verificable. Hasta entonces, Upwork no es una fuente de tráfico activa para medir conversiones del sitio.
+
 ## Decisión de canal
 
 Usar Upwork solo como canal de descubrimiento complementario después de completar el perfil y publicar una muestra ilustrativa. No comprar Connects ni enviar propuestas hasta revisar el coste real por propuesta y autorizar ese gasto. El perfil privado/no iniciado no aporta descubrimiento orgánico actualmente.
