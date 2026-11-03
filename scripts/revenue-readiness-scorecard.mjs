@@ -43,10 +43,13 @@ export function buildScorecard(facts, config) {
 export function markdown(s) {
   const out=["# Revenue Readiness Scorecard","",`**Settled revenue:** ${usd(s.facts.settled_usd)}`,
     `**Settled payments:** ${s.facts.settled_payments}`,`**Commercial requests:** ${s.facts.total_requests}`,
-    `**Qualified leads:** ${s.facts.qualified_leads}`,`**Converted customers:** ${s.facts.converted_customers}`,"",
+    `**Projects with a recorded qualification:** ${s.facts.qualified_leads}`,`**Converted customers:** ${s.facts.converted_customers}`,"",
     "| Milestone | Status | Progress | Remaining |","|---|---:|---:|---:|"];
   for(const x of s.milestones) out.push(`| ${x.label} | ${x.status} | ${x.progress_pct.toFixed(2)}% | ${usd(x.remaining_usd)} |`);
-  out.push("","Source of truth: `sales_settlements` with `status='MATCHED'` and `currency_code='USD'`.",
+  out.push("","Qualification count is distinct projects with at least one `qualify_lead` event in `lead_lifecycle_events`; zero recorded events does not prove zero leads were qualified.",
+    "Converted customers: distinct projects with matched USD settlements.",
+    "Source of truth for settled revenue: `sales_settlements` with `status='MATCHED'` and `currency_code='USD'`.",
+    "This cumulative scorecard does not measure gross margin or customer acquisition cost; those require per-sale fees, labor hours, and direct costs from the commercial cost ledger.",
     "Read-only: no order creation, capture/refund, D1 mutation, secret change, or financial execution.");
   return `${out.join("\n")}\n`;
 }

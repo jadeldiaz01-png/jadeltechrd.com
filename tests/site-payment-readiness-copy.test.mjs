@@ -49,7 +49,7 @@ test("all 11 publicly listed services have a quote-gated PayPal path without a d
   assert.ok(new RegExp('data-cta-id="service_quote_\\$\\{service\\.id\\}"[^>]*>Solicitar cotización</a>').test(app));
 
   for (const id of ids) {
-    assert.ok(fallback.includes(`href="/solicitar-proyecto.html?services=${id}&utm_source=service_catalog`), `static intake path for ${id}`);
+    assert.match(fallback, new RegExp(`href="/solicitar-proyecto\\.html\\?services=${id}(?:&amp;|&)utm_source=service_catalog`), `static intake path for ${id}`);
     assert.match(app, new RegExp(`id: "${id}"`));
   }
   for (const source of [fallback, app]) {

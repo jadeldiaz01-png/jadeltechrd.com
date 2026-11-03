@@ -28,7 +28,7 @@
     utm_content: new Set(["automation_blueprint", "whatsapp_ai", "sales_intelligence"]),
     offer_id: new Set(["whatsapp_support", "automation_blueprint", "sales_lead_intelligence"]),
     service_id: new Set(["architecture", "support", "sales", "social", "cineforge", "meta", "analytics", "revenue", "quant", "governance", "multiagent"]),
-    landing_path: new Set(["/", "/automatizacion-procesos-ia-rd.html", "/whatsapp-ia-empresas-rd.html", "/agente-ventas-ia-rd.html", "/solicitar-proyecto.html"]),
+    landing_path: new Set(["/", "/en/", "/en/request-project.html", "/ai-automation-blueprint.html", "/automatizacion-procesos-ia-rd.html", "/whatsapp-ia-empresas-rd.html", "/agente-ventas-ia-rd.html", "/solicitar-proyecto.html"]),
     lead_source: new Set(["website"])
   });
   const measurementPattern = /^G-[A-Z0-9]+$/;
@@ -43,7 +43,7 @@
       if (!value) continue;
       const allowedValues = allowedAttributionValues[key];
       if (allowedValues && !allowedValues.has(value)) continue;
-      if (key === "cta_id" && !/^(?:service_quote_[a-z0-9]{1,32}|homepage_blueprint_entry)$/.test(value)) continue;
+      if (key === "cta_id" && !/^(?:service_quote_[a-z0-9]{1,32}|homepage_blueprint_entry|english_blueprint_(?:entry|request))$/.test(value)) continue;
       clean[key] = value.slice(0, 120);
     }
     return clean;

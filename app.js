@@ -534,6 +534,7 @@
       <a href="/#precios" data-home-nav>Precios</a>
       <a href="/#gobernanza" data-home-nav>Confianza</a>
       <a class="nav-cta" href="/solicitar-proyecto.html" data-intake-nav="true">Solicitar proyecto</a>
+      <a href="/en/" lang="en">English</a>
       <a href="/?view=privacy" data-nav="privacy">Privacidad</a>
       <a href="/?view=terms" data-nav="terms">Condiciones</a>
       <a href="${DATA_DELETION_URL}" data-nav="data-deletion">Eliminar datos</a>`;
@@ -546,6 +547,7 @@
       <a href="/#precios">Precios</a>
       <a href="/#pagos">Pagos</a>
       <a href="/matriz-oportunidades.html">Matriz de oportunidades</a>
+      <a href="/en/" lang="en">English offer</a>
       <a href="/?view=privacy">Privacidad</a>
       <a href="/?view=terms">Condiciones</a>
       <a href="${DATA_DELETION_URL}">Eliminación de datos</a>`;

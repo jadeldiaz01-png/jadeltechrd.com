@@ -74,7 +74,6 @@ jobs:
           expected = {
               "https://jadeltechrd.com/",
               "https://jadeltechrd.com/solicitar-proyecto.html",
-              "https://jadeltechrd.com/agent-readiness.html",
               "https://jadeltechrd.com/whatsapp-ia-empresas-rd.html",
               "https://jadeltechrd.com/automatizacion-procesos-ia-rd.html",
               "https://jadeltechrd.com/agente-ventas-ia-rd.html",
@@ -83,6 +82,7 @@ jobs:
               "https://jadeltechrd.com/?view=data-deletion",
           }
           assert expected <= urls, f"Missing sitemap URLs: {sorted(expected - urls)}"
+          assert "https://jadeltechrd.com/agent-readiness.html" not in urls, "Sitemap must not advertise a 404 route"
 
           robots = Path("robots.txt").read_text(encoding="utf-8")
           assert "User-agent: *" in robots

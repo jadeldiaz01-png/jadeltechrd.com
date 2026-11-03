@@ -6,10 +6,11 @@ import {
   loadRevenueAggregate,
 } from "../src/revenue-intelligence.mjs";
 
-function fakeDb(values, rows = []) {
+function fakeDb(values, rows = [], statements = []) {
   let index = 0;
   return {
-    prepare() {
+    prepare(sql) {
+      statements.push(sql);
       return {
         first: async () => ({ value: values[index++] ?? 0 }),
         all: async () => ({ results: rows }),
@@ -17,6 +18,17 @@ function fakeDb(values, rows = []) {
     }
   };
 }
+
+test("converted customers are counted from matched USD settlements, not manual lifecycle labels", async () => {
+  const statements = [];
+  const summary = await loadRevenueAggregate(fakeDb([0,0,0,1,0], [], statements));
+  assert.equal(summary.converted_customers, 1);
+  assert.match(statements[3], /FROM sales_settlements s JOIN payment_orders po/);
+  assert.match(statements[3], /s\.status='MATCHED' AND s\.currency_code='USD'/);
+  assert.doesNotMatch(statements[3], /lead_lifecycle_events/);
+  assert.match(statements[4], /FROM sales_settlements/);
+  assert.doesNotMatch(statements[4], /payment_ledger/);
+});
 
 test("runtime aggregate stays aggregate-only and does not infer GA4 metrics", async () => {
   const summary = await loadRevenueAggregate(fakeDb([7,2,1,1,900]));
@@ -39,14 +51,15 @@ test("runtime view remains recommend-only with all advanced model paths disabled
 });
 
 
-test("offer performance is ledger-backed and contains no inferred revenue", async () => {
+test("offer performance is settlement-backed and contains no inferred revenue", async () => {
+  const statements = [];
   const db = fakeDb([], [{
     offer_id:"automation_blueprint",
     total_requests:4,
     allowed_projects:2,
     paid_projects:1,
     reconciled_usd_revenue:250,
-  }]);
+  }], statements);
   const rows = await loadOfferPerformance(db);
   assert.deepEqual(rows, [{
     offer_id:"automation_blueprint",
@@ -55,6 +68,8 @@ test("offer performance is ledger-backed and contains no inferred revenue", asyn
     paid_projects:1,
     reconciled_usd_revenue:250,
   }]);
+  assert.match(statements[0], /sales_settlements/);
+  assert.doesNotMatch(statements[0], /payment_ledger/);
 });
 
 test("runtime view exposes offer performance separately from aggregate recommendation", async () => {

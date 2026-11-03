@@ -98,15 +98,25 @@ jobs:
             matriz-oportunidades.html
             matriz-oportunidades.css
             matriz-oportunidades.json
+            en/index.html
+            en/request-project.html
+            en/privacy.html
+            en/terms.html
+            output/pdf/agentic-blueprint-illustrative-sample.pdf
           )
           for asset in "${public_assets[@]}"; do
             test -f "$asset"
+            mkdir -p "_site/$(dirname "$asset")"
             cp "$asset" "_site/$asset"
           done
           test -s _site/llms.txt
           test -s _site/agent-services.json
           test -s _site/approval-console.html
           test -s _site/approval-console.js
+          test -s _site/en/index.html
+          test -s _site/en/request-project.html
+          test -s _site/en/privacy.html
+          test -s _site/en/terms.html
           test ! -e _site/.github
           test ! -e _site/commercial-runtime
           test ! -e _site/scripts

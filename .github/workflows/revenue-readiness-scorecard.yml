@@ -39,6 +39,7 @@ jobs:
           sql_line=$(grep -F 'sql="SELECT ' "$wf")
           test -n "$sql_line"
           printf '%s' "$sql_line" | grep -Fq "FROM sales_settlements"
+          printf '%s' "$sql_line" | grep -Fq "COUNT(DISTINCT po.project_id) FROM sales_settlements s JOIN payment_orders po"
           ! printf '%s' "$sql_line" | grep -Eiq '\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE)\b'
           echo REVENUE_SCORECARD_CONTRACT=PASS
 
@@ -76,7 +77,7 @@ jobs:
           test "$(jq -r '.success' <<<"$dbs")" = true
           test "$(jq -r --arg n "$D1_NAME" '[.result[]|select(.name==$n)]|length' <<<"$dbs")" = 1
           db=$(jq -r --arg n "$D1_NAME" '.result[]|select(.name==$n)|.uuid' <<<"$dbs")
-          sql="SELECT (SELECT COUNT(*) FROM project_requests) AS total_requests,(SELECT COUNT(DISTINCT project_id) FROM lead_lifecycle_events WHERE stage='qualify_lead') AS qualified_leads,(SELECT COUNT(DISTINCT project_id) FROM lead_lifecycle_events WHERE stage='close_convert_lead') AS converted_customers,(SELECT COUNT(*) FROM sales_settlements WHERE status='MATCHED' AND currency_code='USD') AS settled_payments,(SELECT COALESCE(SUM(amount_minor),0) FROM sales_settlements WHERE status='MATCHED' AND currency_code='USD') AS settled_amount_minor;"
+          sql="SELECT (SELECT COUNT(*) FROM project_requests) AS total_requests,(SELECT COUNT(DISTINCT project_id) FROM lead_lifecycle_events WHERE stage='qualify_lead') AS qualified_leads,(SELECT COUNT(DISTINCT po.project_id) FROM sales_settlements s JOIN payment_orders po ON po.payment_order_id=s.payment_order_id WHERE s.status='MATCHED' AND s.currency_code='USD') AS converted_customers,(SELECT COUNT(*) FROM sales_settlements WHERE status='MATCHED' AND currency_code='USD') AS settled_payments,(SELECT COALESCE(SUM(amount_minor),0) FROM sales_settlements WHERE status='MATCHED' AND currency_code='USD') AS settled_amount_minor;"
           printf '%s' "$sql" | grep -Eq '^SELECT '; ! printf '%s' "$sql" | grep -Eiq '\b(INSERT|UPDATE|DELETE|REPLACE|DROP|ALTER|TRUNCATE)\b'
           resp=$(curl --fail-with-body -sS -X POST "${auth[@]}" "https://api.cloudflare.com/client/v4/accounts/$account/d1/database/$db/query" --data "$(jq -n --arg sql "$sql" '{sql:$sql}')")
           test "$(jq -r '.success' <<<"$resp")" = true; row=$(jq -c '.result[0].results[0]' <<<"$resp"); test "$row" != null

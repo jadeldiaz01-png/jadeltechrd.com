@@ -105,8 +105,8 @@ export async function loadRevenueAggregate(db) {
     scalar(db, "SELECT COUNT(*) AS value FROM project_requests"),
     scalar(db, "SELECT COUNT(*) AS value FROM project_requests WHERE policy_status IN ('PENDING','REQUIRES_HUMAN')"),
     scalar(db, "SELECT COUNT(DISTINCT project_id) AS value FROM lead_lifecycle_events WHERE stage='qualify_lead'"),
-    scalar(db, "SELECT COUNT(DISTINCT project_id) AS value FROM lead_lifecycle_events WHERE stage='close_convert_lead'"),
-    scalar(db, "SELECT COALESCE(SUM(CASE WHEN currency_code='USD' AND ledger_state='MATCHED' THEN CAST(amount_usd AS REAL) ELSE 0 END),0) AS value FROM payment_ledger"),
+    scalar(db, "SELECT COUNT(DISTINCT po.project_id) AS value FROM sales_settlements s JOIN payment_orders po ON po.payment_order_id=s.payment_order_id WHERE s.status='MATCHED' AND s.currency_code='USD'"),
+    scalar(db, "SELECT COALESCE(SUM(amount_minor)/100.0,0) AS value FROM sales_settlements WHERE status='MATCHED' AND currency_code='USD'"),
   ]);
 
   return {
@@ -128,11 +128,12 @@ export async function loadOfferPerformance(db) {
        p.offer_id AS offer_id,
        COUNT(DISTINCT p.project_id) AS total_requests,
        COUNT(DISTINCT CASE WHEN p.policy_status='ALLOWED' THEN p.project_id END) AS allowed_projects,
-       COUNT(DISTINCT CASE WHEN l.ledger_state='MATCHED' THEN p.project_id END) AS paid_projects,
-       COALESCE(SUM(CASE WHEN l.ledger_state='MATCHED' AND l.currency_code='USD'
-                         THEN CAST(l.amount_usd AS REAL) ELSE 0 END),0) AS reconciled_usd_revenue
+       COUNT(DISTINCT CASE WHEN s.settlement_id IS NOT NULL THEN p.project_id END) AS paid_projects,
+       COALESCE(SUM(s.amount_minor)/100.0,0) AS reconciled_usd_revenue
      FROM project_requests p
-     LEFT JOIN payment_ledger l ON l.project_id=p.project_id
+     LEFT JOIN payment_orders po ON po.project_id=p.project_id
+     LEFT JOIN sales_settlements s ON s.payment_order_id=po.payment_order_id
+       AND s.status='MATCHED' AND s.currency_code='USD'
      WHERE p.offer_id <> ''
      GROUP BY p.offer_id
      ORDER BY reconciled_usd_revenue DESC, total_requests DESC, p.offer_id ASC`
