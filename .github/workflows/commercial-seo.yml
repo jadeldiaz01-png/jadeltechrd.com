@@ -89,6 +89,10 @@ jobs:
           assert "https://jadeltechrd.com/agent-readiness.html" not in urls, "Sitemap must not advertise a 404 route"
 
           live_smoke = Path(".github/workflows/commercial-live-smoke.yml").read_text(encoding="utf-8")
+          assert "Blueprint de automatización de leads desde US$250 | Jadel Tech RD" in live_smoke
+          assert "Ordena el seguimiento de tus leads" in live_smoke
+          assert "Agentes de IA & Automatización | Jadel Tech RD" not in live_smoke
+          assert "convierten procesos en sistemas" not in live_smoke
           assert r'''grep -Fq 'https://jadeltechrd.com/' "$sitemap"''' in live_smoke
           assert r'''! grep -Eq 'https://jadeltechrd.com/\?view=(privacy|terms|data-deletion)' "$sitemap"''' in live_smoke
           assert "grep -Fq 'https://jadeltechrd.com/?view=data-deletion' \"$sitemap\"" not in live_smoke
