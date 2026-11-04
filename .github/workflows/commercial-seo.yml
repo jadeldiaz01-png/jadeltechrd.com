@@ -93,6 +93,9 @@ jobs:
           assert "Ordena el seguimiento de tus leads" in live_smoke
           assert "Agentes de IA & Automatización | Jadel Tech RD" not in live_smoke
           assert "convierten procesos en sistemas" not in live_smoke
+          assert "Human-in-the-loop" in live_smoke
+          assert "Supervisión humana" not in live_smoke
+          assert "Convierte trabajo repetitivo en" not in live_smoke
           assert r'''grep -Fq 'https://jadeltechrd.com/' "$sitemap"''' in live_smoke
           assert r'''! grep -Eq 'https://jadeltechrd.com/\?view=(privacy|terms|data-deletion)' "$sitemap"''' in live_smoke
           assert "grep -Fq 'https://jadeltechrd.com/?view=data-deletion' \"$sitemap\"" not in live_smoke
