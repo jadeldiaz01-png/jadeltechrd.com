@@ -129,7 +129,7 @@ jobs:
           grep -Fq 'Business Agent' /tmp/live-home.html
           grep -Fq 'CineForge' /tmp/live-home.html
           grep -Fq 'Research-only' /tmp/live-home.html
-          grep -Fq 'Human-in-the-loop' /tmp/live-home.html
+          grep -Fq 'Supervisión humana' /tmp/live-home.html
           grep -Fq 'Multi-Agent Orchestration' /tmp/live-home.html
           echo 'LIVE_BROWSER_RENDER=PASS'
           echo 'COMMERCIAL_SITE_LIVE=YES'
