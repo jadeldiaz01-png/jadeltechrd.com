@@ -36,9 +36,9 @@ jobs:
               IFS=$'\t' read -r code tls <"$meta" || true
               echo "home HTTP=$code TLS_VERIFY=$tls"
               if [ "$code" = '200' ] && [ "$tls" = '0' ] && \
-                 grep -Fq 'Agentes de IA & Automatización | Jadel Tech RD' "$home" && \
+                 grep -Fq 'Blueprint de automatización de leads desde US$250 | Jadel Tech RD' "$home" && \
                  grep -Fq 'static-commercial-fallback' "$home" && \
-                 grep -Fq 'convierten procesos en sistemas' "$home" && \
+                 grep -Fq 'Ordena el seguimiento de tus leads' "$home" && \
                  ! grep -Fq 'Sitio oficial de información pública para nuestras aplicaciones' "$home"; then
                 ready=true
                 rm -f "$home" "$meta"
