@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/commercial-seo.yml'
+      - '.github/workflows/commercial-live-smoke.yml'
       - 'index.html'
       - 'robots.txt'
       - 'sitemap.xml'
@@ -77,12 +78,20 @@ jobs:
               "https://jadeltechrd.com/whatsapp-ia-empresas-rd.html",
               "https://jadeltechrd.com/automatizacion-procesos-ia-rd.html",
               "https://jadeltechrd.com/agente-ventas-ia-rd.html",
+          }
+          assert expected <= urls, f"Missing sitemap URLs: {sorted(expected - urls)}"
+          noncanonical_policy_views = {
               "https://jadeltechrd.com/?view=privacy",
               "https://jadeltechrd.com/?view=terms",
               "https://jadeltechrd.com/?view=data-deletion",
           }
-          assert expected <= urls, f"Missing sitemap URLs: {sorted(expected - urls)}"
+          assert not (noncanonical_policy_views & urls), "Sitemap must not advertise policy query variants that canonicalize to the homepage"
           assert "https://jadeltechrd.com/agent-readiness.html" not in urls, "Sitemap must not advertise a 404 route"
+
+          live_smoke = Path(".github/workflows/commercial-live-smoke.yml").read_text(encoding="utf-8")
+          assert r'''grep -Fq 'https://jadeltechrd.com/' "$sitemap"''' in live_smoke
+          assert r'''! grep -Eq 'https://jadeltechrd.com/\?view=(privacy|terms|data-deletion)' "$sitemap"''' in live_smoke
+          assert "grep -Fq 'https://jadeltechrd.com/?view=data-deletion' \"$sitemap\"" not in live_smoke
 
           robots = Path("robots.txt").read_text(encoding="utf-8")
           assert "User-agent: *" in robots

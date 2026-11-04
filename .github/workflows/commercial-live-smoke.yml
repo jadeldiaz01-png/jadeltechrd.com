@@ -107,7 +107,8 @@ jobs:
           grep -Fq 'Sitemap: https://jadeltechrd.com/sitemap.xml' "$robots"
           fetch_transport_retry "$BASE_URL/sitemap.xml" "$sitemap" "$sitemap_meta"
           test "$(cat "$sitemap_meta")" = '200'
-          grep -Fq 'https://jadeltechrd.com/?view=data-deletion' "$sitemap"
+          grep -Fq 'https://jadeltechrd.com/' "$sitemap"
+          ! grep -Eq 'https://jadeltechrd.com/\?view=(privacy|terms|data-deletion)' "$sitemap"
           rm -f "$robots" "$robots_meta" "$sitemap" "$sitemap_meta"
           echo 'LIVE_LEGAL_DISCOVERY=PASS'
           echo 'LIVE_TRANSPORT_RETRY_POLICY=PASS'
