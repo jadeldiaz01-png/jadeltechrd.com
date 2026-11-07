@@ -86,7 +86,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node --test tests/paypal-live-worker-flags-readonly.test.mjs tests/paypal-live-webhook-event-change.test.mjs
+          node --test tests/paypal-live-worker-flags-readonly.test.mjs tests/paypal-live-webhook-event-change.test.mjs tests/paypal-live-preactivation-readonly.test.mjs
 
       - name: Validate commercial runtime deploy governance
         shell: bash
