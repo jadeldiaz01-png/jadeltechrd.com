@@ -73,6 +73,10 @@ test("monthly public prices require explicit PayPal subscription approval", () =
   assert.ok(recurring.length > 0);
   assert.ok(recurring.every(id => discovery.services.some(service => service.id === id)));
   assert.ok(recurring.every(id => ('monthly' in SERVICE_PRICING_CATALOG[id]) || ('monthly_pack' in SERVICE_PRICING_CATALOG[id])));
-  assert.match(fallback, /aprobación expresa de la suscripción en PayPal/i);
-  assert.match(app, /suscripción separada que el comprador debe aprobar en PayPal/i);
+  const activation = fs.readFileSync('.github/workflows/paypal-live-activate.yml', 'utf8');
+  assert.match(activation, /PAYPAL_SUBSCRIPTIONS_ENABLED:"false"/);
+  assert.match(fallback, /suscripciones[^.]{0,120}deshabilitadas/i);
+  assert.match(app, /suscripciones[^.]{0,120}deshabilitadas/i);
+  assert.doesNotMatch(fallback, /las mensualidades se cobran solo tras la aprobación expresa/i);
+  assert.doesNotMatch(app, /los importes mensuales usan una suscripción separada/i);
 });
