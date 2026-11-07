@@ -15,7 +15,9 @@ for (const [name, source] of surfaces) {
     assert.match(source, /firma inválida rechazada|invalid-signature probe rejected/i);
     assert.match(source, /class="event-wait">(?:PENDIENTE|PENDING)<\/span><b>(?:Evidence ledger|Payment evidence)<\/b>/i);
     assert.match(source, /primera conciliación positiva con captura real pendiente|first positive reconciliation with a real capture pending/i);
-    assert.match(source, /US\$14,800/);
+    assert.match(source, /US\$250/);
+    assert.doesNotMatch(source, /US\$14,800/);
+    assert.match(source, /captura LIVE (?:están|está|continúan|sigue|está temporalmente) deshabilitad/i);
     assert.match(source, /console-state[^>]*>\s*SUPERVISADO\s*</i);
     assert.equal([...source.matchAll(/class="console-state"/g)].length, 1);
     assert.match(source, /no se marca PAID sin coincidencia exacta|only marks PAID after validating signature and exact match/i);
