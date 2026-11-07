@@ -57,7 +57,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           test "$(git rev-parse refs/remotes/origin/main)" = "$EXPECTED_SHA"
 
-          token=$(printf '%s' "${CLOUDFLARE_READONLY_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$$//')
+          token=$(printf '%s' "${CLOUDFLARE_READONLY_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
           account=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
           test -n "$token" || { echo PREACTIVATION_READONLY_TOKEN=MISSING >&2; exit 3; }
           [[ "$account" =~ ^[0-9a-fA-F]{32}$ ]] || { echo PREACTIVATION_ACCOUNT=INVALID >&2; exit 3; }
