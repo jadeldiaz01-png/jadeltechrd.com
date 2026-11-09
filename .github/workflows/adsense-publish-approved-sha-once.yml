@@ -1,0 +1,78 @@
+name: One-time authorized AdSense ownership Pages dispatch
+
+# Owner-approved scope: verify jadeltechrd.com property only, no ad serving.
+# This job is intentionally triggered only by creation/modification of itself.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/adsense-publish-approved-sha-once.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch-approved-pages:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact protected-main source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Validate exact commit and ownership-only configuration
+        shell: bash
+        env:
+          REPO: ${{ github.repository }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$REPO" = "jadeldiaz01-png/jadeltechrd.com"
+          test "$GITHUB_REF" = "refs/heads/main"
+          [[ "$DISPATCH_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$DISPATCH_SHA"
+          latest=$(git ls-remote origin refs/heads/main | cut -f1)
+          test "$latest" = "$DISPATCH_SHA" || {
+            echo 'APPROVED_SHA_NOT_CURRENT=FAIL'
+            exit 4
+          }
+
+          test "$(git show --format= --name-only "$DISPATCH_SHA" | grep -Fxc '.github/workflows/adsense-publish-approved-sha-once.yml')" = 1
+
+          grep -Fq '<meta name="google-adsense-account" content="ca-pub-4830696678723029">' index.html
+          grep -Fxq 'google.com, pub-4830696678723029, DIRECT, f08c47fec0942fa0' ads.txt
+          test "$(wc -l < ads.txt)" -eq 1
+          for page in guias.html guia-automatizacion-leads.html guia-chatbot-soporte.html; do
+            test -s "$page"
+            ! grep -Fq 'adsbygoogle.js' "$page"
+          done
+          ! grep -Fq 'adsbygoogle.js' index.html
+          ! grep -Fq 'pagead2.googlesyndication.com' index.html
+
+          grep -Fq 'workflow_dispatch:' .github/workflows/pages.yml
+          grep -Fq 'test "$GITHUB_SHA" = "$EXPECTED_SHA"' .github/workflows/pages.yml
+          grep -Fq 'DEPLOY_PUBLIC_SITE' .github/workflows/pages.yml
+          echo "ONESHOT_APPROVED_MAIN_SHA=${DISPATCH_SHA}"
+          echo 'ONESHOT_ADSENSE_OWNERSHIP_GATES=PASS'
+
+      - name: Dispatch existing signed and attested Pages workflow by exact SHA
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "/repos/${REPO}/actions/workflows/pages.yml/dispatches" \
+            -f ref=main \
+            -f "inputs[expected_sha]=${DISPATCH_SHA}" \
+            -f "inputs[confirmation]=DEPLOY_PUBLIC_SITE" \
+            >/dev/null
+          echo "PAGES_DISPATCH_REQUESTED_FOR_SHA=${DISPATCH_SHA}"
+          echo 'PAGES_DISPATCH_REQUEST=PASS'
