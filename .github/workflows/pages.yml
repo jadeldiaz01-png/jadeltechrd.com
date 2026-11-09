@@ -117,7 +117,8 @@ jobs:
             mkdir -p "_site/$(dirname "$asset")"
             cp "$asset" "_site/$asset"
           done
-          test "$(tr -d '\\r\\n' < _site/ads.txt)" = "google.com, pub-4830696678723029, DIRECT, f08c47fec0942fa0"
+          grep -Fxq 'google.com, pub-4830696678723029, DIRECT, f08c47fec0942fa0' _site/ads.txt
+          test "$(wc -l < _site/ads.txt)" -eq 1
           grep -Fq 'name="google-adsense-account" content="ca-pub-4830696678723029"' _site/index.html
           test -s _site/guias.html
           test -s _site/guia-automatizacion-leads.html
