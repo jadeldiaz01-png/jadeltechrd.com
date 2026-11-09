@@ -1,0 +1,39 @@
+name: Validate AdSense ownership-only changes
+
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'guias.html'
+      - 'guia-*.html'
+      - 'ads.txt'
+      - 'sitemap.xml'
+      - '.github/workflows/pages.yml'
+      - 'tests/adsense-ownership-verification.test.mjs'
+      - '.github/workflows/adsense-ownership-verification.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'guias.html'
+      - 'guia-*.html'
+      - 'ads.txt'
+      - 'sitemap.xml'
+      - '.github/workflows/pages.yml'
+      - 'tests/adsense-ownership-verification.test.mjs'
+      - '.github/workflows/adsense-ownership-verification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  adsense-ownership:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify ownership-only HTML, ads.txt and Pages package
+        run: node --test tests/adsense-ownership-verification.test.mjs
