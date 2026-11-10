@@ -15,7 +15,9 @@ for (const [name, source] of surfaces) {
     assert.match(source, /firma inválida rechazada|invalid-signature probe rejected/i);
     assert.match(source, /class="event-wait">(?:PENDIENTE|PENDING)<\/span><b>(?:Evidence ledger|Payment evidence)<\/b>/i);
     assert.match(source, /primera conciliación positiva con captura real pendiente|first positive reconciliation with a real capture pending/i);
-    assert.match(source, /US\$14,800/);
+    assert.match(source, /US\$250/);
+    assert.doesNotMatch(source, /US\$14,800/);
+    assert.match(source, /captura LIVE (?:(?:están|está|continúan|sigue) )?deshabilitad/i);
     assert.match(source, /console-state[^>]*>\s*SUPERVISADO\s*</i);
     assert.equal([...source.matchAll(/class="console-state"/g)].length, 1);
     assert.match(source, /no se marca PAID sin coincidencia exacta|only marks PAID after validating signature and exact match/i);
@@ -71,6 +73,10 @@ test("monthly public prices require explicit PayPal subscription approval", () =
   assert.ok(recurring.length > 0);
   assert.ok(recurring.every(id => discovery.services.some(service => service.id === id)));
   assert.ok(recurring.every(id => ('monthly' in SERVICE_PRICING_CATALOG[id]) || ('monthly_pack' in SERVICE_PRICING_CATALOG[id])));
-  assert.match(fallback, /aprobación expresa de la suscripción en PayPal/i);
-  assert.match(app, /suscripción separada que el comprador debe aprobar en PayPal/i);
+  const activation = fs.readFileSync('.github/workflows/paypal-live-activate.yml', 'utf8');
+  assert.match(activation, /PAYPAL_SUBSCRIPTIONS_ENABLED:"false"/);
+  assert.match(fallback, /suscripciones[^.]{0,120}deshabilitadas/i);
+  assert.match(app, /suscripciones[^.]{0,120}deshabilitadas/i);
+  assert.doesNotMatch(fallback, /las mensualidades se cobran solo tras la aprobación expresa/i);
+  assert.doesNotMatch(app, /los importes mensuales usan una suscripción separada/i);
 });
