@@ -1,0 +1,27 @@
+name: Consented educational guide analytics
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "guias.html"
+      - "guia-automatizacion-leads.html"
+      - "guia-chatbot-soporte.html"
+      - "ga4-loader.js"
+      - "revenue-funnel.js"
+      - "tests/consented-guide-analytics.test.mjs"
+      - ".github/workflows/consented-guide-analytics.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate consented guide analytics and attribution
+        run: node --test tests/consented-guide-analytics.test.mjs
