@@ -10,7 +10,6 @@ const pages = [
   "guia-automatizacion-leads.html",
   "guia-chatbot-soporte.html",
 ];
-const ga4 = read("ga4-loader.js");
 const funnel = read("revenue-funnel.js");
 
 test("educational guides load analytics through the consent UI and a narrow CSP", () => {
@@ -47,8 +46,6 @@ test("lead automation guide tracks its Blueprint CTA and preserves offer attribu
   const params = new URLSearchParams(href.split("?")[1]?.replace(/&amp;/g, "&") || "");
   assert.equal(params.get("offer_id"), "automation_blueprint");
   assert.equal(params.get("service_id"), "architecture");
-  assert.match(funnel, /guide_(?:index|lead)_blueprint/);
-  assert.match(ga4, /guide_(?:index|lead)_blueprint/);
 });
 
 test("guide index offers a measured path to the entry Blueprint", () => {
@@ -60,6 +57,52 @@ test("guide index offers a measured path to the entry Blueprint", () => {
   const params = new URLSearchParams(href.split("?")[1]?.replace(/&amp;/g, "&") || "");
   assert.equal(params.get("offer_id"), "automation_blueprint");
   assert.equal(params.get("service_id"), "architecture");
+});
+
+test("revenue funnel emits the guide CTA id and keeps Blueprint attribution", () => {
+  const listeners = {};
+  const dataLayer = [];
+  const target = {
+    href: "/ai-automation-blueprint.html?offer_id=automation_blueprint&service_id=architecture",
+    dataset: { revenueEvent: "offer_cta_click", ctaId: "guide_lead_blueprint" },
+    closest(selector) { return selector === "[data-revenue-event]" ? this : null; },
+  };
+  const window = {
+    dataLayer,
+    location: {
+      pathname: "/guia-automatizacion-leads.html",
+      search: "",
+      href: "https://jadeltechrd.com/guia-automatizacion-leads.html",
+      origin: "https://jadeltechrd.com",
+    },
+    dispatchEvent() {},
+  };
+
+  runInNewContext(funnel, {
+    URL,
+    URLSearchParams,
+    CustomEvent: class {},
+    document: {
+      body: { dataset: {} },
+      addEventListener(type, handler) { listeners[type] = handler; },
+      getElementById() { return null; },
+    },
+    sessionStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+    window,
+  });
+
+  listeners.click({ target });
+  const click = dataLayer.find((event) => event.event === "offer_cta_click");
+  assert.ok(click);
+  assert.equal(click.offer_id, "automation_blueprint");
+  assert.equal(click.service_id, "architecture");
+  assert.equal(click.cta_id, "guide_lead_blueprint");
+  assert.equal(click.utm_content, "guide_lead_blueprint");
+
+  const destination = new URL(target.href, window.location.href);
+  assert.equal(destination.searchParams.get("offer_id"), "automation_blueprint");
+  assert.equal(destination.searchParams.get("service_id"), "architecture");
+  assert.equal(destination.searchParams.get("utm_content"), "guide_lead_blueprint");
 });
 
 test("GA4 does not load or send events before consent and stops after revocation", () => {
