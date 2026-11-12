@@ -1,0 +1,366 @@
+{
+  "schema_version": "1.0.0",
+  "manifest_id": "AGIA-2026-JADELTECHRD-WEB-OVERLAY-DRAFT",
+  "source_package": "AGIA Institutional Production Readiness 2026 v1.0.0",
+  "repository": "jadeldiaz01-png/jadeltechrd.com",
+  "scope": "web",
+  "audit_snapshot": {
+    "observed_at": "2026-10-15",
+    "main_sha": "b76563a7f5e9c5f4d721e08b02985f746fc856d5",
+    "protected_observed": true,
+    "site_manifest": {
+      "path": "config/site-production-readiness-2026.json",
+      "blob_sha": "9a826de0ab216b6085236324576e0d2ff93be5ad"
+    },
+    "institutional_manifest": {
+      "path": "config/institutional-production-manifest-2026.json",
+      "blob_sha": "89d7e8217e2a425a6b46bbdc0fefe5fd419c79bd"
+    }
+  },
+  "decision": {
+    "state": "NO_GO",
+    "production_ready": false,
+    "production_authorized": false,
+    "financial_execution_authorized": false,
+    "external_publication_authorized": false,
+    "live_trading_authorized": false,
+    "max_autonomous_capital_usd": 0,
+    "max_unapproved_spend_usd": 0,
+    "execution_enabled_by_default": false,
+    "fail_closed": true
+  },
+  "authority": {
+    "system_of_record": [
+      "config/institutional-production-manifest-2026.json",
+      "config/site-production-readiness-2026.json",
+      "config/slo-policy.json"
+    ],
+    "overlay_is_not_a_certifier": true,
+    "required_external_attestations": true,
+    "requires_independent_review": true,
+    "requires_specific_human_merge_approval": true,
+    "requires_specific_human_deploy_approval": true
+  },
+  "catalog": [
+    {
+      "id": "C01",
+      "domain": "core",
+      "title": "Arquitectura ADR y límites de confianza"
+    },
+    {
+      "id": "C02",
+      "domain": "core",
+      "title": "Identidad MFA y privilegio mínimo"
+    },
+    {
+      "id": "C03",
+      "domain": "core",
+      "title": "Gobierno de capacidades de agentes y MCP"
+    },
+    {
+      "id": "C04",
+      "domain": "core",
+      "title": "Contratos API y esquemas versionados"
+    },
+    {
+      "id": "C05",
+      "domain": "core",
+      "title": "Consistencia e idempotencia"
+    },
+    {
+      "id": "C06",
+      "domain": "core",
+      "title": "Threat modeling y seguridad de secretos"
+    },
+    {
+      "id": "C07",
+      "domain": "core",
+      "title": "SBOM y procedencia verificable"
+    },
+    {
+      "id": "C08",
+      "domain": "core",
+      "title": "Protección de main y revisión independiente"
+    },
+    {
+      "id": "C09",
+      "domain": "core",
+      "title": "Telemetría y trazabilidad"
+    },
+    {
+      "id": "C10",
+      "domain": "core",
+      "title": "SLO y presupuesto de errores"
+    },
+    {
+      "id": "C11",
+      "domain": "core",
+      "title": "Respaldo restauración e incidentes"
+    },
+    {
+      "id": "C12",
+      "domain": "core",
+      "title": "Lineage y derechos sobre datos"
+    },
+    {
+      "id": "C13",
+      "domain": "core",
+      "title": "Privacidad y minimización"
+    },
+    {
+      "id": "C14",
+      "domain": "core",
+      "title": "Evaluación adversarial reproducible"
+    },
+    {
+      "id": "C15",
+      "domain": "core",
+      "title": "Evaluación de modelos y control de cambios"
+    },
+    {
+      "id": "C16",
+      "domain": "core",
+      "title": "FinOps cuotas y costes"
+    },
+    {
+      "id": "C17",
+      "domain": "core",
+      "title": "Gates humanos y separación de funciones"
+    },
+    {
+      "id": "W01",
+      "domain": "web",
+      "title": "DNS TLS y bundle inmutable"
+    },
+    {
+      "id": "W02",
+      "domain": "web",
+      "title": "Intake seguro y conversión legítima"
+    },
+    {
+      "id": "W03",
+      "domain": "web",
+      "title": "SEO contenido y licencias"
+    },
+    {
+      "id": "W04",
+      "domain": "web",
+      "title": "AdSense elegibilidad y tráfico válido"
+    },
+    {
+      "id": "W05",
+      "domain": "web",
+      "title": "Ingresos netos conciliados"
+    },
+    {
+      "id": "W06",
+      "domain": "web",
+      "title": "Ventana SLO 30 días"
+    },
+    {
+      "id": "W07",
+      "domain": "web",
+      "title": "Publicación externa con aprobación"
+    },
+    {
+      "id": "T01",
+      "domain": "trading",
+      "title": "Datos mercado y derechos"
+    },
+    {
+      "id": "T02",
+      "domain": "trading",
+      "title": "Punto en tiempo y no leakage"
+    },
+    {
+      "id": "T03",
+      "domain": "trading",
+      "title": "OOS y selección"
+    },
+    {
+      "id": "T04",
+      "domain": "trading",
+      "title": "Edge neto robusto"
+    },
+    {
+      "id": "T05",
+      "domain": "trading",
+      "title": "Ejecución y riesgo extremo"
+    },
+    {
+      "id": "T06",
+      "domain": "trading",
+      "title": "PAPER TESTNET y reconciliación"
+    },
+    {
+      "id": "T07",
+      "domain": "trading",
+      "title": "Autoridad humana LIVE"
+    },
+    {
+      "id": "T08",
+      "domain": "trading",
+      "title": "Revisión cuantitativa independiente"
+    },
+    {
+      "id": "S01",
+      "domain": "social",
+      "title": "Inteligencia social lícita"
+    },
+    {
+      "id": "S02",
+      "domain": "social",
+      "title": "Campañas lícitas sin spam"
+    }
+  ],
+  "web_controls": [
+    {
+      "id": "C01",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C02",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C03",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C04",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C05",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C06",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C07",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C08",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C09",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C10",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C11",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C12",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C13",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C14",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C15",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C16",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "C17",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "W01",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "W02",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "W03",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "W04",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "W05",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "W06",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    },
+    {
+      "id": "W07",
+      "status": "NOT_YET_CERTIFIED",
+      "evidence": []
+    }
+  ],
+  "out_of_scope_control_ids": [
+    "T01",
+    "T02",
+    "T03",
+    "T04",
+    "T05",
+    "T06",
+    "T07",
+    "T08",
+    "S01",
+    "S02"
+  ],
+  "web_slo": {
+    "window_days": 30,
+    "interval_minutes": 10,
+    "expected_slots": 4320,
+    "minimum_valid_slots": 4104,
+    "minimum_coverage_ratio": 0.95,
+    "maximum_gap_minutes": 30,
+    "model": "scheduled_first_attempt_no_retry"
+  },
+  "evidence_policy": {
+    "accepted_source": "authenticated versioned runtime evidence bound to exact revision and independently checked",
+    "historical_pass_is_not_fresh_certification": true,
+    "unverified_promo_video_never_proves_receipts": true,
+    "stale_evidence_must_not_promote": true
+  },
+  "next_gate": "OWNER_AND_INDEPENDENT_REVIEW_OF_DRAFT_PR_ONLY"
+}
