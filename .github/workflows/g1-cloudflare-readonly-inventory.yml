@@ -1,0 +1,55 @@
+# G1 discovery only: no deployment, migrations, D1 queries, or POST.
+# Manual-only after a separately approved merge; never runs on PR or push.
+name: G1 Cloudflare inventory (GET only)
+on:
+  workflow_dispatch:
+    inputs:
+      staging_worker:
+        description: "Exact existing staging Worker name (optional; auto-discover otherwise)"
+        type: string
+        required: false
+      staging_d1:
+        description: "Exact existing staging D1 name (optional; binding checked otherwise)"
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: g1-cloudflare-readonly
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    environment: g1-cloudflare-readonly
+    steps:
+      - name: Checkout exact SHA without persisting credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Enforce source SHA and run synthetic local tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "G1_SOURCE_SHA=$GITHUB_SHA"
+          python3 -m unittest discover -s scripts/g1 -p 'test_cloudflare_readonly_inventory.py' -v
+      - name: Read Cloudflare metadata by GET only
+        shell: bash
+        env:
+          CLOUDFLARE_G1_READ_TOKEN: ${{ secrets.CLOUDFLARE_G1_READ_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          G1_EXPECTED_STAGING_WORKER: ${{ inputs.staging_worker }}
+          G1_EXPECTED_STAGING_D1: ${{ inputs.staging_d1 }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_G1_READ_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
+          python3 scripts/g1/cloudflare_readonly_inventory.py
+          echo "G1_FULL_CERTIFICATION=NOT_ATTESTED_BY_INVENTORY"
