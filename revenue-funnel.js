@@ -24,7 +24,7 @@
   });
 
   function validCtaId(value) {
-    return /^(?:service_quote_[a-z0-9]{1,32}|homepage_blueprint_(?:entry|scope|pricing)|english_blueprint_(?:entry|request)|lead_demo_(?:es|en)|hero_(?:request|catalog)|final_request)$/.test(value);
+    return /^(?:service_quote_[a-z0-9]{1,32}|homepage_blueprint_(?:entry|scope|pricing)|english_blueprint_(?:entry|request)|lead_demo_(?:es|en)|hero_(?:request|catalog)|final_request|guide_(?:index|lead)_blueprint)$/.test(value);
   }
 
   function validAttributionValue(key, value) {
