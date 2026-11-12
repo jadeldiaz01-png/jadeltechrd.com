@@ -5,12 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="google-adsense-account" content="ca-pub-4830696678723029">
   <meta name="theme-color" content="#0b1220">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://*.googletagmanager.com; style-src 'self'; img-src 'self' data: https://*.google-analytics.com https://*.googletagmanager.com; font-src 'self'; connect-src 'self' https://*.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.google.com; manifest-src 'self'; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="description" content="Guía práctica de seguimiento de leads: mapa del proceso, métricas, datos mínimos, idempotencia, consentimiento y pruebas.">
   <title>Cómo automatizar el seguimiento de clientes potenciales | Jadel Tech RD</title>
   <link rel="canonical" href="https://jadeltechrd.com/guia-automatizacion-leads.html">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/analytics-consent.css">
+  <script src="/ga4-config.js" defer></script>
+  <script src="/ga4-loader.js" defer></script>
+  <script src="/analytics-consent.js" defer></script>
+  <script src="/revenue-funnel.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -41,7 +46,7 @@
   <p>Ensaya solicitudes normales, duplicadas, vacías, fuera de horario, con consentimiento denegado y con servicios externos desconectados. Comprueba que una solicitud inválida no dispara mensajes; que el error se registra; y que un responsable puede detener el flujo. Solo después de estas pruebas tiene sentido validar una integración con datos reales y permisos aprobados.</p>
   <h2>6. Decide si conviene automatizar</h2>
   <p>Una estimación simple compara el tiempo humano que se ahorraría, los costes recurrentes, el mantenimiento y los riesgos del proceso. No multipliques por una tasa de conversión imaginaria para prometer retorno. Si el volumen mensual es bajo o las solicitudes son muy variables, quizá sea suficiente un tablero con recordatorios manuales.</p>
-  <p><strong>Resultado esperado:</strong> un mapa del proceso, un pequeño conjunto de métricas, riesgos explícitos y una lista priorizada de tareas. La implementación debe ser una decisión posterior. Para conocer el alcance comercial de un diagnóstico, consulta <a href="/ai-automation-blueprint.html">AI Automation Blueprint</a>; esta guía, por sí sola, es contenido educativo gratuito.</p>
+  <p><strong>Resultado esperado:</strong> un mapa del proceso, un pequeño conjunto de métricas, riesgos explícitos y una lista priorizada de tareas. La implementación debe ser una decisión posterior. Para conocer el alcance comercial de un diagnóstico, consulta <a href="/ai-automation-blueprint.html?offer_id=automation_blueprint&amp;service_id=architecture" data-revenue-event="offer_cta_click" data-cta-id="guide_lead_blueprint">AI Automation Blueprint</a>; esta guía, por sí sola, es contenido educativo gratuito.</p>
   <p><a href="/guias.html">← Volver a todas las guías</a></p>
   </article></main>
   <footer class="site-footer"><div class="shell footer-inner"><p>© 2026 Jadel Tech RD</p><nav aria-label="Enlaces de pie"><a href="/guias.html">Guías</a><a href="/?view=privacy">Privacidad</a><a href="/?view=terms">Condiciones</a><a href="/solicitar-proyecto.html">Contacto</a></nav></div></footer>
