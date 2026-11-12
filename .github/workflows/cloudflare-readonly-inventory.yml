@@ -1,0 +1,191 @@
+name: Cloudflare read-only Worker and D1 inventory
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cloudflare-readonly-inventory
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    environment:
+      name: g1-cloudflare-readonly
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID_RAW: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_READONLY_TOKEN_RAW: ${{ secrets.G1CLOUDFLAREREADONLY }}
+    steps:
+      - name: Validate read-only token policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+
+          raw="${CLOUDFLARE_READONLY_TOKEN_RAW:-}"
+          account_id="${CLOUDFLARE_ACCOUNT_ID_RAW:-}"
+          test -n "$raw" || { echo 'READONLY_TOKEN_PRESENT=NO' >&2; exit 2; }
+          test -n "$account_id" || { echo 'CLOUDFLARE_ACCOUNT_ID_PRESENT=NO' >&2; exit 2; }
+          echo "::add-mask::$raw"
+          account_id=$(printf '%s' "$account_id" | tr -d '\r\n[:space:]')
+          [[ "$account_id" =~ ^[a-fA-F0-9]{32}$ ]] || { echo 'CLOUDFLARE_ACCOUNT_ID_FORMAT=FAIL' >&2; exit 2; }
+          echo "::add-mask::$account_id"
+
+          token=$(printf '%s' "$raw" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"* && "$token" == *\" ]]; then token="${token:1:${#token}-2}"; fi
+          if [[ "$token" == \'* && "$token" == *\' ]]; then token="${token:1:${#token}-2}"; fi
+          test -n "$token" || { echo 'READONLY_TOKEN_NORMALIZATION=FAIL' >&2; exit 2; }
+          echo "::add-mask::$token"
+          unset raw CLOUDFLARE_READONLY_TOKEN_RAW CLOUDFLARE_ACCOUNT_ID_RAW
+
+          api='https://api.cloudflare.com/client/v4'
+          headers=$(mktemp)
+          verify_code=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
+            --proto '=https' --tlsv1.2 -H "Authorization: Bearer $token" \
+            -o "$headers" -w '%{http_code}' "$api/accounts/$account_id/tokens/verify")
+          test "$verify_code" = 200 && jq -e '.success == true and .result.status == "active" and (.result.id | type == "string" and length > 0)' "$headers" >/dev/null || {
+            echo 'READONLY_TOKEN_ACTIVE=FAIL' >&2
+            exit 3
+          }
+          token_id=$(jq -r '.result.id' "$headers")
+          echo 'READONLY_TOKEN_ACTIVE=PASS'
+
+          details=$(mktemp)
+          detail_code=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
+            --proto '=https' --tlsv1.2 -H "Authorization: Bearer $token" \
+            -o "$details" -w '%{http_code}' "$api/accounts/$account_id/tokens/$token_id")
+          if [ "$detail_code" != 200 ] || ! jq -e --arg id "$token_id" '.success == true and .result.id == $id and .result.status == "active"' "$details" >/dev/null; then
+            echo 'READONLY_TOKEN_POLICY=UNVERIFIABLE fail_closed' >&2
+            exit 4
+          fi
+
+          allowed='["Account API Tokens Read","D1 Read","Workers Scripts Read"]'
+          actual=$(jq -c '[.result.policies[]? | select(.effect == "allow") | .permission_groups[]?.name] | unique | sort' "$details")
+          expected=$(jq -c 'sort' <<<"$allowed")
+          if [ "$actual" != "$expected" ]; then
+            echo 'READONLY_TOKEN_POLICY=FAIL expected_exact_read_permissions' >&2
+            exit 5
+          fi
+          if ! jq -e --arg account "$account_id" '
+            (.result.policies | length) == 1 and
+            .result.policies[0].effect == "allow" and
+            (.result.policies[0].resources | keys) == [("com.cloudflare.api.account." + $account)] and
+            .result.policies[0].resources["com.cloudflare.api.account." + $account] == "*"
+          ' "$details" >/dev/null; then
+            echo 'READONLY_TOKEN_POLICY=FAIL account_scope' >&2
+            exit 5
+          fi
+          echo 'READONLY_TOKEN_POLICY=PASS exact_allowlist_and_account_scope'
+          unset token token_id
+
+      - name: Inventory Jadel Workers, D1 databases, and bindings (GET only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+
+          account_id=$(printf '%s' "${CLOUDFLARE_ACCOUNT_ID_RAW:-}" | tr -d '\r\n[:space:]')
+          token=$(printf '%s' "${CLOUDFLARE_READONLY_TOKEN_RAW:-}" | tr -d '\r\n' | sed -E 's/^[[:space:]]*Bearer[[:space:]]+//I; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$token" == \"* && "$token" == *\" ]]; then token="${token:1:${#token}-2}"; fi
+          if [[ "$token" == \'* && "$token" == *\' ]]; then token="${token:1:${#token}-2}"; fi
+          echo "::add-mask::$token"
+          api='https://api.cloudflare.com/client/v4'
+
+          cf_get() {
+            local url="$1" file="$2" code
+            code=$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+              --retry 2 --retry-all-errors --proto '=https' --tlsv1.2 \
+              -H "Authorization: Bearer $token" -H 'Accept: application/json' \
+              -o "$file" -w '%{http_code}' "$url")
+            if [ "$code" != 200 ] || ! jq -e '.success == true' "$file" >/dev/null; then
+              echo "CLOUDFLARE_GET=FAIL http=$code" >&2
+              return 1
+            fi
+          }
+
+          d1_file=$(mktemp)
+          : > "$d1_file"
+          page=1
+          while :; do
+            response=$(mktemp)
+            cf_get "$api/accounts/$account_id/d1/database?page=$page&per_page=100" "$response"
+            jq -c '.result[]?' "$response" >> "$d1_file"
+            pages=$(jq -r '.result_info.total_pages // 1' "$response")
+            [ "$page" -lt "$pages" ] || break
+            page=$((page + 1))
+            [ "$page" -le 100 ] || { echo 'D1_PAGINATION=FAIL limit' >&2; exit 6; }
+          done
+          d1_jadel=$(mktemp)
+          jq -s 'map(select((.name // "" | ascii_downcase) | contains("jadel")))' "$d1_file" > "$d1_jadel"
+          jq -e 'all(.[]; (.name | test("^[A-Za-z0-9_-]+$")))' "$d1_jadel" >/dev/null || { echo 'D1_NAME_FORMAT=FAIL' >&2; exit 6; }
+          d1_count=$(jq 'length' "$d1_jadel")
+          echo "JADEL_D1_DATABASES=$d1_count"
+          jq -r '.[].name' "$d1_jadel" | sort -u | while IFS= read -r name; do
+            [ -n "$name" ] && printf 'D1=%s\n' "$name"
+          done
+
+          workers_file=$(mktemp)
+          : > "$workers_file"
+          page=1
+          while :; do
+            response=$(mktemp)
+            cf_get "$api/accounts/$account_id/workers/scripts?page=$page&per_page=100" "$response"
+            jq -r '.result[]?.id // empty' "$response" | while IFS= read -r name; do
+              case "$name" in *[!A-Za-z0-9_-]*|'') echo 'WORKER_NAME_FORMAT=FAIL' >&2; exit 7 ;; esac
+              if [[ "${name,,}" == *jadel* ]]; then printf '%s\n' "$name"; fi
+            done >> "$workers_file"
+            pages=$(jq -r '.result_info.total_pages // 1' "$response")
+            [ "$page" -lt "$pages" ] || break
+            page=$((page + 1))
+            [ "$page" -le 100 ] || { echo 'WORKER_PAGINATION=FAIL limit' >&2; exit 7; }
+          done
+          sort -u -o "$workers_file" "$workers_file"
+          worker_count=$(wc -l < "$workers_file" | tr -d '[:space:]')
+          echo "JADEL_WORKERS=$worker_count"
+          [ "$worker_count" -gt 0 ] || { echo 'JADEL_WORKERS=NONE' >&2; exit 8; }
+
+          summary="$RUNNER_TEMP/cloudflare-inventory-summary.md"
+          {
+            echo '## Cloudflare read-only inventory'
+            echo
+            echo 'Only Jadel-named resources are listed. No D1 rows or SQL were accessed.'
+            echo
+            echo '### D1 databases'
+            jq -r '.[] | "- " + .name' "$d1_jadel"
+            echo
+            echo '### Worker D1 bindings'
+            echo '| Worker | Binding | D1 database |'
+            echo '|---|---|---|'
+          } > "$summary"
+
+          while IFS= read -r worker; do
+            [ -n "$worker" ] || continue
+            settings=$(mktemp)
+            cf_get "$api/accounts/$account_id/workers/scripts/$worker/settings" "$settings"
+            bindings=$(jq -c '[.result.bindings[]? | select((.type // "" | ascii_downcase) == "d1")]' "$settings")
+            binding_count=$(jq 'length' <<<"$bindings")
+            if [ "$binding_count" -eq 0 ]; then
+              printf '%s\n' "| $worker | none | none |" >> "$summary"
+              echo "WORKER_D1_BINDING=$worker:none"
+              continue
+            fi
+            while IFS= read -r binding; do
+              binding_name=$(jq -r '.name // "unnamed"' <<<"$binding")
+              case "$binding_name" in *[!A-Za-z0-9_-]*|'') echo 'BINDING_NAME_FORMAT=FAIL' >&2; exit 9 ;; esac
+              database_id=$(jq -r '.database_id // .id // empty' <<<"$binding")
+              test -n "$database_id" || { echo "WORKER_D1_BINDING=FAIL worker=$worker missing_id" >&2; exit 9; }
+              database_name=$(jq -r --arg id "$database_id" '.[] | select(.uuid == $id) | .name' "$d1_file" | head -n1)
+              test -n "$database_name" || { echo "WORKER_D1_BINDING=FAIL worker=$worker unmapped_database" >&2; exit 9; }
+              printf '%s\n' "| $worker | $binding_name | $database_name |" >> "$summary"
+              echo "WORKER_D1_BINDING=$worker/$binding_name->$database_name"
+            done < <(jq -c '.[]' <<<"$bindings")
+          done < "$workers_file"
+
+          cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+          echo 'CLOUDFLARE_READONLY_INVENTORY=PASS'
+          echo 'API_METHODS=GET_ONLY'
+          echo 'D1_SQL_EXECUTED=NO'
+          echo 'CLOUDFLARE_MUTATIONS=NO'
