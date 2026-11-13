@@ -8,21 +8,26 @@ const app = fs.readFileSync('app.js', 'utf8');
 const surfaces = [['static fallback', fallback], ['interactive app', app]];
 
 for (const [name, source] of surfaces) {
-  test(`${name} distinguishes configured webhook from pending positive payment reconciliation`, () => {
-    assert.doesNotMatch(source, /console-state[^>]*>\s*READY\s*</i);
-    assert.doesNotMatch(source, /<span class="event-ok">PASS<\/span><b>Evidence ledger<\/b>/i);
-    assert.match(source, /class="event-ok">(?:CONFIGURADO|CONFIGURED)<\/span><b>PayPal LIVE webhook<\/b>/i);
-    assert.match(source, /firma inválida rechazada|invalid-signature probe rejected/i);
-    assert.match(source, /class="event-wait">(?:PENDIENTE|PENDING)<\/span><b>(?:Evidence ledger|Payment evidence)<\/b>/i);
-    assert.match(source, /primera conciliación positiva con captura real pendiente|first positive reconciliation with a real capture pending/i);
+  test(`${name} puts the customer Blueprint before internal payment operations`, () => {
+    const consoleStart = source.indexOf("agent-console");
+    const blueprintStart = source.indexOf("blueprint-alcance", consoleStart);
+    const hero = source.slice(consoleStart, blueprintStart);
+    const payments = source.slice(source.indexOf("payment-section"));
+    assert.doesNotMatch(hero, /console-state[^>]*>\s*READY\s*</i);
+    assert.match(hero, /aria-label="Ejemplo ilustrativo del alcance del Blueprint, no una automatización activa"/i);
+    assert.match(hero, /console-title">Blueprint · un flujo</i);
+    assert.match(hero, /class="console-state">EJEMPLO</i);
+    assert.match(hero, /<b>Mapa \+ plan<\/b>/i);
+    assert.match(hero, /<b>Construcción aparte<\/b>/i);
+    assert.doesNotMatch(hero, /PayPal LIVE webhook|Evidence ledger|Payment evidence|Policy gate|ORCHESTRATOR/i);
+    assert.match(payments, /PayPal LIVE webhook|webhook (?:PayPal )?LIVE configurado/i);
+    assert.match(payments, /primera conciliación positiva|primera captura real/i);
     assert.match(source, /US\$14,800/);
-    assert.match(source, /console-state[^>]*>\s*SUPERVISADO\s*</i);
-    assert.equal([...source.matchAll(/class="console-state"/g)].length, 1);
-    assert.match(source, /no se marca PAID sin coincidencia exacta|only marks PAID after validating signature and exact match/i);
+    assert.equal([...hero.matchAll(/class="console-state"/g)].length, 1);
+    assert.match(payments, /no se marca PAID sin coincidencia exacta|solo se marca PAID después de validar/i);
     assert.doesNotMatch(source, /webhook firmado y ledger de pagos pendientes de validación|webhook and ledger reconciliation not yet verified/i);
   });
 }
-
 const discovery = JSON.parse(fs.readFileSync('agent-services.json', 'utf8'));
 test("all 11 publicly listed services have a quote-gated PayPal path without a direct payment link", () => {
   const ids = Object.keys(SERVICE_PRICING_CATALOG).sort();

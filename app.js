@@ -219,21 +219,22 @@
           </div>
         </div>
 
-        <div class="agent-console reveal" aria-label="Visualización del sistema de agentes">
+        <div class="agent-console reveal" aria-label="Ejemplo ilustrativo del alcance del Blueprint, no una automatización activa">
           <div class="console-bar">
             <span class="console-dot"></span><span class="console-dot"></span><span class="console-dot"></span>
-            <span class="console-title">Jadel Agent Control Plane</span>
-            <span class="console-state">SUPERVISADO</span>
+            <span class="console-title">Blueprint · un flujo</span>
+            <span class="console-state">EJEMPLO</span>
           </div>
           <div class="agent-core">
-            <div class="core-orbit orbit-a"><span>Media</span><span>Data</span><span>Sales</span></div>
-            <div class="core-orbit orbit-b"><span>Risk</span><span>Policy</span><span>Ops</span></div>
-            <div class="core-node"><strong>JT</strong><small>ORCHESTRATOR</small></div>
+            <div class="core-orbit orbit-a"><span>Web</span><span>Email</span><span>Chat</span></div>
+            <div class="core-orbit orbit-b"><span>Captura</span><span>Asigna</span><span>Sigue</span></div>
+            <div class="core-node"><strong>JT</strong><small>UN FLUJO</small></div>
           </div>
           <div class="console-events" aria-live="polite">
-            <div><span class="event-ok">PASS</span><b>Policy gate</b><small>external action requires approval</small></div>
-            <div><span class="event-ok">CONFIGURED</span><b>PayPal LIVE webhook</b><small>Approval event configured; invalid-signature probe rejected.</small></div><div><span class="event-wait">PENDING</span><b>Payment evidence</b><small>first positive reconciliation with a real capture pending</small></div>
-            <div><span class="event-wait">HITL</span><b>Human approval</b><small>waiting before side effect</small></div>
+            <div><span class="event-ok">01</span><b>Un solo proceso</b><small>Seguimiento de consultas, de entrada a respuesta.</small></div>
+            <div><span class="event-ok">02</span><b>Mapa + plan</b><small>Arquitectura recomendada y backlog priorizado.</small></div>
+            <div><span class="event-wait">03</span><b>Construcción aparte</b><small>El Blueprint define el plan; no conecta sistemas.</small></div>
+            <div><span class="event-wait">04</span><b>Revisión humana</b><small>Tú decides el alcance antes de pagar.</small></div>
           </div>
         </div>
       </section>
