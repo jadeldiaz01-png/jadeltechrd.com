@@ -78,6 +78,7 @@ jobs:
             guia-automatizacion-leads.html
             guia-chatbot-soporte.html
             ads.txt
+            google9c34371b77d7fca7.html
             styles.css
             project-request.css
             project-request.js
@@ -117,6 +118,7 @@ jobs:
             mkdir -p "_site/$(dirname "$asset")"
             cp "$asset" "_site/$asset"
           done
+          grep -Fxq 'google-site-verification: google9c34371b77d7fca7.html' _site/google9c34371b77d7fca7.html
           grep -Fxq 'google.com, pub-4830696678723029, DIRECT, f08c47fec0942fa0' _site/ads.txt
           test "$(wc -l < _site/ads.txt)" -eq 1
           grep -Fq 'name="google-adsense-account" content="ca-pub-4830696678723029"' _site/index.html
